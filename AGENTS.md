@@ -34,6 +34,10 @@ prefixed names.
 
 ## Conventions
 
+- Commit messages: one line, `area: summary`, like `timex: rework in
+  Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
+  A short body only when the why genuinely needs it.
+
 - Tests attach to symbols (`test atoi { ... }`); a type with many
   aspects gets one merged topical test. Module roots use
   `std.testing.refAllDecls(@This())`, never itemized `_ =` lists.
