@@ -1,132 +1,80 @@
-//! Cached wall-clock time.
+//! Io-less clock reads in `std.Io.Timestamp` values, for Linux and
+//! macOS.
 //!
-//! Worker loops refresh a thread-local monotonic value once per tick; the
-//! logger converts it to Unix time via an offset computed once at startup.
-//! Both clocks are process-wide, so the offset is identical on every
-//! thread, and monotonic time does not jump, so `tick + offset` stays
-//! aligned to wall time for the process lifetime.
+//! `std.Io.Timestamp.now` wants an `Io` that code without an event loop
+//! does not carry, and each read is one `clock_gettime` anyway — vDSO on
+//! Linux, one libc call on macOS — so `now` goes to the raw layer
+//! directly, in std's own types: `Clock` in, `Timestamp` out, and the
+//! whole `Duration` conversion ladder (`toMicroseconds`,
+//! `toMilliseconds`, `toSeconds`) comes with the type.
 //!
-//! Threads that never refresh (main, the test runner) read the clock
-//! directly — one vdso call per timestamp, the uncached cost.
-//!
-//! std.time lost its timestamp helpers in 0.16, and Io.Clock.now needs
-//! an Io the logger does not carry, so the reads go through the raw
-//! `linux.clock_gettime` (vdso-backed) like the rest of this codebase.
+//! `CachedClock` is the first-class cache: the caller owns the instance
+//! and the refresh cadence — an event loop stores one and ticks it once
+//! per iteration, making every timestamp during the tick one atomic
+//! load instead of a clock call.
 
 const std = @import("std");
+const Io = std.Io;
+const posix = std.posix;
 const linux = std.os.linux;
-const time = std.time;
-const testing = std.testing;
+const c = std.c;
 const assert = std.debug.assert;
+const testing = std.testing;
+const builtin = @import("builtin");
 
-var mono_to_wall_offset_ms: i64 = 0;
+pub const CachedClock = @import("timex/cached_clock.zig").CachedClock;
 
-/// Compute the wall offset. Call once at startup, before workers spawn.
-pub fn init() void {
-    mono_to_wall_offset_ms = realtimeMs() - monotonicMs();
+comptime {
+    switch (builtin.os.tag) {
+        .linux, .macos => {},
+        else => @compileError("timex supports Linux and macOS"),
+    }
 }
 
-/// The thread's cached monotonic time, in ms. Null until the first
-/// refresh — those callers pay the direct clock read instead.
-threadlocal var tick_mono_ms: ?i64 = null;
-
-/// Refresh the thread's cached time. The worker loop calls this once per
-/// tick; every timestamp taken during the tick reuses the value.
-pub fn refreshTick() void {
-    _ = refreshTickUs();
+/// Read `clock` directly. One clock call, no `Io`.
+///
+/// The clockid members are the kernel/libc constants by name — the
+/// values std's `Io.Clock` docs map, per platform. Each arm's members
+/// are compile-time-valid constants on their own OS, so the call cannot
+/// fail. The switch is exhaustive over `Io.Clock` on purpose: if std
+/// grows a clock, this becomes a compile error rather than a silent
+/// wrong mapping.
+/// The `.awake` and `.boot` arms carry the per-OS mapping — std's own,
+/// per the `Io.Clock` docs — as comptime switches on the OS, whose dead
+/// arms are pruned: each platform's literals are only ever analyzed on
+/// that platform. The other three clocks share members on both.
+pub fn now(clock: Io.Clock) Io.Timestamp {
+    const clk: posix.CLOCK = switch (clock) {
+        .real => .REALTIME,
+        .awake => switch (builtin.os.tag) {
+            .linux => .MONOTONIC,
+            .macos => .UPTIME_RAW,
+            else => unreachable,
+        },
+        .boot => switch (builtin.os.tag) {
+            .linux => .BOOTTIME,
+            .macos => .MONOTONIC_RAW,
+            else => unreachable,
+        },
+        .cpu_process => .PROCESS_CPUTIME_ID,
+        .cpu_thread => .THREAD_CPUTIME_ID,
+    };
+    var ts: posix.timespec = undefined;
+    switch (builtin.os.tag) {
+        .linux => assert(linux.errno(linux.clock_gettime(clk, &ts)) == .SUCCESS),
+        .macos => assert(c.clock_gettime(clk, &ts) == 0),
+        else => unreachable,
+    }
+    const ns = @as(i96, @intCast(ts.sec)) * std.time.ns_per_s + @as(i96, @intCast(ts.nsec));
+    return .fromNanoseconds(ns);
 }
 
-/// Drop the thread's cached time, so that tickMs reads the clock again.
-/// A test that pins the tick with refreshTick restores the thread with
-/// this.
-pub fn clearTick() void {
-    tick_mono_ms = null;
-}
-
-/// Refresh the log cache and return the same monotonic sample in microseconds.
-pub fn refreshTickUs() i64 {
-    const us = monotonicUs();
-    tick_mono_ms = @divFloor(us, time.us_per_ms);
-    return us;
-}
-
-/// Monotonic microseconds for the bounded poll window.
-pub fn monotonicUs() i64 {
-    var ts: linux.timespec = undefined;
-    readClock(.MONOTONIC, &ts);
-    return @as(i64, @intCast(ts.sec)) * time.us_per_s +
-        @divFloor(@as(i64, @intCast(ts.nsec)), time.ns_per_us);
-}
-
-/// Monotonic ms: the cached tick value on worker threads, a direct clock
-/// read anywhere else. Worker paths use this instead of a fresh read.
-pub inline fn tickMs() i64 {
-    return tick_mono_ms orelse monotonicMs();
-}
-
-/// Wall-clock Unix ms: the cached tick value plus the startup offset on
-/// worker threads, a direct clock read anywhere else.
-pub inline fn wallMs() i64 {
-    const mono: i64 = tick_mono_ms orelse monotonicMs();
-    return mono + mono_to_wall_offset_ms;
-}
-
-/// Wall-clock Unix µs, always a direct read. The logfmt dev format wants
-/// microsecond precision; its consumers are human eyes at a terminal, so
-/// the per-call vdso cost is the wrong thing to optimize.
-pub fn realtimeUs() i64 {
-    var ts: linux.timespec = undefined;
-    readClock(.REALTIME, &ts);
-    return @as(i64, @intCast(ts.sec)) * time.us_per_s +
-        @divFloor(@as(i64, @intCast(ts.nsec)), time.ns_per_us);
-}
-
-/// Monotonic ms, for deadline math (immune to wall-clock jumps).
-pub fn monotonicMs() i64 {
-    var ts: linux.timespec = undefined;
-    readClock(.MONOTONIC, &ts);
-    return @as(i64, @intCast(ts.sec)) * time.ms_per_s +
-        @divFloor(@as(i64, @intCast(ts.nsec)), time.ns_per_ms);
-}
-
-fn realtimeMs() i64 {
-    var ts: linux.timespec = undefined;
-    readClock(.REALTIME, &ts);
-    return @as(i64, @intCast(ts.sec)) * time.ms_per_s +
-        @divFloor(@as(i64, @intCast(ts.nsec)), time.ns_per_ms);
-}
-
-/// The clock ids are compile-time-valid constants and the pointer is
-/// caller-owned, so a vdso clock_gettime cannot fail on Linux.
-fn readClock(clk: linux.CLOCK, ts: *linux.timespec) void {
-    const rc = linux.clock_gettime(clk, ts);
-    assert(linux.errno(rc) == .SUCCESS);
-}
-
-test wallMs {
-    // The test thread never refreshes, so wallMs reads the clock directly.
-    init();
-    const a = wallMs();
-    const b = wallMs();
-    try testing.expect(b >= a);
-    const direct = realtimeMs();
-    try testing.expect(@abs(b - direct) < 5_000); // within 5s of wall time
-}
-
-test refreshTick {
-    init();
-    refreshTick();
-    const cached = wallMs();
-    // A direct read moments later is within a generous window of the
-    // cached conversion — proves the cached path returns real time.
-    try testing.expect(@abs(cached - realtimeMs()) < 5_000);
-}
-
-test refreshTickUs {
-    init();
-    const before = monotonicUs();
-    const tick = refreshTickUs();
-    const after = monotonicUs();
-    try testing.expect(before <= tick and tick <= after);
-    try testing.expectEqual(@divFloor(tick, time.us_per_ms) + mono_to_wall_offset_ms, wallMs());
+test now {
+    // Shape, not values. The magnitudes are what distinguish the clockid
+    // mappings — a wall reading is decades past the epoch, a monotonic
+    // reading is at most days of uptime — so a swapped mapping fails
+    // here, where every "the clock advances" test would pass it.
+    const wall_scale = std.time.ns_per_day * 365 * 20;
+    try testing.expect(now(.real).nanoseconds > wall_scale);
+    try testing.expect(now(.awake).nanoseconds < wall_scale);
 }
