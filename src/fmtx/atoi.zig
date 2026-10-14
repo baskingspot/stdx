@@ -15,28 +15,35 @@
 //! 8 bytes are validated as digits and folded to their value with a handful
 //! of multiply-shifts, no per-digit loop. Types too narrow to ever hold the
 //! chunk's value compile the SWAR out entirely — a `u8` tops out at 3 digits.
-//! Overflow is detected after the parse (fast_float's strategy): the
-//! accumulator wraps — defined, via `*%` — and the digit count plus a
-//! 20-digit boundary check decide, so the checked and unchecked loops are
-//! identical.
+//! For types no wider than 64 bits, overflow is detected after the parse
+//! (fast_float's strategy): the accumulator wraps — defined, via `*%` — and
+//! the digit count plus a 20-digit boundary check decide, so the checked and
+//! unchecked loops are identical. Wider types check each operation instead.
 
 const std = @import("std");
 const math = std.math;
 const testing = std.testing;
 const mem = std.mem;
 
-pub const Error = error{
-    /// The value does not fit in `T`.
-    Overflow,
-    /// The input was empty, had no digits, or contained a non-digit byte.
-    InvalidCharacter,
-};
+/// The error set for the given overflow mode. `.checked` adds `Overflow`;
+/// `.unchecked` cannot return it.
+///
+/// - `Overflow`: the value does not fit `T`. See `Overflow.checked`.
+/// - `InvalidCharacter`: the input was empty, had no digits, or contained a
+///   non-digit byte.
+fn Error(comptime o: Overflow) type {
+    return switch (o) {
+        .checked => error{ Overflow, InvalidCharacter },
+        .unchecked => error{InvalidCharacter},
+    };
+}
 
 /// How `atoi` treats a value that exceeds the range of `T`.
 pub const Overflow = enum {
-    /// Return `error.Overflow`. The accumulation loop is identical to
-    /// `.unchecked`; overflow is detected after the parse from the digit
-    /// count, not checked per operation.
+    /// Return `error.Overflow`. For a `T` no wider than 64 bits the
+    /// accumulation loop is identical to `.unchecked`: overflow is detected
+    /// after the parse from the digit count, not checked per operation.
+    /// Wider types check each operation instead.
     checked,
     /// The caller guarantees that the value fits `T`. Overflow is not
     /// detected: the accumulation wraps (defined), and the final cast
@@ -59,10 +66,6 @@ pub const LeadingZeros = enum {
 pub const Options = struct {
     overflow: Overflow = .checked,
     leading_zeros: LeadingZeros = .allow,
-
-    /// The configuration `atoi` bakes in: checked overflow, leading zeros
-    /// allowed.
-    pub const default: Options = .{};
 };
 
 // ---------------------------------------------------------------------------
@@ -129,7 +132,7 @@ fn accumulate64(
     digits: []const u8,
     comptime use_swar8: bool,
     comptime use_swar4: bool,
-) Error!u64 {
+) error{InvalidCharacter}!u64 {
     var magnitude: u64 = 0;
     var i: usize = 0;
     if (use_swar8) {
@@ -164,7 +167,7 @@ fn finish(
     magnitude: Magnitude,
     negative: bool,
     comptime overflow: Overflow,
-) Error!T {
+) Error(overflow)!T {
     if (int_info.signedness == .signed) {
         const limit: Magnitude = if (negative)
             @as(Magnitude, 1) << (int_info.bits - 1)
@@ -194,9 +197,16 @@ fn finish(
 /// With `.{ .overflow = .unchecked }` the caller asserts the value fits `T`;
 /// see `Overflow.unchecked` for the exact contract.
 ///
-/// Comptime calls are always fully checked, including with `.unchecked`:
-/// comptime wrapping is defined, and the digit-count validation still runs.
-pub fn atoiWith(comptime T: type, buf: []const u8, comptime options: Options) Error!T {
+/// Comptime adds no checking of its own. With `.checked` the digit-count
+/// validation runs as usual; with `.unchecked` it does not, and only Zig's
+/// own comptime rules reject a value — `@intCast` for narrow types, the
+/// arithmetic for wider ones. A `u64` or `i64` magnitude that wraps and lands
+/// in range is returned, at comptime exactly as at runtime.
+pub fn atoiWith(
+    comptime T: type,
+    buf: []const u8,
+    comptime options: Options,
+) Error(options.overflow)!T {
     const int_info = switch (@typeInfo(T)) {
         .int => |info| info,
         else => @compileError("atoi: T must be an integer type, found " ++ @typeName(T)),
@@ -278,8 +288,8 @@ pub fn atoiWith(comptime T: type, buf: []const u8, comptime options: Options) Er
 
 /// `atoiWith` with default options: overflow returns `error.Overflow`, and
 /// leading zeros are allowed.
-pub inline fn atoi(comptime T: type, buf: []const u8) Error!T {
-    return atoiWith(T, buf, .default);
+pub inline fn atoi(comptime T: type, buf: []const u8) Error(.checked)!T {
+    return atoiWith(T, buf, .{ .overflow = .checked });
 }
 
 /// `atoiWith` with `.{ .overflow = .unchecked }`: the caller guarantees the
@@ -287,7 +297,7 @@ pub inline fn atoi(comptime T: type, buf: []const u8) Error!T {
 /// there is nothing left to skip in the loop; only the final validation and
 /// cast differ. Cannot return `error.Overflow`; `error.InvalidCharacter`
 /// still applies.
-pub inline fn atoiUnchecked(comptime T: type, buf: []const u8) Error!T {
+pub inline fn atoiUnchecked(comptime T: type, buf: []const u8) Error(.unchecked)!T {
     return atoiWith(T, buf, .{ .overflow = .unchecked });
 }
 
@@ -365,7 +375,8 @@ test atoiUnchecked {
     try testing.expectError(error.InvalidCharacter, atoiUnchecked(u32, "1234x"));
     try testing.expectError(error.InvalidCharacter, atoiUnchecked(u32, ""));
 
-    // Comptime calls are always checked, even with `.unchecked`.
+    // Comptime `.unchecked` parses like runtime; a `T` too narrow for the
+    // value fails to compile in `finish`'s `@intCast`, not in `atoiWith`.
     const comptime_value = comptime atoiUnchecked(u8, "255") catch unreachable;
     try testing.expectEqual(255, comptime_value);
 }
