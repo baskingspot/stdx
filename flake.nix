@@ -37,6 +37,9 @@
               zls_0_16
               ziglint
               zigdoc
+              zizmor
+              pinact
+              just
             ];
           };
         };

@@ -1,0 +1,26 @@
+# stdx: shared std-lib extensions. README.md describes the modules;
+# AGENTS.md holds the working conventions.
+
+default: test
+
+# Unit tests (Debug)
+test:
+    zig build test --summary all
+
+# Unit tests (ReleaseSafe) — the option matrix: lazy analysis hides code that
+# only instantiates in release modes
+test-release-safe:
+    zig build test -Doptimize=ReleaseSafe --summary all
+
+# Unit tests (ReleaseFast)
+test-release-fast:
+    zig build test -Doptimize=ReleaseFast --summary all
+
+# Lint: ziglint, Zig formatting, justfile formatting
+lint:
+    ziglint
+    zig fmt --check src build.zig
+    just --fmt --check
+
+# Everything CI runs
+ci: test test-release-safe test-release-fast lint
