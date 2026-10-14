@@ -5,7 +5,7 @@
 
 const std = @import("std");
 
-const slab_allocator = @import("heapx/slab_allocator.zig");
+const slab_allocator = @import("heap/slab_allocator.zig");
 pub const SlabAllocator = slab_allocator.SlabAllocator;
 
 test {

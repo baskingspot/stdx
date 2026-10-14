@@ -8,8 +8,8 @@ number parsing, IPv4 and CIDR handling, fixed-capacity buffers, a bounded
 writer, a slab allocator. stdx is where they live now — tested
 standalone, no dependencies.
 
-The modules mirror the std namespaces they extend (`memx`, `fmtx`,
-`netx`, `posixx`, `heapx`); the data structures (`ArrayBuffer`,
+The modules mirror the std namespaces they extend (`mem`, `fmt`,
+`net`, `posix`, `heap`); the data structures (`ArrayBuffer`,
 `SliceBuffer`, `BoundedWriter`, `multi_array`) sit at the top level. The
 source is the documentation: every type and function carries doc
 comments that render with `zig doc`, alongside its own tests.

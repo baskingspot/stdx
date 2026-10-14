@@ -68,7 +68,7 @@ general enough to extract — look before deciding.
   wanted.
 - base32: a general Crockford codec — std has base64 only. The
   harness one is stable-token-specific; a rewrite, not a port.
-- Ip6 variant of netx: open, deliberately deferred.
+- Ip6 variant of net: open, deliberately deferred.
 - Compile-fail test steps for the `@compileError` paths (build
   test infra, not a data structure).
 - Publish docs to Cloudflare Pages from CI (`just doc` exists;
@@ -85,7 +85,7 @@ headliners are half covered.
   loop. Same std pattern as `trimEnd`/`lastIndexOfNonZero`: forward
   vectorized, backwards forgotten. A vectorized memrchr is
   `lastIndexOfNonZero` with the predicate generalized to
-  equals-this-byte. memx-sized.
+  equals-this-byte. mem-sized.
 - memchr2/memchr3 (first of 2-3 alternative bytes, the parser-delimiter
   workhorse): verified gap — std's `findAnyPos` is a nested scalar
   loop, O(n·k). The general vectorization: per block, one broadcast
@@ -94,7 +94,7 @@ headliners are half covered.
 - memmem (substring search, SIMD prefilters, Two-Way fallback):
   fastmem-shaped — arch-named impls, thin dispatch, the bench/asm
   infrastructure fastmem already has. Belongs beside memcpy/memset,
-  not in memx.
+  not in mem.
 
 License check if ported: BurntSushi's memchr is permissive dual
 (verify the exact pair before transcribing any constants).
@@ -105,7 +105,7 @@ std 0.16 covers the C canon already: `DebugAllocator` (GPA —
 malloc-with-debugging), `ArenaAllocator` (region), `FixedBufferAllocator`
 (bump over caller storage), `PageAllocator`, `MemoryPool` (fixed-T
 pools), and `SmpAllocator` — the important one: tcmalloc-shaped, so
-the fast-general-purpose lane is std's, not ours. heapx.SlabAllocator
+the fast-general-purpose lane is std's, not ours. heap.SlabAllocator
 builds on the pools.
 
 Genuine C-classic gaps, zero users — bench-idea parking only:
@@ -121,7 +121,7 @@ From our repos:
   The generalizable core is the pool-bookkeeping primitive slotmap
   wants — revisit with slotmap, not a port now.
 - handoff `Slab` is a different concept entirely (page-backed per-slot
-  kernel mappings), not a divergent copy of heapx.SlabAllocator — no
+  kernel mappings), not a divergent copy of heap.SlabAllocator — no
   rot to converge.
 
 ## Swiss hash map — SHIPPED, measured slower than the incumbent
@@ -165,7 +165,7 @@ The bar before shipping: differential anchors vs std (behavioral)
 and a probe-bound bench vs array_hash_map.Bounded (performance) —
 group screening has to beat the Robin Hood walks we already have,
 measured, not assumed. Composes with the repo's existing SIMD
-idioms — the compare-and-find-bits pattern already shipped in memx
+idioms — the compare-and-find-bits pattern already shipped in mem
 three times.
 
 ## Bloom filter
@@ -207,7 +207,7 @@ Verified shape:
 - Class ladder generated at init, runtime not comptime: `chunk =
   base × factor^i` (base ~64, factor ~1.25) up to page/2, then
   single-chunk pages; oversize → honest `error.OutOfMemory`. Kills
-  the comptime-tier granularity complaint against heapx.SlabAllocator.
+  the comptime-tier granularity complaint against heap.SlabAllocator.
 - Per-page free lists threaded through free chunks; per-page live
   counts; page becomes reclaimable at count zero. No per-chunk
   headers needed for routing — Zig's typed `free` hands back size and

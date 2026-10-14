@@ -23,18 +23,18 @@ struct/slice element paths.
 
 ## Layout
 
-Modules mirror the std namespace they extend: `memx` ↔ `std.mem`,
-`fmtx` ↔ `std.fmt`, `netx` ↔ `std.Io.net`, `posixx` ↔ `std.posix`,
-`simdx` ↔ `std.simd`, `heapx` ↔ `std.heap`. Single data structures lift
+Modules mirror the std namespace they extend: `mem` ↔ `std.mem`,
+`fmt` ↔ `std.fmt`, `net` ↔ `std.Io.net`, `posix` ↔ `std.posix`,
+`heap` ↔ `std.heap`. Single data structures lift
 to top-level names (`ArrayBuffer`, `BoundedWriter`, `SliceBuffer`);
 concepts with multiple flavors get a package of short names
 (`multi_array.{Array, Buffer}`), like `std.array_hash_map.Auto`.
-Subdirectory modules (`fmtx/`, `heapx/`) re-export their surface with
+Subdirectory modules (`fmt/`, `heap/`) re-export their surface with
 prefixed names.
 
 ## Conventions
 
-- Commit messages: one line, `area: summary`, like `timex: rework in
+- Commit messages: one line, `area: summary`, like `time: rework in
   Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
   A short body only when the why genuinely needs it.
 
@@ -53,12 +53,12 @@ prefixed names.
 - Before hand-rolling something std has, check the std function and,
   for hot paths, the disassembly. If std's version loses on codegen,
   keep the hand-roll and cite the evidence in a comment
-  (`memx.lastIndexOfNonZero` is the precedent: four instructions vs
+  (`mem.lastIndexOfNonZero` is the precedent: four instructions vs
   std's scalarized ~85 on aarch64).
 - Error sets are named, documented per member, and pass underlying
   parse errors through rather than collapsing them.
 - Comptime options over runtime flags when they change code shape
-  (`fmtx.AtoiOptions`); each configuration compiles to its own loop.
+  (`fmt.AtoiOptions`); each configuration compiles to its own loop.
 
 ## Adding code
 

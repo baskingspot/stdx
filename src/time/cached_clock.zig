@@ -13,7 +13,7 @@
 //! future, and it lags true time by at most one refresh interval —
 //! the refresh cadence is the granularity, and nothing else is. Good
 //! for log timestamps, metrics, rate limits; wrong for deadlines and
-//! timeouts — measure those with `timex.now` directly.
+//! timeouts — measure those with `time.now` directly.
 //!
 //! Elapsed time and deadlines read `.awake`; `.real` is for wall
 //! timestamps. A cached `.awake` value is meaningful only inside this
@@ -30,7 +30,7 @@ const std = @import("std");
 const Io = std.Io;
 const testing = std.testing;
 
-const timex = @import("../timex.zig");
+const time = @import("../time.zig");
 
 pub fn CachedClock(comptime clock: Io.Clock) type {
     return struct {
@@ -43,7 +43,7 @@ pub fn CachedClock(comptime clock: Io.Clock) type {
         /// Read the clock and store it. Returns the full-precision
         /// sample — the cache keeps one word.
         pub fn refresh(self: *Self) Io.Timestamp {
-            const t = timex.now(clock);
+            const t = time.now(clock);
             self.cached = @intCast(t.nanoseconds);
             return t;
         }
@@ -52,7 +52,7 @@ pub fn CachedClock(comptime clock: Io.Clock) type {
         /// a cold clock.
         pub fn now(self: *Self) Io.Timestamp {
             if (self.cached != 0) return .fromNanoseconds(self.cached);
-            return timex.now(clock);
+            return time.now(clock);
         }
 
         /// Drop the cache so the next read goes direct. A test that
@@ -65,7 +65,7 @@ pub fn CachedClock(comptime clock: Io.Clock) type {
 
 test CachedClock {
     // Shape, not values. A cold clock reads direct — a fresh, boot-scale
-    // timestamp, same shape as timex.now(.awake).
+    // timestamp, same shape as time.now(.awake).
     var clock: CachedClock(.awake) = .init;
     const wall_scale = std.time.ns_per_day * 365 * 20;
     const cold = clock.now();

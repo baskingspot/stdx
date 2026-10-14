@@ -19,7 +19,7 @@ const builtin = @import("builtin");
 comptime {
     switch (builtin.os.tag) {
         .linux, .macos => {},
-        else => @compileError("randomx supports Linux and macOS"),
+        else => @compileError("random supports Linux and macOS"),
     }
 }
 

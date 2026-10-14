@@ -22,12 +22,12 @@ const assert = std.debug.assert;
 const testing = std.testing;
 const builtin = @import("builtin");
 
-pub const CachedClock = @import("timex/cached_clock.zig").CachedClock;
+pub const CachedClock = @import("time/cached_clock.zig").CachedClock;
 
 comptime {
     switch (builtin.os.tag) {
         .linux, .macos => {},
-        else => @compileError("timex supports Linux and macOS"),
+        else => @compileError("time supports Linux and macOS"),
     }
 }
 

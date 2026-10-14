@@ -2,7 +2,7 @@
 //!
 //! IPv4 addressing: a portless address and CIDR prefixes, following
 //! `net.Ip4Address` and Go's `net/netip`. fd-level socket helpers live in
-//! `posixx`.
+//! `posix`.
 
 const std = @import("std");
 const mem = std.mem;
@@ -14,7 +14,7 @@ pub const Ip4Address = net.Ip4Address;
 pub const Ip6Address = net.Ip6Address;
 pub const IpAddress = net.IpAddress;
 
-const fmtx = @import("fmtx.zig");
+const fmt = @import("fmt.zig");
 
 pub const Ip4 = struct {
     bytes: [4]u8,
@@ -262,7 +262,7 @@ pub const Prefix4 = struct {
         // Canonical CIDR bits, like Go netip: leading zeros are a parse
         // error (InvalidBits via atoi), and "/0" alone is valid. Empty bits
         // and non-digits also fail inside atoi.
-        const bits = fmtx.atoiWith(u8, bits_str, .{ .leading_zeros = .reject }) catch
+        const bits = fmt.atoiWith(u8, bits_str, .{ .leading_zeros = .reject }) catch
             return error.InvalidBits;
         if (bits > 32) return error.BitsOutOfRange;
         return .{ .addr = addr, .bits = bits };
@@ -331,7 +331,7 @@ test Prefix4 {
     try testing.expectError(error.InvalidCharacter, Prefix4.parse("bogus/8"));
     try testing.expectError(error.InvalidBits, Prefix4.parse("10.0.0.0/"));
 
-    // Bits parse via fmtx.atoi: signs, whitespace, and underscores are
+    // Bits parse via fmt.atoi: signs, whitespace, and underscores are
     // rejected where std.fmt.parseInt accepted them.
     try testing.expectError(error.InvalidBits, Prefix4.parse("10.0.0.0/+8"));
     try testing.expectError(error.InvalidBits, Prefix4.parse("10.0.0.0/-8"));

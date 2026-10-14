@@ -5,7 +5,7 @@
 //! `std.MultiArrayList(T)` splits a struct (or tagged union) into one array
 //! per field, but backs them with a heap allocation sized at runtime and a
 //! runtime byte-offset map. These siblings embed the field arrays instead:
-//! `Array(T, length)` is the comptime-length counterpart of `memx.Array`
+//! `Array(T, length)` is the comptime-length counterpart of `mem.Array`
 //! (exactly `length` elements, no `len` field), and `Buffer(T, capacity)` is
 //! the `ArrayBuffer` counterpart (fixed capacity, runtime `len`, list API,
 //! no allocator). The field arrays are generated as one `.auto` layout
@@ -121,7 +121,7 @@ fn SortContext(comptime Container: type, comptime SubCtx: type) type {
 
 /// A struct-of-arrays container of exactly `length` elements of `T`, stored
 /// inline — the fixed-size sibling of `std.MultiArrayList` and the
-/// comptime-length sibling of `memx.Array`.
+/// comptime-length sibling of `mem.Array`.
 ///
 /// Each field of `T` lives in its own `[length]FieldType` array, so a
 /// computation touching only some fields walks contiguous memory, and `T`'s
