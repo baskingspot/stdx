@@ -11,7 +11,6 @@ pub const multi_array = @import("multi_array.zig");
 pub const netx = @import("netx.zig");
 pub const posixx = @import("posixx.zig");
 pub const randomx = @import("randomx.zig");
-pub const simdx = @import("simdx.zig");
 pub const SliceBuffer = @import("slice_buffer.zig").SliceBuffer;
 pub const stdio = @import("stdio.zig");
 pub const timex = @import("timex.zig");
