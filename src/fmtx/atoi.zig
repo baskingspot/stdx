@@ -10,15 +10,13 @@
 //! configurations.
 //!
 //! The hot path uses SWAR digit processing, transcribed from fast_float's
-//! `ascii_number.h` (credit @aqrit; the technique is explained in
-//! https://lemire.me/blog/2022/01/21/swar-explained-parsing-eight-digits/):
-//! 8 bytes are validated as digits and folded to their value with a handful
-//! of multiply-shifts, no per-digit loop. Types too narrow to ever hold the
-//! chunk's value compile the SWAR out entirely — a `u8` tops out at 3 digits.
-//! For types no wider than 64 bits, overflow is detected after the parse
-//! (fast_float's strategy): the accumulator wraps — defined, via `*%` — and
-//! the digit count plus a 20-digit boundary check decide, so the checked and
-//! unchecked loops are identical. Wider types check each operation instead.
+//! `ascii_number.h` (credit @aqrit). Types too narrow to ever hold the
+//! chunk's value compile the SWAR out entirely — a `u8` tops out at 3
+//! digits. For types no wider than 64 bits, overflow is detected after
+//! the parse (fast_float's strategy): the accumulator wraps — defined, via
+//! `*%` — and the digit count plus a 20-digit boundary check decide, so the
+//! checked and unchecked loops are identical. Wider types check each
+//! operation instead.
 
 const std = @import("std");
 const math = std.math;
@@ -69,11 +67,11 @@ pub const Options = struct {
 };
 
 // ---------------------------------------------------------------------------
-// SWAR primitives, transcribed from fast_float's ascii_number.h
+// SWAR primitives, transcribed from fast_float's `ascii_number.h`
 // (parse_eight_digits_unrolled, is_made_of_eight_digits_fast, and the
-// 4-digit variants), credit @aqrit. The technique is explained in
-// https://lemire.me/blog/2022/01/21/swar-explained-parsing-eight-digits/,
-// an extension to eight digits of Wojciech Muła's SWAR digit parsing.
+// 4-digit variants). An extension to eight digits of Wojciech Muła's SWAR
+// digit parsing; the technique is explained at
+// https://lemire.me/blog/2022/01/21/swar-explained-parsing-eight-digits/.
 //
 // All arithmetic is wrapping (`*%`, `+%`): the fold products deliberately
 // exceed u64 and wrap their garbage cross-terms away, so plain `*` would be

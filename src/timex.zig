@@ -33,16 +33,11 @@ comptime {
 
 /// Read `clock` directly. One clock call, no `Io`.
 ///
-/// The clockid members are the kernel/libc constants by name — the
-/// values std's `Io.Clock` docs map, per platform. Each arm's members
-/// are compile-time-valid constants on their own OS, so the call cannot
-/// fail. The switch is exhaustive over `Io.Clock` on purpose: if std
-/// grows a clock, this becomes a compile error rather than a silent
-/// wrong mapping.
-/// The `.awake` and `.boot` arms carry the per-OS mapping — std's own,
-/// per the `Io.Clock` docs — as comptime switches on the OS, whose dead
-/// arms are pruned: each platform's literals are only ever analyzed on
-/// that platform. The other three clocks share members on both.
+/// The switch is exhaustive over `Io.Clock` on purpose: if std grows
+/// a clock, this becomes a compile error rather than a silent wrong
+/// mapping. The `.awake` and `.boot` arms carry the per-OS mapping
+/// std's `Io.Clock` docs spell out; dead platform arms are pruned, and
+/// the other three clocks share members on both.
 pub fn now(clock: Io.Clock) Io.Timestamp {
     const clk: posix.CLOCK = switch (clock) {
         .real => .REALTIME,

@@ -19,8 +19,8 @@ pub const GetSockNameError =
     error{AddressFamilyNotSupported};
 
 /// Peer address of a connected socket, by fd. `error.SocketUnconnected`
-/// covers the not-yet-connected case; ENOTCONN does not route through
-/// `posix.unexpectedErrno` here.
+/// covers ENOTCONN — std's `posix.getpeername` does the conversion, so
+/// this wrapper does not decode errno by hand.
 pub fn getpeername(fd: posix.socket_t) GetSockNameError!net.Ip4Address {
     var in: posix.sockaddr.in = undefined;
     var len: posix.socklen_t = @sizeOf(posix.sockaddr.in);
