@@ -15,6 +15,7 @@ pub const priority_queue = @import("priority_queue.zig");
 pub const randomx = @import("randomx.zig");
 pub const SliceBuffer = @import("slice_buffer.zig").SliceBuffer;
 pub const stdio = @import("stdio.zig");
+pub const swiss = @import("swiss.zig");
 pub const timex = @import("timex.zig");
 pub const Uuid = @import("Uuid.zig");
 

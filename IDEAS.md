@@ -124,7 +124,21 @@ From our repos:
   kernel mappings), not a divergent copy of heapx.SlabAllocator — no
   rot to converge.
 
-## Swiss hash map — hashbrown / Go 1.24 / Abseil lineage
+## Swiss hash map — SHIPPED, measured slower than the incumbent
+
+`swiss.Bounded`/`BoundedWith` landed: Abseil's control-byte encoding,
+comptime group width, triangular probes with mirrored control bytes,
+always-tombstone removal, Abseil's swap-and-repeat compaction,
+differential anchors vs std. But the bench this entry demanded
+measured the opposite of the pitch: at 83% load, u64 and 32-byte
+keys, `array_hash_map.Bounded` wins — hit 2.39 vs 2.76 ns, miss
+1.59 vs 2.00 ns (u64), same ratios at 32-byte keys. Structural:
+robin's index header carries a 64-bit hash fingerprint per slot, so
+probes promote to key compares ~never; swiss's 7-bit H2 promotes on
+~1/128 candidates and SIMD screening of 16 lanes does not pay for
+it. The niches that remain: slot-order iteration (not insertion
+order), no per-entry hash storage (less memory), and workloads not
+yet measured. Do not assume swiss is the fast one.
 
 std has no SwissTables anywhere (verified): std.hash_map is
 tombstone-based open addressing with per-slot fingerprint metadata;
@@ -153,6 +167,32 @@ group screening has to beat the Robin Hood walks we already have,
 measured, not assumed. Composes with the repo's existing SIMD
 idioms — the compare-and-find-bits pattern already shipped in memx
 three times.
+
+## Bloom filter
+
+Needed before (real user, predates stdx). Nothing in std (verified
+against the container surface audit). The heapless family's purest
+member: fixed capacity, allocation-free, and the best comptime
+showcase in the pile — optimal-parameter math (`m =
+-n·ln p/(ln 2)^2`, `k = (m/n)·ln 2`) computed at comptime from
+`Bloom(T, expected_items, false_positive_rate)`, storage an
+embedded `std.StaticBitSet(m)` (std composition, not a hand-rolled
+bit array). Double hashing (Kirsch–Mitzenmacher: index_i =
+h1 + i·h2) for k probes from two hash halves — one Wyhash call,
+split. API: `add`, `contains`, `clear`, `count`, comptime `p`
+surfaced as a constant. Probabilistic contract documented: no
+false negatives, `p` false positives at capacity.
+
+## rapidhash
+
+The current fast non-crypto general-purpose hash (wyhash lineage,
+SMHasher-verified) — the one projects adopt over xxhash3 when
+hash throughput matters. std's default is `std.hash.Wyhash`, and
+`AutoContext` hashes everything through it, so the comparison
+baseline is in-tree: bench-first — a port must beat Wyhash on the
+probe-bound workloads (the swiss maps above are exactly that
+consumer) before it earns a hashx module. Verify the upstream
+license before porting any constants.
 
 ## SlabArena — malloc over a fixed region (memcached's model)
 
