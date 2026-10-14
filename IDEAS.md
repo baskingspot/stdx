@@ -124,6 +124,36 @@ From our repos:
   kernel mappings), not a divergent copy of heapx.SlabAllocator — no
   rot to converge.
 
+## Swiss hash map — hashbrown / Go 1.24 / Abseil lineage
+
+std has no SwissTables anywhere (verified): std.hash_map is
+tombstone-based open addressing with per-slot fingerprint metadata;
+std.array_hash_map is the Robin Hood we just shipped bounded.
+
+The design: control groups (7 bits of hash + state tag per byte),
+SIMD byte-match screens a whole group per probe step, tombstone
+deletion kept cheap by the same walk. References to pull from:
+- hashbrown (Rust std's map — the Group/ctrl SIMD core)
+- Go 1.24's runtime swiss map (runtime/internal/swiss — its
+  8-byte groups and the reasons for half-size)
+- Abseil flat_hash_map (the original — growth and probe policy)
+
+Two variants, both worth having:
+- Bounded (the array_hash_map.Bounded sibling): fixed capacity — but
+  Swiss has no distance field, so backward-shift deletion is
+  impossible and tombstones would rot a never-rehashed table; the
+  bounded variant needs in-place rebuild-on-tombstone-threshold.
+  That rebuild policy is the genuinely new design work.
+- Resizable (unmanaged, allocator-per-call, the std.hash_map
+  sibling).
+
+The bar before shipping: differential anchors vs std (behavioral)
+and a probe-bound bench vs array_hash_map.Bounded (performance) —
+group screening has to beat the Robin Hood walks we already have,
+measured, not assumed. Composes with the repo's existing SIMD
+idioms — the compare-and-find-bits pattern already shipped in memx
+three times.
+
 ## SlabArena — malloc over a fixed region (memcached's model)
 
 The sharpened spec: a general-purpose `mem.Allocator`-shaped allocator
@@ -225,11 +255,20 @@ Each worker owns a deque and steals from others' tails — the
 ### heapless — fixed-capacity everything
 
 The crate closest to stdx's DNA: fixed-capacity, allocation-free
-  containers. Remaining members we lack:
+  containers. Status after the std-overlap audit:
 
-- Deque: the ring buffer — belongs with the queue family above.
-- BinaryHeap: std's PriorityQueue is unmanaged-alloc-per-call; a
-  fixed-capacity sibling follows the ArrayBuffer pattern.
-- IndexMap/IndexSet: fixed-capacity insertion-ordered map. std's
-  ArrayHashMap covers the alloc-y version; heapless proves the
-  fixed-capacity one matters.
+- Deque: ABSORBED BY STD — `std.Deque` with `initBuffer` (caller
+  storage) plus `pushFrontBounded`/`pushBackBounded` is the whole
+  fixed-capacity deque. Do not build a copy.
+- BinaryHeap: SHIPPED as `priority_queue.Bounded` — std.PriorityQueue's
+  exact surface (Order comparator + context, pop/popIndex/update,
+  storage-order iterator) with the capacity comptime and the array
+  embedded; `NoSpaceLeft` on full. Differential anchors against
+  std.PriorityQueue drain identically, min and max comparators.
+- IndexMap/IndexSet: SHIPPED as `array_hash_map.Bounded` (auto
+  context) and `array_hash_map.BoundedWith` (custom context) — a
+  faithful Robin Hood port of std.ArrayHashMap: same index-slot
+  layout, backward-shift deletion, ordered/swap entry compaction,
+  insertion-order iteration; `V = void` covers the set. Differential
+  anchors run identical op sequences against std's and assert
+  equivalence after every step.
