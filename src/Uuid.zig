@@ -119,18 +119,18 @@ pub fn eql(a: Uuid, b: Uuid) bool {
 
 test Uuid {
     // nil round-trips.
-    try testing.expect(Uuid.nil.eql(try Uuid.parse("00000000-0000-0000-0000-000000000000")));
+    try testing.expect(Uuid.nil.eql(try .parse("00000000-0000-0000-0000-000000000000")));
 
     // v4: fixed version/variant bits, distinct draws.
-    const a = Uuid.v4();
-    const b = Uuid.v4();
+    const a: Uuid = .v4();
+    const b: Uuid = .v4();
     try testing.expect(a.version() == .v4);
     try testing.expectEqual(@as(u8, 0x40), a.bytes[6] & 0xf0);
     try testing.expectEqual(@as(u8, 0x80), a.bytes[8] & 0xc0);
     try testing.expect(!a.eql(b));
 
     // v7: wall-aligned timestamp in the leading 48 bits, fixed bits.
-    const c = Uuid.v7();
+    const c: Uuid = .v7();
     try testing.expect(c.version() == .v7);
     const ts = mem.readInt(u48, c.bytes[0..6], .big);
     const now = timex.now(.real).toMilliseconds();
@@ -139,15 +139,15 @@ test Uuid {
     // Round trip: format then parse, either case.
     var buf: [36]u8 = undefined;
     const s = try std.fmt.bufPrint(&buf, "{f}", .{c});
-    try testing.expect(c.eql(try Uuid.parse(s)));
+    try testing.expect(c.eql(try .parse(s)));
 
     var upper_buf: [36]u8 = undefined;
     for (s, &upper_buf) |ch, *dst| dst.* = std.ascii.toUpper(ch);
-    try testing.expect(c.eql(try Uuid.parse(&upper_buf)));
+    try testing.expect(c.eql(try .parse(&upper_buf)));
 
     // RFC 9562's own v4 example round-trips.
     try testing.expectEqualStrings("f81d4fae-7dec-11d0-a765-00a0c91e6bf6", blk: {
-        const ex = try Uuid.parse("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
+        const ex: Uuid = try .parse("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
         try testing.expect(ex.version() == .v1);
         var eb: [36]u8 = undefined;
         break :blk try std.fmt.bufPrint(&eb, "{f}", .{ex});
@@ -170,6 +170,6 @@ test Uuid {
     );
 
     // Unknown versions parse: a future UUID is still a UUID.
-    const future = try Uuid.parse("f81d4fae-7dec-91d0-a765-00a0c91e6bf6");
+    const future: Uuid = try .parse("f81d4fae-7dec-91d0-a765-00a0c91e6bf6");
     try testing.expectEqual(@as(u4, 9), @intFromEnum(future.version()));
 }

@@ -12,13 +12,14 @@ const std = @import("std");
 const assert = std.debug.assert;
 const math = std.math;
 const mem = std.mem;
+const Allocator = mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
 const testing = std.testing;
 
 const BoundedWriter = @This();
 
-allocator: mem.Allocator,
+allocator: Allocator,
 writer: Io.Writer,
 limit: usize,
 
@@ -28,7 +29,7 @@ const vtable: Io.Writer.VTable = .{
     .rebase = rebase,
 };
 
-pub fn init(allocator: mem.Allocator, limit: usize) BoundedWriter {
+pub fn init(allocator: Allocator, limit: usize) BoundedWriter {
     return .{
         .allocator = allocator,
         .writer = .{ .buffer = &.{}, .vtable = &vtable },
