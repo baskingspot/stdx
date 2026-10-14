@@ -25,13 +25,3 @@ transcribed from `ascii_number.h` (credit @aqrit; the technique is Daniel
 Lemire's SWAR digit parsing, an extension of Wojciech Muła's). The credit
 and technique links are kept in the file header.
 
-## ztls
-
-Upstream: https://github.com/mattrobenolt/ztls (Apache-2.0).
-
-`src/array_buffer.zig` and `src/slice_buffer.zig` derive from ztls's
-`array_buffer.zig`. Every commit to that file in ztls is by Matt
-Robenolt, who is also the stdx copyright holder, so the Apache-2.0
-grant places no obligation on this MIT relicensing. Listed for
-provenance.
-
