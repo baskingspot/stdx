@@ -3,7 +3,14 @@
     .version = "0.0.0",
     .fingerprint = 0x5479474f829ec509, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .benchmark = .{
+            .url = "git+https://github.com/mattrobenolt/zig-benchmark#5572317d18d1e5b4630950658b1628b4398a84a8",
+            .hash = "benchmark-0.1.0-JS72VhUcAQAM6gGwbJeMtNhbX7n8LQk4LIdSrRz9ljNg",
+            // Only the `bench` step imports it; test/lint builds never fetch it.
+            .lazy = true,
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

@@ -3,3 +3,5 @@ zig-out/
 .direnv/
 docs/
 .wrangler/
+.envrc.local
+zig-pkg/
