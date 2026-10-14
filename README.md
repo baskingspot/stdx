@@ -28,10 +28,11 @@ Then import it as `stdx` in your build, as normal.
 ## Work on it
 
 ```
-zig build test
+just test
 ```
 
-Zig 0.16. `nix develop` gives you the toolchain, ziglint, and zigdoc.
+Zig 0.16. `nix develop` gives you the toolchain, ziglint, zigdoc, and
+just — the justfile carries the rest (`just ci` for the full set).
 
 MIT licensed — see `LICENSE`. A few pieces were adapted from other code;
 `THIRD_PARTY.md` says which, and under what terms.

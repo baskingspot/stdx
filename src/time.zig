@@ -64,6 +64,80 @@ pub fn now(clock: Io.Clock) Io.Timestamp {
     return .fromNanoseconds(ns);
 }
 
+/// Wall time derived from an `.awake` sample, through the offset between
+/// the two clocks computed once at process startup. Both clocks are
+/// process-wide, so the offset is identical on every thread: compute it
+/// once, before threads spawn, and share the value.
+///
+/// The pattern this serves: a loop ticks one `CachedClock(.awake)` per
+/// iteration and serves both deadline math and log timestamps from that
+/// single sample — deadline math reads `mono.now()`, log timestamps read
+/// `toWall(mono.now())` — so a log line's timestamp is the same sample the
+/// loop acted on. One clock read per tick, not two.
+///
+/// Derived wall never moves backwards within the process: the offset is
+/// fixed and `.awake` never steps back, so timestamps keep monotonic
+/// ordering — an NTP step cannot reorder log lines. The trade: derived
+/// wall is not true wall; it drifts if the wall clock is stepped after
+/// startup, bounded by the startup offset plus drift. For log timestamps
+/// that is the right trade. True wall is what `CachedClock(.real)` and
+/// `now(.real)` are for.
+///
+/// `offset_ns` is `i64` nanoseconds: real-minus-awake ≈ real since the
+/// epoch, so it carries the same year-2262 ceiling the `CachedClock` doc
+/// flags for `.real`.
+pub const WallFromAwake = struct {
+    offset_ns: i64,
+
+    /// The startup offset: read both clocks once and store the value
+    /// wherever the process keeps startup state.
+    pub fn compute() WallFromAwake {
+        return .{
+            .offset_ns = @intCast(now(.real).nanoseconds - now(.awake).nanoseconds),
+        };
+    }
+
+    /// The wall time of an `.awake` sample.
+    pub fn toWall(self: WallFromAwake, awake: Io.Timestamp) Io.Timestamp {
+        return .fromNanoseconds(awake.nanoseconds + self.offset_ns);
+    }
+};
+
+test WallFromAwake {
+    // The offset is real minus awake: decades-scale, because real is
+    // decades past the epoch and awake is at most days of uptime.
+    const offset: WallFromAwake = .compute();
+    try testing.expect(offset.offset_ns > std.time.ns_per_day * 365 * 20);
+
+    // Derived wall tracks real time: toWall of a fresh awake sample lands
+    // within a window of a fresh real read.
+    const awake = now(.awake);
+    const wall = offset.toWall(awake);
+    const real = now(.real);
+    try testing.expect(@abs(wall.nanoseconds - real.nanoseconds) < std.time.ns_per_s);
+
+    // Ordering is preserved: two awake samples in order derive wall times
+    // in the same order — the never-backwards property, structurally.
+    const a = now(.awake);
+    const b = now(.awake);
+    try testing.expect(b.nanoseconds >= a.nanoseconds);
+    try testing.expect(offset.toWall(b).nanoseconds >= offset.toWall(a).nanoseconds);
+
+    // Composes with a cold CachedClock: a never-refreshing thread reads
+    // direct, and the derivation stays correct on that direct sample.
+    var mono: CachedClock(.awake) = .init;
+    const derived = offset.toWall(mono.now());
+    try testing.expect(derived.nanoseconds > std.time.ns_per_day * 365 * 20);
+
+    // And with a refreshed one: toWall(mono.now()) is the same sample the
+    // loop would act on.
+    const sample = mono.refresh();
+    try testing.expectEqual(
+        offset.toWall(sample).nanoseconds,
+        offset.toWall(mono.now()).nanoseconds,
+    );
+}
+
 test now {
     // Shape, not values. The magnitudes are what distinguish the clockid
     // mappings — a wall reading is decades past the epoch, a monotonic

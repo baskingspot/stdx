@@ -4,22 +4,23 @@ Working notes for AI coding agents in stdx.
 
 ## Environment
 
-Zig 0.16 only. `nix develop` provides zig, zls, ziglint, zigdoc. The
-flake is the tool contract: nothing on PATH outside the devshell.
+Zig 0.16 only. `nix develop` provides zig, zls, ziglint, zigdoc, just.
+The flake is the tool contract: nothing on PATH outside the devshell.
 
-Before calling work done, run and show:
+The justfile is the command interface. Run recipes, not raw zig
+commands:
 
 ```
-zig build test
-ziglint
-zig fmt --check src build.zig
+just lint test
 ```
 
-When the change touches generic code, run the option matrix too:
-`zig build test -Doptimize=ReleaseSafe` and `-Doptimize=ReleaseFast`.
-Lazy analysis hides code that only instantiates under a different
-element type or build mode; u8-only tests never analyze the
-struct/slice element paths.
+Takes multiple targets — `just lint test` does both. `just ci` is
+the full CI set; the darwin cross-compile is the macOS CI lane's job,
+not a local one. When the change touches generic code, run the option
+matrix too: `just test-release-safe test-release-fast`. Lazy analysis
+hides code that only instantiates under a different element type or
+build mode; u8-only tests never analyze the struct/slice element
+paths.
 
 ## Layout and naming
 
