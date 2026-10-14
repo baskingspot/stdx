@@ -64,7 +64,7 @@ general enough to extract — look before deciding.
 ## Smaller
 
 - Read-cursor buffer: pos+len over caller storage (the harness
-  `IoBuffer` shape), `SliceBuffer`'s cousin. Mechanical port when
+  `IoBuffer` shape), `buffer.Slice`'s cousin. Mechanical port when
   wanted.
 - base32: a general Crockford codec — std has base64 only. The
   harness one is stable-token-specific; a rewrite, not a port.
@@ -126,12 +126,12 @@ From our repos:
 
 ## Swiss hash map — SHIPPED, measured slower than the incumbent
 
-`swiss.Bounded`/`BoundedWith` landed: Abseil's control-byte encoding,
+`swiss.Custom`/`Auto` landed: Abseil's control-byte encoding,
 comptime group width, triangular probes with mirrored control bytes,
 always-tombstone removal, Abseil's swap-and-repeat compaction,
 differential anchors vs std. But the bench this entry demanded
 measured the opposite of the pitch: at 83% load, u64 and 32-byte
-keys, `array_hash_map.Bounded` wins — hit 2.39 vs 2.76 ns, miss
+keys, `bounded_array_hash_map.Auto` wins — hit 2.39 vs 2.76 ns, miss
 1.59 vs 2.00 ns (u64), same ratios at 32-byte keys. Structural:
 robin's index header carries a 64-bit hash fingerprint per slot, so
 probes promote to key compares ~never; swiss's 7-bit H2 promotes on
@@ -153,7 +153,7 @@ deletion kept cheap by the same walk. References to pull from:
 - Abseil flat_hash_map (the original — growth and probe policy)
 
 Two variants, both worth having:
-- Bounded (the array_hash_map.Bounded sibling): fixed capacity — but
+- Bounded (the bounded_array_hash_map.Auto sibling): fixed capacity — but
   Swiss has no distance field, so backward-shift deletion is
   impossible and tombstones would rot a never-rehashed table; the
   bounded variant needs in-place rebuild-on-tombstone-threshold.
@@ -162,7 +162,7 @@ Two variants, both worth having:
   sibling).
 
 The bar before shipping: differential anchors vs std (behavioral)
-and a probe-bound bench vs array_hash_map.Bounded (performance) —
+and a probe-bound bench vs array_hash_map.Auto (performance) —
 group screening has to beat the Robin Hood walks we already have,
 measured, not assumed. Composes with the repo's existing SIMD
 idioms — the compare-and-find-bits pattern already shipped in mem
@@ -216,7 +216,7 @@ Verified shape:
   region. Zero external state, no retained allocator, no deinit story.
 - Alignment manufactured, not inherited: comptime alignment param,
   strides rounded to it, storage declared `align(N)` — the
-  ArrayBufferAligned pattern at allocator scale. Page size a comptime
+  buffer.Array aligned pattern at allocator scale. Page size a comptime
   param (power-of-two stride over the array).
 
 The fork, stated:
@@ -300,13 +300,13 @@ The crate closest to stdx's DNA: fixed-capacity, allocation-free
 - Deque: ABSORBED BY STD — `std.Deque` with `initBuffer` (caller
   storage) plus `pushFrontBounded`/`pushBackBounded` is the whole
   fixed-capacity deque. Do not build a copy.
-- BinaryHeap: SHIPPED as `priority_queue.Bounded` — std.PriorityQueue's
+- BinaryHeap: SHIPPED as `priority_queue.Custom` — std.PriorityQueue's
   exact surface (Order comparator + context, pop/popIndex/update,
   storage-order iterator) with the capacity comptime and the array
   embedded; `NoSpaceLeft` on full. Differential anchors against
   std.PriorityQueue drain identically, min and max comparators.
-- IndexMap/IndexSet: SHIPPED as `array_hash_map.Bounded` (auto
-  context) and `array_hash_map.BoundedWith` (custom context) — a
+- IndexMap/IndexSet: SHIPPED as `array_hash_map.Auto` (auto
+  context) and `array_hash_map.Custom` (custom context) — a
   faithful Robin Hood port of std.ArrayHashMap: same index-slot
   layout, backward-shift deletion, ordered/swap entry compaction,
   insertion-order iteration; `V = void` covers the set. Differential

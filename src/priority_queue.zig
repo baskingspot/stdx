@@ -12,7 +12,8 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const testing = std.testing;
-const Order = std.math.Order;
+const math = std.math;
+const Order = math.Order;
 
 /// A priority queue that stores up to `buffer_capacity` elements in a
 /// `[buffer_capacity]T` array embedded in the value.
@@ -20,17 +21,17 @@ const Order = std.math.Order;
 /// The parameter is named `buffer_capacity` rather than `capacity` because
 /// Zig rejects a container declaration that shadows an enclosing function
 /// parameter; the bound is exposed as the `capacity` constant instead.
-pub fn Bounded(
+pub fn Custom(
     comptime T: type,
-    buffer_capacity: comptime_int,
     comptime Context: type,
+    buffer_capacity: comptime_int,
     comptime compareFn: fn (context: Context, a: T, b: T) Order,
 ) type {
     return struct {
         const Self = @This();
 
         /// Smallest integer type that can hold `0..capacity`.
-        pub const Index = std.math.IntFittingRange(0, buffer_capacity);
+        pub const Index = math.IntFittingRange(0, buffer_capacity);
 
         /// Maximum number of elements the queue can hold.
         pub const capacity: Index = @intCast(buffer_capacity);
@@ -154,7 +155,7 @@ pub fn Bounded(
         }
 
         pub const Iterator = struct {
-            queue: *Bounded(T, buffer_capacity, Context, compareFn),
+            queue: *Custom(T, Context, buffer_capacity, compareFn),
             index: Index,
 
             pub fn next(it: *Iterator) ?T {
@@ -194,7 +195,7 @@ pub fn Bounded(
             const len: usize = self.len;
             var index: usize = target_index;
             while (true) {
-                var lesser_child_i = (std.math.mul(usize, index, 2) catch break) | 1;
+                var lesser_child_i = (math.mul(usize, index, 2) catch break) | 1;
                 if (!(lesser_child_i < len)) break;
 
                 const next_child_i = lesser_child_i + 1;
@@ -222,12 +223,12 @@ pub fn Bounded(
 
 fn minOrder(context: void, a: u32, b: u32) Order {
     _ = context;
-    return std.math.order(a, b);
+    return math.order(a, b);
 }
 
 fn maxOrder(context: void, a: u32, b: u32) Order {
     _ = context;
-    return std.math.order(a, b).invert();
+    return math.order(a, b).invert();
 }
 
 fn equalOrder(context: void, a: u32, b: u32) Order {
@@ -237,10 +238,10 @@ fn equalOrder(context: void, a: u32, b: u32) Order {
     return .eq;
 }
 
-const Small = Bounded(u32, 4, void, minOrder);
-const MaxHeap = Bounded(u32, 8, void, maxOrder);
+const Small = Custom(u32, void, 4, minOrder);
+const MaxHeap = Custom(u32, void, 8, maxOrder);
 
-test Bounded {
+test Custom {
     // Pushed ascending: a min-heap pops them back in ascending order.
     var ascending: Small = .empty;
     try ascending.pushSlice(&.{ 1, 2, 3, 4 });
@@ -318,7 +319,7 @@ test Bounded {
 
 test "capacity boundaries" {
     inline for ([_]comptime_int{ 1, 2, 3, 4 }) |n| {
-        const Queue = Bounded(u32, n, void, minOrder);
+        const Queue = Custom(u32, void, n, minOrder);
         var queue: Queue = .empty;
         try testing.expectEqual(@as(usize, n), @as(usize, Queue.capacity));
 
@@ -352,7 +353,7 @@ const differential_items = blk: {
     break :blk items;
 };
 
-/// Push `items` into a `std.PriorityQueue` and a `Bounded` with
+/// Push `items` into a `std.PriorityQueue` and a `Custom` with
 /// the same element type, context and comparator, then assert the two drain
 /// identically — first from the full queues, then after refilling and
 /// interleaving pops and pushes.
@@ -366,7 +367,7 @@ fn expectMatchesStd(
 ) !void {
     const gpa = testing.allocator;
     const Reference = std.PriorityQueue(T, Context, compareFn);
-    const Queue = Bounded(T, buffer_capacity, Context, compareFn);
+    const Queue = Custom(T, Context, buffer_capacity, compareFn);
 
     var reference: Reference = .initContext(context);
     defer reference.deinit(gpa);
@@ -411,13 +412,13 @@ test "matches std.PriorityQueue" {
 
 test "popIndex" {
     // Single element: index 0 is also the last storage slot.
-    var single: Bounded(u32, 1, void, minOrder) = .empty;
+    var single: Custom(u32, void, 1, minOrder) = .empty;
     try single.push(7);
     try testing.expectEqual(@as(u32, 7), single.popIndex(0));
     try testing.expectEqual(@as(?u32, null), single.pop());
 
     // Root: popIndex(0) is pop.
-    var root: Bounded(u32, 5, void, minOrder) = .empty;
+    var root: Custom(u32, void, 5, minOrder) = .empty;
     try root.pushSlice(&.{ 5, 1, 4, 2, 3 });
     try testing.expectEqual(@as(u32, 1), root.popIndex(0));
     for ([_]u32{ 2, 3, 4, 5 }) |elem| {
@@ -426,7 +427,7 @@ test "popIndex" {
 
     // Middle: locate an index through the iterator, remove it, and the
     // remaining heap still pops in priority order.
-    var middle: Bounded(u32, 7, void, minOrder) = .empty;
+    var middle: Custom(u32, void, 7, minOrder) = .empty;
     try middle.pushSlice(&.{ 2, 1, 8, 9, 3, 4, 5 });
     var it = middle.iterator();
     var index: usize = 0;
@@ -445,7 +446,7 @@ test "popIndex" {
 
     // Last: remove the final storage slot. The iterator says which element
     // that is; the survivors still drain in priority order.
-    const Three = Bounded(u32, 3, void, minOrder);
+    const Three = Custom(u32, void, 3, minOrder);
     var last: Three = .empty;
     try last.pushSlice(&.{ 3, 1, 2 });
     var storage: [3]u32 = undefined;
@@ -464,7 +465,7 @@ test "popIndex" {
 
 test "update" {
     // Min-heap: decreasing a key sifts up, increasing it sifts down.
-    var min: Bounded(u32, 8, void, minOrder) = .empty;
+    var min: Custom(u32, void, 8, minOrder) = .empty;
     try min.pushSlice(&.{ 55, 44, 11 });
     try min.update(55, 5); // decrease -> sift up
     try min.update(11, 66); // increase -> sift down
@@ -499,10 +500,10 @@ const RankTable = struct {
 };
 
 fn rankOrder(context: *const RankTable, a: usize, b: usize) Order {
-    return std.math.order(context.ranks[a], context.ranks[b]);
+    return math.order(context.ranks[a], context.ranks[b]);
 }
 
-const RankedQueue = Bounded(usize, 16, *const RankTable, rankOrder);
+const RankedQueue = Custom(usize, *const RankTable, 16, rankOrder);
 
 test "update with context" {
     const table: RankTable = .{
@@ -581,8 +582,8 @@ const Event = struct {
 
 fn eventOrder(context: void, a: Event, b: Event) Order {
     _ = context;
-    return switch (std.math.order(a.priority, b.priority)) {
-        .eq => std.math.order(a.seq, b.seq),
+    return switch (math.order(a.priority, b.priority)) {
+        .eq => math.order(a.seq, b.seq),
         else => |order| order,
     };
 }
@@ -596,13 +597,13 @@ test "struct elements" {
         .{ .priority = 3, .seq = 1 },
         .{ .priority = 2, .seq = 0 },
     };
-    const BoundedEvents = Bounded(Event, events.len, void, eventOrder);
+    const CustomEvents = Custom(Event, void, events.len, eventOrder);
 
     // Same comparator and sequence as std's queue: drains must be identical.
     try expectMatchesStd(Event, void, eventOrder, events.len, {}, &events);
 
     // The field comparison drives the order, ties broken by `seq`.
-    var queue: BoundedEvents = .empty;
+    var queue: CustomEvents = .empty;
     try queue.pushSlice(&events);
     const expected = [_]Event{
         .{ .priority = 1, .seq = 1 },
@@ -619,7 +620,7 @@ test "struct elements" {
 }
 
 test "equal comparator" {
-    const Equal = Bounded(u32, 4, void, equalOrder);
+    const Equal = Custom(u32, void, 4, equalOrder);
     var queue: Equal = .empty;
     try queue.pushSlice(&.{ 3, 1, 4, 2 });
     try testing.expectEqual(@as(usize, 4), @as(usize, queue.count()));

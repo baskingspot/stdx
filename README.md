@@ -9,8 +9,11 @@ writer, a slab allocator. stdx is where they live now — tested
 standalone, no dependencies.
 
 The modules mirror the std namespaces they extend (`mem`, `fmt`,
-`net`, `posix`, `heap`); the data structures (`ArrayBuffer`,
-`SliceBuffer`, `BoundedWriter`, `multi_array`) sit at the top level. The
+`net`, `posix`, `heap`); concepts std lacks get concept names
+(`bloom`, `swiss`, `rapidhash`); container families follow
+`std.array_hash_map`'s shape — the module carries the concept
+(`bounded_array_hash_map`), the constructors inside are bare
+(`Custom`/`Auto`/`String`). The
 source is the documentation: every type and function carries doc
 comments that render with `zig doc`, alongside its own tests.
 

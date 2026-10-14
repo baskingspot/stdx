@@ -7,7 +7,7 @@
 //! runtime byte-offset map. These siblings embed the field arrays instead:
 //! `Array(T, length)` is the comptime-length counterpart of `mem.Array`
 //! (exactly `length` elements, no `len` field), and `Buffer(T, capacity)` is
-//! the `ArrayBuffer` counterpart (fixed capacity, runtime `len`, list API,
+//! the `buffer.Array` counterpart (fixed capacity, runtime `len`, list API,
 //! no allocator). The field arrays are generated as one `.auto` layout
 //! struct at comptime, so the compiler handles alignment and padding — std's
 //! runtime offset sorting disappears entirely.
@@ -255,7 +255,7 @@ pub fn Array(comptime T: type, comptime length: comptime_int) type {
     };
 }
 
-/// A fixed-capacity struct-of-arrays list — the `ArrayBuffer` sibling of
+/// A fixed-capacity struct-of-arrays list — the `buffer.Array` sibling of
 /// `std.MultiArrayList`. Storage is embedded (`[capacity]FieldType` per
 /// field), `len` is runtime, and there is no allocator: appending to a full
 /// list returns `error.NoSpaceLeft`.

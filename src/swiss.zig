@@ -23,6 +23,11 @@
 const std = @import("std");
 const testing = std.testing;
 
+const bounded = @import("swiss/bounded.zig");
+pub const Custom = bounded.Custom;
+pub const Auto = bounded.Auto;
+pub const String = bounded.String;
+
 /// Top bit set, all others clear: an empty slot. Enables a sign-style
 /// empty match on a group of bytes.
 pub const empty = 0x80;
@@ -45,6 +50,8 @@ pub const group_width = if (std.simd.suggestVectorLength(u8)) |width|
 else
     8;
 
+const Group = @Vector(group_width, u8);
+
 /// The group mask type: one bit per lane, `@bitCast` of the compare's
 /// bool vector — the repo's shipped idiom.
 pub const Mask = @Int(.unsigned, group_width);
@@ -57,23 +64,23 @@ pub fn full(h2: u64) u8 {
 
 /// The lanes holding a full byte (any H2).
 pub fn matchFull(bytes: *const [group_width]u8) Mask {
-    const top: @Vector(group_width, u8) = @splat(0x80);
-    const chunk: @Vector(group_width, u8) = bytes.*;
-    const is_full = (chunk & top) == @as(@Vector(group_width, u8), @splat(0));
+    const top: Group = @splat(0x80);
+    const chunk: Group = bytes.*;
+    const is_full = (chunk & top) == @as(Group, @splat(0));
     return @bitCast(is_full);
 }
 
 /// The lanes holding `empty`.
 pub fn matchEmpty(bytes: *const [group_width]u8) Mask {
-    const chunk: @Vector(group_width, u8) = bytes.*;
-    const is_empty = chunk == @as(@Vector(group_width, u8), @splat(empty));
+    const chunk: Group = bytes.*;
+    const is_empty = chunk == @as(Group, @splat(empty));
     return @bitCast(is_empty);
 }
 
 /// The lanes holding `deleted`.
 pub fn matchDeleted(bytes: *const [group_width]u8) Mask {
-    const chunk: @Vector(group_width, u8) = bytes.*;
-    const is_deleted = chunk == @as(@Vector(group_width, u8), @splat(deleted));
+    const chunk: Group = bytes.*;
+    const is_deleted = chunk == @as(Group, @splat(deleted));
     return @bitCast(is_deleted);
 }
 
@@ -81,8 +88,8 @@ pub fn matchDeleted(bytes: *const [group_width]u8) Mask {
 /// condition. Equivalent to "top bit set", since every special byte in
 /// a table (or its mirror) has it and no full byte does.
 pub fn matchEmptyOrDeleted(bytes: *const [group_width]u8) Mask {
-    const top: @Vector(group_width, u8) = @splat(0x80);
-    const chunk: @Vector(group_width, u8) = bytes.*;
+    const top: Group = @splat(0x80);
+    const chunk: Group = bytes.*;
     const is_special = (chunk & top) == top;
     return @bitCast(is_special);
 }
@@ -90,8 +97,8 @@ pub fn matchEmptyOrDeleted(bytes: *const [group_width]u8) Mask {
 /// The lanes holding a full byte whose H2 equals `tag` — a candidate
 /// slot for a key with that fingerprint.
 pub fn matchH2(bytes: *const [group_width]u8, tag: u8) Mask {
-    const chunk: @Vector(group_width, u8) = bytes.*;
-    const matches = chunk == @as(@Vector(group_width, u8), @splat(tag));
+    const chunk: Group = bytes.*;
+    const matches = chunk == @as(Group, @splat(tag));
     return @bitCast(matches);
 }
 
@@ -100,8 +107,6 @@ pub fn firstSet(mask: Mask) ?u6 {
     if (mask == 0) return null;
     return @intCast(@ctz(mask));
 }
-
-pub const Bounded = @import("swiss/bounded.zig").Bounded;
 
 test {
     testing.refAllDecls(@This());

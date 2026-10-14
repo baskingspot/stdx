@@ -12,7 +12,29 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const testing = std.testing;
+const StringContext = std.hash_map.StringContext;
+const AutoContext = std.hash_map.AutoContext;
 
+/// A `Bounded` that hashes keys with `std.hash_map.AutoContext`, like std's
+/// `AutoHashMap`: one context, no type-dependent routing. Slices — including
+/// `[]const u8` — are rejected by `std.hash.autoHash`; string keys use
+/// `String`.
+pub fn Auto(
+    comptime K: type,
+    comptime V: type,
+    buffer_capacity: comptime_int,
+) type {
+    return Custom(K, V, AutoContext(K), buffer_capacity);
+}
+
+/// A `Bounded` for string keys, like std's `StringHashMap`: the one context
+/// that hashes `[]const u8` by content. Key memory is managed by the caller.
+pub fn String(
+    comptime V: type,
+    buffer_capacity: comptime_int,
+) type {
+    return Custom([]const u8, V, StringContext, buffer_capacity);
+}
 /// A hash map that stores up to `buffer_capacity` key-value pairs in arrays
 /// embedded in the value, indexed by `std.array_hash_map`'s open-addressed
 /// header. Entries are kept in insertion order.
@@ -25,10 +47,10 @@ const testing = std.testing;
 /// The parameter is named `buffer_capacity` rather than `capacity` because Zig
 /// rejects a container declaration that shadows an enclosing function
 /// parameter; the bound is exposed as the `capacity` constant instead.
-pub fn BoundedWith(
-    comptime Context: type,
+pub fn Custom(
     comptime K: type,
     comptime V: type,
+    comptime Context: type,
     buffer_capacity: comptime_int,
 ) type {
     return struct {
@@ -165,6 +187,19 @@ pub fn BoundedWith(
             .context = undefined,
         };
 
+        /// Initialize and return a map with a default-initialized context.
+        /// Convenience for stateless contexts such as
+        /// `std.hash_map.AutoContext` and `std.array_hash_map.StringContext`;
+        /// contexts that carry state must use `initContext`.
+        pub const init: Self = .{
+            .key_buffer = undefined,
+            .value_buffer = undefined,
+            .hash_buffer = undefined,
+            .index_buffer = @splat(IndexSlot.empty),
+            .len = 0,
+            .context = .{},
+        };
+
         /// Initialize and return a map with context.
         pub fn initContext(context: Context) Self {
             return .{
@@ -175,14 +210,6 @@ pub fn BoundedWith(
                 .len = 0,
                 .context = context,
             };
-        }
-
-        /// Initialize and return a map with a default-initialized context.
-        /// Convenience for stateless contexts such as
-        /// `std.hash_map.AutoContext` and `std.array_hash_map.StringContext`;
-        /// contexts that carry state must use `initContext`.
-        pub fn init() Self {
-            return initContext(.{});
         }
 
         /// Number of entries currently stored.
@@ -583,46 +610,22 @@ pub fn BoundedWith(
     };
 }
 
-/// A `BoundedWith` that hashes keys with std's default context.
-///
-/// Plain auto-hashable key types need no context argument. `[]const u8` keys
-/// route to `std.array_hash_map.StringContext`, which hashes string contents
-/// (std's `StringArrayHashMapUnmanaged` choice): `std.hash_map.AutoContext`
-/// rejects slices outright, so it cannot be the default for strings. Other key
-/// types use `std.hash_map.AutoContext(K)`; slices inside a key type, or any
-/// type `std.hash.autoHash` refuses, still need an explicit context through
-/// `BoundedWith`.
-pub fn Bounded(
-    comptime K: type,
-    comptime V: type,
-    buffer_capacity: comptime_int,
-) type {
-    return BoundedWith(
-        if (K == []const u8) std.array_hash_map.StringContext else std.hash_map.AutoContext(K),
-        K,
-        V,
-        buffer_capacity,
-    );
-}
-
-// --- Tests ---
-
 test "empty" {
     // `empty`'s context is undefined, which is harmless for the zero-sized
     // auto contexts; `init` is the same value with the context defaulted.
-    var map: Bounded(u32, u32, 4) = .empty;
+    var map: Auto(u32, u32, 4) = .empty;
     try testing.expectEqual(@as(usize, 0), @as(usize, map.count()));
     try map.put(1, 10);
     try testing.expectEqual(@as(?u32, 10), map.get(1));
 
-    var initialized = Bounded(u32, u32, 4).init();
+    var initialized: Auto(u32, u32, 4) = .init;
     try initialized.put(2, 20);
     try testing.expectEqual(@as(?u32, 20), initialized.get(2));
     try testing.expectEqual(@as(usize, 1), @as(usize, initialized.count()));
 }
 
 test "put" {
-    var map = Bounded(u32, u32, 4).initContext(.{});
+    var map: Auto(u32, u32, 4) = .init;
 
     try map.put(3, 30);
     try map.put(1, 10);
@@ -654,7 +657,7 @@ test "put" {
 }
 
 test "getOrPut" {
-    var map = Bounded(u32, u32, 4).initContext(.{});
+    var map: Auto(u32, u32, 4) = .init;
 
     const gop1 = try map.getOrPut(7);
     try testing.expect(!gop1.found_existing);
@@ -687,7 +690,7 @@ test "getOrPut" {
 }
 
 test "get" {
-    var map = Bounded(u32, u32, 4).initContext(.{});
+    var map: Auto(u32, u32, 4) = .init;
 
     try testing.expectEqual(@as(?u32, null), map.get(1));
     try testing.expect(!map.contains(1));
@@ -708,7 +711,7 @@ test "get" {
 }
 
 test "orderedRemove" {
-    var map = Bounded(u32, u32, 4).initContext(.{});
+    var map: Auto(u32, u32, 4) = .init;
     try map.put(3, 30);
     try map.put(1, 10);
     try map.put(2, 20);
@@ -738,7 +741,7 @@ test "orderedRemove" {
 }
 
 test "swapRemove" {
-    var map = Bounded(u32, u32, 4).initContext(.{});
+    var map: Auto(u32, u32, 4) = .init;
     try map.put(3, 30);
     try map.put(1, 10);
     try map.put(2, 20);
@@ -774,7 +777,7 @@ test "swapRemove" {
 }
 
 test "iterator" {
-    var map = Bounded(u32, u32, 8).initContext(.{});
+    var map: Auto(u32, u32, 8) = .init;
 
     // Empty map: next() is null immediately.
     var empty_iterator = map.iterator();
@@ -821,7 +824,7 @@ test "iterator" {
 }
 
 test "keys" {
-    var map = Bounded(u32, u32, 4).initContext(.{});
+    var map: Auto(u32, u32, 4) = .init;
     try testing.expectEqualSlices(u32, &.{}, map.keys());
     try testing.expectEqualSlices(u32, &.{}, map.values());
 
@@ -842,7 +845,7 @@ test "keys" {
 }
 
 test "clear" {
-    var map = Bounded(u32, u32, 4).initContext(.{});
+    var map: Auto(u32, u32, 4) = .init;
     try map.put(1, 10);
     try map.put(2, 20);
 
@@ -874,8 +877,8 @@ test "clear" {
 
 test "capacity boundaries" {
     inline for ([_]comptime_int{ 1, 2, 3, 4 }) |n| {
-        const Map = Bounded(u32, u32, n);
-        var map = Map.initContext(.{});
+        const Map = Auto(u32, u32, n);
+        var map: Map = .init;
         try testing.expect(Map.Index == std.math.IntFittingRange(0, n));
         try testing.expectEqual(@as(usize, n), @as(usize, Map.capacity));
 
@@ -898,7 +901,7 @@ test "capacity boundaries" {
 }
 
 test "V = void" {
-    var set = Bounded(u32, void, 4).initContext(.{});
+    var set: Auto(u32, void, 4) = .init;
     try set.put(2, {});
     try set.put(1, {});
     try set.put(3, {});
@@ -933,7 +936,7 @@ test "V = void" {
 
 test "auto keys" {
     // Integer keys through std.hash_map.AutoContext.
-    var integers = Bounded(u16, u32, 4).initContext(.{});
+    var integers: Auto(u16, u32, 4) = .init;
     try integers.put(3, 30);
     try integers.put(1, 10);
     try integers.put(3, 33);
@@ -942,9 +945,9 @@ test "auto keys" {
     try testing.expectEqual(@as(?u32, null), integers.get(2));
     try testing.expectEqualSlices(u16, &.{ 3, 1 }, integers.keys());
 
-    // []const u8 keys route to std.array_hash_map.StringContext because
-    // std.hash_map.AutoContext rejects slices.
-    var strings = Bounded([]const u8, u32, 4).initContext(.{});
+    // String keys are a separate entry point, like std: AutoContext rejects
+    // slices, so they cannot ride Auto.
+    var strings: String(u32, 4) = .init;
     try strings.put("one", 1);
     try strings.put("two", 2);
     try strings.put("one", 11);
@@ -997,7 +1000,7 @@ const PointContext = struct {
 };
 
 test "custom context" {
-    var salted = BoundedWith(SaltContext, u32, u32, 4).initContext(.{ .salt = 0x1234 });
+    var salted: Custom(u32, u32, SaltContext, 4) = .initContext(.{ .salt = 0x1234 });
     try salted.put(1, 10);
     try salted.put(2, 20);
     try testing.expectEqual(@as(?u32, 10), salted.get(1));
@@ -1007,7 +1010,7 @@ test "custom context" {
     try testing.expectEqual(@as(?u32, null), salted.get(1));
     try testing.expectEqualSlices(u32, &.{2}, salted.keys());
 
-    var points = BoundedWith(PointContext, Point, u32, 4).initContext(.{});
+    var points: Custom(Point, u32, PointContext, 4) = .init;
     try points.put(.{ .x = 1, .y = 2 }, 12);
     try points.put(.{ .x = 2, .y = 1 }, 21);
     try points.put(.{ .x = 1, .y = 2 }, 99);
@@ -1053,8 +1056,8 @@ const AllCollideContext = struct {
 };
 
 test "deletion under collisions" {
-    const Map = BoundedWith(AllCollideContext, u32, u32, 32);
-    var map = Map.initContext(.{});
+    const Map = Custom(u32, u32, AllCollideContext, 32);
+    var map: Map = .init;
 
     // Every key lands in the same run, at increasing probe distances.
     for (0..24) |i| {
@@ -1083,7 +1086,7 @@ test "deletion under collisions" {
 
     // The same for swap removal, which moves the last entry into the hole and
     // must repoint that entry's slot.
-    var swap_map = Map.initContext(.{});
+    var swap_map: Map = .init;
     for (0..24) |i| {
         try swap_map.put(@intCast(i), @intCast(i * 10));
     }
@@ -1253,7 +1256,7 @@ test "matches std.AutoArrayHashMapUnmanaged" {
     var reference: Reference = .empty;
     defer reference.deinit(testing.allocator);
 
-    var bounded = Bounded(u16, u32, 64).initContext(.{});
+    var bounded: Auto(u16, u32, 64) = .init;
     try runDifferentialOps(64, 64, &reference, &bounded, &differential_items);
 }
 
@@ -1264,7 +1267,7 @@ test "matches std at a large capacity" {
     var reference: Reference = .empty;
     defer reference.deinit(testing.allocator);
 
-    var bounded = Bounded(u16, u32, 200).initContext(.{});
+    var bounded: Auto(u16, u32, 200) = .init;
     try runDifferentialOps(200, 200, &reference, &bounded, &large_differential_items);
 }
 
@@ -1273,6 +1276,6 @@ test "collision-heavy differential against std" {
     var reference: Reference = .empty;
     defer reference.deinit(testing.allocator);
 
-    var bounded = BoundedWith(NarrowHashContext, u16, u32, 64).initContext(.{});
+    var bounded: Custom(u16, u32, NarrowHashContext, 64) = .init;
     try runDifferentialOps(64, 64, &reference, &bounded, &differential_items);
 }

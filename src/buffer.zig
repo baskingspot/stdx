@@ -1,6 +1,9 @@
-//! Fixed-capacity buffer backed by an array.
-//!
-//! Useful for building messages or accumulating bytes without heap allocation.
+//! Fixed-capacity append buffers, the `multi_array.{Array, Buffer}` shape:
+//! `Array(T, capacity)` embeds its storage, `Slice(T)` borrows the
+//! caller's. Same API over both — the append/assume-capacity pairs,
+//! `remainingCapacity`, `clear` — with the storage axis as the flavor
+//! names.
+
 const std = @import("std");
 const assert = std.debug.assert;
 const mem = std.mem;
@@ -8,11 +11,14 @@ const testing = std.testing;
 const Alignment = mem.Alignment;
 const crypto = std.crypto;
 
-pub fn ArrayBuffer(comptime T: type, comptime buffer_capacity: comptime_int) type {
-    return ArrayBufferAligned(T, .of(T), buffer_capacity);
+/// Fixed-capacity buffer backed by an array.
+///
+/// Useful for building messages or accumulating bytes without heap allocation.
+pub fn Array(comptime T: type, comptime buffer_capacity: comptime_int) type {
+    return ArrayAligned(T, .of(T), buffer_capacity);
 }
 
-fn ArrayBufferAligned(
+fn ArrayAligned(
     comptime T: type,
     comptime alignment: Alignment,
     comptime buffer_capacity: comptime_int,
@@ -97,11 +103,7 @@ fn ArrayBufferAligned(
             self.len = 0;
         }
 
-        /// Zero the full storage and reset. `std.crypto.secureZero` handles
-        /// any element type — 0.16 implements it as `@memset` over a `[]volatile
-        /// T` view, so non-scalar elements (a certificate chain of borrowed
-        /// DER, say) zero the same way; the volatile qualifier prevents the
-        /// dead store from being elided.
+        /// Zero the full storage and reset.
         pub fn secureZero(self: *Self) void {
             crypto.secureZero(T, &self.buffer);
             self.len = 0;
@@ -118,8 +120,8 @@ fn ArrayBufferAligned(
     };
 }
 
-test ArrayBuffer {
-    var buf: ArrayBuffer(u8, 32) = .empty;
+test Array {
+    var buf: Array(u8, 32) = .empty;
 
     try buf.appendSlice("hello");
     try testing.expectEqualStrings("hello", buf.constSlice());
@@ -129,7 +131,7 @@ test ArrayBuffer {
     try testing.expectEqualStrings("hello world!", buf.constSlice());
 
     // Overflow is an error for append and appendSlice alike.
-    var small: ArrayBuffer(u8, 4) = .empty;
+    var small: Array(u8, 4) = .empty;
     try small.appendSlice("hi");
     try testing.expectError(error.NoSpaceLeft, small.appendSlice("hello"));
     try testing.expectEqualStrings("hi", small.constSlice());
@@ -140,7 +142,7 @@ test ArrayBuffer {
     try testing.expectError(error.NoSpaceLeft, small.append('x'));
 
     // get, set, resize.
-    var four: ArrayBuffer(u8, 4) = .empty;
+    var four: Array(u8, 4) = .empty;
     try four.appendSlice("abc");
     four.set(1, 'X');
     try testing.expectEqual(@as(u8, 'X'), four.get(1));
@@ -166,14 +168,14 @@ test ArrayBuffer {
     try testing.expectEqualStrings("", four.constSlice());
 
     // secureClear zeroes the used span and leaves the tail untouched.
-    var secure: ArrayBuffer(u8, 8) = .{ .buffer = @splat(0x5a), .len = 0 };
+    var secure: Array(u8, 8) = .{ .buffer = @splat(0x5a), .len = 0 };
     try secure.appendSlice("secret");
     secure.secureClear();
     try testing.expectEqual(@as(usize, 0), secure.len);
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0, 0, 0, 0x5a, 0x5a }, &secure.buffer);
 
     // secureZero clears full storage and length.
-    var zero: ArrayBuffer(u8, 8) = .empty;
+    var zero: Array(u8, 8) = .empty;
     try zero.appendSlice("secret");
     zero.secureZero();
     try testing.expectEqual(@as(usize, 0), zero.len);
@@ -181,7 +183,7 @@ test ArrayBuffer {
 
     // Non-scalar elements: append, get, set, pop — the whole element-value
     // path, then the secureClear claim above.
-    var headers: ArrayBuffer([]const u8, 4) = .empty;
+    var headers: Array([]const u8, 4) = .empty;
     try headers.append("aa");
     try headers.appendSlice(&.{ "bb", "cc" });
     try testing.expectEqual(@as(usize, 3), headers.len);
@@ -193,4 +195,129 @@ test ArrayBuffer {
     headers.secureClear();
     try testing.expectEqual(@as(usize, 0), headers.len);
     try testing.expectEqual(@as(usize, 0), headers.buffer[0].len);
+}
+
+/// A bounded append-only view over storage the caller owns.
+pub fn Slice(comptime T: type) type {
+    return struct {
+        const Self = @This();
+
+        buffer: []T,
+        len: usize,
+
+        pub const empty: Self = .{ .buffer = &.{}, .len = 0 };
+
+        pub fn init(buffer: []T) Self {
+            return .{ .buffer = buffer, .len = 0 };
+        }
+
+        pub fn constSlice(self: *const Self) []const T {
+            return self.buffer[0..self.len];
+        }
+
+        pub fn slice(self: *Self) []T {
+            return self.buffer[0..self.len];
+        }
+
+        pub fn unusedCapacitySlice(self: *Self) []T {
+            return self.buffer[self.len..];
+        }
+
+        pub fn remainingCapacity(self: *const Self) usize {
+            return self.buffer.len - self.len;
+        }
+
+        pub fn append(self: *Self, item: T) error{NoSpaceLeft}!void {
+            if (self.remainingCapacity() == 0) return error.NoSpaceLeft;
+            self.appendAssumeCapacity(item);
+        }
+
+        pub fn appendAssumeCapacity(self: *Self, item: T) void {
+            assert(self.remainingCapacity() > 0);
+            self.buffer[self.len] = item;
+            self.len += 1;
+        }
+
+        pub fn appendSlice(self: *Self, items: []const T) error{NoSpaceLeft}!void {
+            if (items.len > self.remainingCapacity()) return error.NoSpaceLeft;
+            self.appendSliceAssumeCapacity(items);
+        }
+
+        pub fn appendSliceAssumeCapacity(self: *Self, items: []const T) void {
+            assert(items.len <= self.remainingCapacity());
+            @memcpy(self.unusedCapacitySlice()[0..items.len], items);
+            self.len += items.len;
+        }
+
+        pub fn retainFrom(self: *Self, items: []const T) error{NoSpaceLeft}!void {
+            if (items.len > self.buffer.len) return error.NoSpaceLeft;
+            @memmove(self.buffer[0..items.len], items);
+            self.len = items.len;
+        }
+
+        pub fn pop(self: *Self) ?T {
+            if (self.len == 0) return null;
+            self.len -= 1;
+            return self.buffer[self.len];
+        }
+
+        pub fn resize(self: *Self, len: usize) void {
+            assert(len <= self.buffer.len);
+            self.len = len;
+        }
+
+        pub fn clear(self: *Self) void {
+            self.len = 0;
+        }
+    };
+}
+
+test Slice {
+    var storage: [8]u8 = undefined;
+    var buf: Slice(u8) = .init(&storage);
+
+    try buf.appendSlice("hello");
+    try testing.expectEqualStrings("hello", buf.constSlice());
+    try buf.retainFrom(buf.constSlice()[2..]);
+    try testing.expectEqualStrings("llo", buf.constSlice());
+
+    // Single-item append, matching Array and std.ArrayList.
+    try buf.append('!');
+    try testing.expectEqualStrings("llo!", buf.constSlice());
+    buf.appendAssumeCapacity('?');
+    try testing.expectEqualStrings("llo!?", buf.constSlice());
+
+    // pop: the last item, null when empty, matching std.ArrayList.pop.
+    try testing.expectEqual(@as(?u8, '?'), buf.pop());
+    try testing.expectEqualStrings("llo!", buf.constSlice());
+    buf.clear();
+    try testing.expect(buf.pop() == null);
+
+    // resize within the backing storage; capacity math stays honest.
+    buf.resize(2);
+    try testing.expectEqualStrings("ll", buf.constSlice());
+    try testing.expectEqual(@as(usize, 6), buf.remainingCapacity());
+    buf.resize(buf.buffer.len);
+    try testing.expectEqual(@as(usize, 0), buf.remainingCapacity());
+
+    // Overflow is an error for append, appendSlice, and retainFrom alike.
+    try testing.expectError(error.NoSpaceLeft, buf.append('x'));
+    try testing.expectError(error.NoSpaceLeft, buf.appendSlice("0123456789"));
+    try testing.expectError(error.NoSpaceLeft, buf.retainFrom("012345678"));
+
+    // Non-scalar elements: the whole element-value path, no element
+    // arithmetic anywhere.
+    const Header = struct { a: u32, b: []const u8 };
+    var header_storage: [4]Header = undefined;
+    var hbuf: Slice(Header) = .init(&header_storage);
+    try hbuf.append(.{ .a = 1, .b = "one" });
+    try hbuf.appendSlice(&.{ .{ .a = 2, .b = "two" }, .{ .a = 3, .b = "three" } });
+    try testing.expectEqual(@as(usize, 3), hbuf.len);
+    try testing.expectEqual(@as(u32, 2), hbuf.slice()[1].a);
+    try testing.expectEqual(@as(u32, 3), hbuf.pop().?.a);
+    try hbuf.retainFrom(hbuf.constSlice()[1..]);
+    try testing.expectEqual(@as(u32, 2), hbuf.slice()[0].a);
+    var five: [5]Header = undefined;
+    for (&five) |*h| h.* = .{ .a = 0, .b = "" };
+    try testing.expectError(error.NoSpaceLeft, hbuf.appendSlice(&five));
 }

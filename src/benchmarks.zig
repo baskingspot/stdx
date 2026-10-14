@@ -1,13 +1,18 @@
 //! stdx benchmarks: the bounded maps against each other, the pairing the
-//! IDEAS ledger cares about — `array_hash_map.Bounded` (robin) is the
-//! small-table map, `swiss.Bounded` the large-table one, and the numbers
-//! are the crossover story: same keys, same capacities, both sizes.
+//! IDEAS ledger cares about — `bounded_array_hash_map.Auto` (robin) is the
+//! small-table map, `swiss.Auto` the large-table one, and the numbers
+//! are the crossover story: same keys, same capacities, both sizes. The
+//! Bloom filter follows with its steady-state `add` and `contains` cost,
+//! then rapidhash against Wyhash on small keys and a 16 KiB buffer.
+
+const std = @import("std");
 
 const bench = @import("benchmark");
 const stdx = @import("stdx");
-
 const swiss = stdx.swiss;
-const robin = stdx.array_hash_map;
+const robin = stdx.bounded_array_hash_map;
+const bloom = stdx.bloom;
+const rapidhash = stdx.rapidhash;
 
 // The small workload: 3000 keys in 3584 capacity (~83% load), u64 keys —
 // the table sits in cache and fingerprint precision decides.
@@ -31,8 +36,8 @@ const large_capacity = 8_000_000;
 const large_fill = 7_000_000;
 const large_probe_keys = 4096;
 
-var large_swiss: swiss.Bounded(u32, u32, large_capacity) = .init();
-var large_robin: robin.Bounded(u32, u32, large_capacity) = .init();
+var large_swiss: swiss.Auto(u32, u32, large_capacity) = .empty;
+var large_robin: robin.Auto(u32, u32, large_capacity) = .empty;
 var large_hit_keys: [large_probe_keys]u32 = undefined;
 var large_miss_keys: [large_probe_keys]u32 = undefined;
 var large_filled = false;
@@ -60,7 +65,7 @@ fn ensureLargeFilled() !void {
 }
 
 pub fn benchmarkSwissSmall(b: *bench.B) !void {
-    var map: swiss.Bounded(u64, u64, small_capacity) = .init();
+    var map: swiss.Auto(u64, u64, small_capacity) = .empty;
     for (small_keys) |k| try map.put(k, k);
     var sink: u64 = 0;
     while (try b.loop()) {
@@ -72,7 +77,7 @@ pub fn benchmarkSwissSmall(b: *bench.B) !void {
 }
 
 pub fn benchmarkRobinSmall(b: *bench.B) !void {
-    var map: robin.Bounded(u64, u64, small_capacity) = .init();
+    var map: robin.Auto(u64, u64, small_capacity) = .empty;
     for (small_keys) |k| try map.put(k, k);
     var sink: u64 = 0;
     while (try b.loop()) {
@@ -84,7 +89,7 @@ pub fn benchmarkRobinSmall(b: *bench.B) !void {
 }
 
 pub fn benchmarkSwissSmallMiss(b: *bench.B) !void {
-    var map: swiss.Bounded(u64, u64, small_capacity) = .init();
+    var map: swiss.Auto(u64, u64, small_capacity) = .empty;
     for (small_keys) |k| try map.put(k, k);
     var sink: u64 = 0;
     while (try b.loop()) {
@@ -96,7 +101,7 @@ pub fn benchmarkSwissSmallMiss(b: *bench.B) !void {
 }
 
 pub fn benchmarkRobinSmallMiss(b: *bench.B) !void {
-    var map: robin.Bounded(u64, u64, small_capacity) = .init();
+    var map: robin.Auto(u64, u64, small_capacity) = .empty;
     for (small_keys) |k| try map.put(k, k);
     var sink: u64 = 0;
     while (try b.loop()) {
@@ -147,6 +152,119 @@ pub fn benchmarkRobinLargeMiss(b: *bench.B) !void {
         for (b.blackBox(&large_miss_keys)) |k| {
             if (large_robin.get(k)) |v| sink +%= v;
         }
+    }
+    b.keepAlive(sink);
+}
+
+// The Bloom workload: 10k keys, cycled. The filter is sized for 1M items,
+// so after the first pass every add re-sets bits that are already set —
+// the steady-state add cost.
+const bloom_capacity = 1_000_000;
+const bloom_keys = blk: {
+    @setEvalBranchQuota(20000);
+    var ks: [10_000]u64 = undefined;
+    var state: u64 = 0x2545f4914f6a03d5;
+    for (&ks) |*k| {
+        state = state *% 6364136223846793005 +% 1442695040888963407;
+        k.* = state;
+    }
+    break :blk ks;
+};
+
+pub fn benchmarkBloomAdd(b: *bench.B) !void {
+    var filter: bloom.Auto(u64, bloom_capacity, 0.01) = .empty;
+    var i: usize = 0;
+    while (try b.loop()) {
+        filter.add(bloom_keys[i]);
+        i += 1;
+        if (i == bloom_keys.len) i = 0;
+    }
+    // Keep the filter itself alive: a scalar result would let the optimizer
+    // drop the bit writes, and the asm memory clobber in keepAlive pins
+    // every store the loop made.
+    b.keepAlive(&filter);
+}
+
+pub fn benchmarkBloomContains(b: *bench.B) !void {
+    var filter: bloom.Auto(u64, bloom_capacity, 0.01) = .empty;
+    for (bloom_keys) |key| filter.add(key);
+
+    var found: usize = 0;
+    var i: usize = 0;
+    while (try b.loop()) {
+        found += @intFromBool(filter.contains(bloom_keys[i]));
+        i += 1;
+        if (i == bloom_keys.len) i = 0;
+    }
+    b.keepAlive(found);
+}
+
+// rapidhash vs Wyhash: the small-key workload cycles 4/8/16-byte slices of
+// a fixed 4096-key table, the large one hashes a single 16 KiB buffer. Each
+// implementation gets its own timed loop — the names pair up, the hashes
+// never interleave.
+const hash_keys = blk: {
+    @setEvalBranchQuota(100_000);
+    var keys: [4096][16]u8 = undefined;
+    var state: u64 = 0x2545f4914f6a03d5;
+    for (&keys) |*key| {
+        for (key) |*byte| {
+            state = state *% 6364136223846793005 +% 1442695040888963407;
+            byte.* = @truncate(state >> 32);
+        }
+    }
+    break :blk keys;
+};
+
+const hash_key_lens = [_]usize{ 4, 8, 16 };
+
+pub fn benchmarkRapidhashSmall(b: *bench.B) !void {
+    var sink: u64 = 0;
+    var i: usize = 0;
+    while (try b.loop()) {
+        const key: []const u8 = b.blackBox(&hash_keys[i & (hash_keys.len - 1)]);
+        sink +%= rapidhash.hash(0, key[0..hash_key_lens[i % hash_key_lens.len]]);
+        i += 1;
+    }
+    b.keepAlive(sink);
+}
+
+pub fn benchmarkWyhashSmall(b: *bench.B) !void {
+    var sink: u64 = 0;
+    var i: usize = 0;
+    while (try b.loop()) {
+        const key: []const u8 = b.blackBox(&hash_keys[i & (hash_keys.len - 1)]);
+        sink +%= std.hash.Wyhash.hash(0, key[0..hash_key_lens[i % hash_key_lens.len]]);
+        i += 1;
+    }
+    b.keepAlive(sink);
+}
+
+const hash_large_len = 16 * 1024;
+
+const hash_large = blk: {
+    @setEvalBranchQuota(100_000);
+    var data: [hash_large_len]u8 = undefined;
+    var state: u64 = 0x2545f4914f6a03d5;
+    for (&data) |*byte| {
+        state = state *% 6364136223846793005 +% 1442695040888963407;
+        byte.* = @truncate(state >> 32);
+    }
+    break :blk data;
+};
+
+pub fn benchmarkRapidhashLarge(b: *bench.B) !void {
+    var sink: u64 = 0;
+    while (try b.loop()) {
+        sink +%= rapidhash.hash(0, b.blackBox(&hash_large));
+    }
+    b.keepAlive(sink);
+}
+
+pub fn benchmarkWyhashLarge(b: *bench.B) !void {
+    var sink: u64 = 0;
+    while (try b.loop()) {
+        sink +%= std.hash.Wyhash.hash(0, b.blackBox(&hash_large));
     }
     b.keepAlive(sink);
 }
