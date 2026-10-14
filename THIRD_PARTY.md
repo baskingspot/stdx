@@ -35,11 +35,3 @@ Robenolt, who is also the stdx copyright holder, so the Apache-2.0
 grant places no obligation on this MIT relicensing. Listed for
 provenance.
 
-## handoff
-
-Upstream: Matt Robenolt's `handoff` (Apache-2.0, not public).
-
-`src/stdio.zig` derives from handoff's `src/stdio.zig`. Every commit
-there is by Matt Robenolt, sole author and stdx copyright holder, so
-the Apache-2.0 grant places no obligation on this MIT relicensing.
-Listed for provenance.

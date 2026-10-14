@@ -13,6 +13,7 @@ pub const posixx = @import("posixx.zig");
 pub const simdx = @import("simdx.zig");
 pub const SliceBuffer = @import("slice_buffer.zig").SliceBuffer;
 pub const stdio = @import("stdio.zig");
+pub const timex = @import("timex.zig");
 
 test {
     std.testing.refAllDecls(@This());
