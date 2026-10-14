@@ -40,6 +40,7 @@
               zizmor
               pinact
               just
+              python3
             ];
           };
         };

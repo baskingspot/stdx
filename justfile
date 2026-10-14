@@ -8,9 +8,10 @@ default: test
 doc:
     zig build docs
 
-# Serve the rendered docs at http://localhost:8000
-serve: doc
-    python3 -m http.server -d zig-out/zig-docs 8000
+# Serve the rendered docs at http://127.0.0.1:PORT (default 8000;
+# override with an argument or the PORT env var)
+doc-serve port=env("PORT", "8000"): doc
+    python3 -m http.server -d zig-out/zig-docs -b 127.0.0.1 "{{ port }}"
 
 # Unit tests (Debug)
 test:
