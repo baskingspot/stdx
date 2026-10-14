@@ -50,6 +50,10 @@ pub fn version(self: Uuid) Version {
 }
 
 /// Generate a v4 (random) UUID. Six bits are fixed: version 4, variant 10.
+/// The bits come from `io.random`: a CSPRNG seeded from the kernel via
+/// `randomSecure` — std's contract — satisfying RFC 9562 §6.2. Use
+/// `io.randomSecure` (always a syscall, no stored state) only for threat
+/// models where RNG state in process memory is itself a liability.
 pub fn v4(io: Io) Uuid {
     var u: Uuid = undefined;
     io.random(&u.bytes);
