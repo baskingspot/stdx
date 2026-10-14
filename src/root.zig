@@ -1,4 +1,4 @@
-//! stdx — shared standard-library extensions for Zig.
+//! stdx — shared standard-library extensions.
 
 const std = @import("std");
 
