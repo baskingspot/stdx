@@ -15,7 +15,8 @@ doc-serve port=env("PORT", "8000"): doc
 
 # Deploy the rendered docs to Cloudflare as an assets-only Worker (config in
 # wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus
-# CLOUDFLARE_ACCOUNT_ID if the token can see more than one account.
+# CLOUDFLARE_ACCOUNT_ID if the token can see more than one account —
+# e.g. `set -a; source ~/code/cloudflare/.envrc.local; set +a`.
 doc-deploy: doc
     wrangler deploy
 

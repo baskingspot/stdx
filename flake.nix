@@ -30,18 +30,24 @@
             overlays = [ mattware.overlays.default ];
           };
 
-          # Cloudflare's `cf` CLI (open beta) as a thin wrapper: exec npx with
-          # a pinned version. The npm dist is fully bundled, so npx fetches a
-          # single package and runs it. The flake pins the version; npm owns
-          # the bits. Deploy stays on wrangler until cf leaves beta.
-          cfVersion = "1.0.0-beta.16";
-          cf-cli = pkgs.writeShellApplication {
-            name = "cf";
-            runtimeInputs = [ pkgs.nodejs_22 ];
-            text = ''exec npx --yes "cf@${cfVersion}" "$@"'';
+          # Wrangler as a thin wrapper: exec npx with a pinned version; the
+          # flake pins the version, npm owns the bits. min-release-age is
+          # overridden per-tool so day-zero wrangler releases stay installable
+          # (the global npmrc supply-chain guard still covers everything
+          # else). `cf` was tried here and dropped: `cf deploy` requires a
+          # JS/Python/Rust manifest (package.json et al) to pick a build
+          # tool, which this repo will never have.
+          wranglerVersion = "4.150.0";
+          wrangler = pkgs.writeShellApplication {
+            name = "wrangler";
+            runtimeEnv = {
+              NPM_CONFIG_MIN_RELEASE_AGE = "0";
+            };
+            text = ''exec ${pkgs.nodejs_24}/bin/npx --yes "wrangler@${wranglerVersion}" "$@"'';
           };
         in
         {
+          formatter = pkgs.nixfmt-tree;
           devShells.default = pkgs.mkShell {
             packages =
               with pkgs;
@@ -54,9 +60,8 @@
                 pinact
                 just
                 python3
-                wrangler
               ]
-              ++ [ cf-cli ];
+              ++ [ wrangler ];
           };
         };
     };
