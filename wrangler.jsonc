@@ -13,12 +13,10 @@
     "not_found_handling": "none",
     "html_handling": "auto-trailing-slash"
   },
-  // This repo owns the domain attachment (go.withmatt.com pattern): deploy
-  // creates the custom domain and its proxied DNS record. Terraform in
-  // ~/code/cloudflare stays out of worker-hosted hostnames.
-  "routes": [
-    { "pattern": "stdx.withmatt.com", "custom_domain": true }
-  ],
-  // Single canonical origin.
+  // stdx.withmatt.com is attached via Terraform in ~/code/cloudflare
+  // (cloudflare_workers_custom_domain). No routes here: the CI deploy
+  // token is script-scoped and cannot touch DNS or domains, so deploys
+  // are pure version uploads. Keep the workers.dev subdomain off so the
+  // site has a single canonical origin.
   "workers_dev": false
 }
