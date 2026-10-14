@@ -3,6 +3,11 @@
 
 default: test
 
+# Render API docs into docs/ (the wasm viewer `zig std` uses; open
+# docs/index.html)
+doc:
+    zig test src/root.zig -femit-docs -fno-emit-bin
+
 # Unit tests (Debug)
 test:
     zig build test --summary all
