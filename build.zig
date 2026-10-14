@@ -31,24 +31,24 @@ pub fn build(b: *std.Build) void {
     // The benchmark dependency is lazy: only the `bench` step imports it, so
     // test and lint builds never fetch it. Without it fetched there is no
     // `bench` step; `zig build --fetch` materializes it.
-    const benchmark_dep = b.lazyDependency("benchmark", .{
-        .target = target,
-        .optimize = optimize,
-    }) orelse return;
-    const benchmark = @import("benchmark");
+    if (b.lazyImport(@This(), "benchmark")) |benchmark| {
+        const benchmark_dep = b.lazyDependency("benchmark", .{
+            .target = target,
+            .optimize = optimize,
+        }) orelse unreachable;
+        const benchmarks_root = b.createModule(.{
+            .root_source_file = b.path("src/benchmarks.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "stdx", .module = mod }},
+        });
+        const run_benchmarks = benchmark.addRunTest(b, .{
+            .dependency = benchmark_dep,
+            .root_module = benchmarks_root,
+        });
+        if (b.args) |args| run_benchmarks.addArgs(args);
 
-    const benchmarks_root = b.createModule(.{
-        .root_source_file = b.path("src/benchmarks.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{.{ .name = "stdx", .module = mod }},
-    });
-    const run_benchmarks = benchmark.addRunTest(b, .{
-        .dependency = benchmark_dep,
-        .root_module = benchmarks_root,
-    });
-    if (b.args) |args| run_benchmarks.addArgs(args);
-
-    const bench_step = b.step("bench", "Run stdx benchmarks");
-    bench_step.dependOn(&run_benchmarks.step);
+        const bench_step = b.step("bench", "Run stdx benchmarks");
+        bench_step.dependOn(&run_benchmarks.step);
+    }
 }
