@@ -13,6 +13,12 @@ doc:
 doc-serve port=env("PORT", "8000"): doc
     python3 -m http.server -d zig-out/zig-docs -b 127.0.0.1 "{{ port }}"
 
+# Deploy the rendered docs to Cloudflare as an assets-only Worker (config in
+# wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus
+# CLOUDFLARE_ACCOUNT_ID if the token can see more than one account.
+doc-deploy: doc
+    wrangler deploy
+
 # Unit tests (Debug)
 test:
     zig build test --summary all

@@ -1,0 +1,20 @@
+{
+  // Schema lives on unpkg because this repo has no node_modules.
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "stdx-withmatt-com",
+  // Set to the date of the last deploy-relevant config change.
+  "compatibility_date": "2026-10-13",
+  // Pure static site: no worker script, so no `main` and no `binding`.
+  // Asset requests are free and served from cache without any invocation.
+  "assets": {
+    // Output of `zig build docs` (see justfile `doc`).
+    "directory": "./zig-out/zig-docs",
+    // Plain 404 for unknown paths (not an SPA, no 404.html).
+    "not_found_handling": "none",
+    "html_handling": "auto-trailing-slash"
+  },
+  // Interim origin until the vanity domain stdx.withmatt.com is attached via
+  // Terraform in ~/code/cloudflare; flip this off then for a single
+  // canonical origin.
+  "workers_dev": true
+}

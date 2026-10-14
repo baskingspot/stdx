@@ -29,19 +29,34 @@
             inherit system;
             overlays = [ mattware.overlays.default ];
           };
+
+          # Cloudflare's `cf` CLI (open beta) as a thin wrapper: exec npx with
+          # a pinned version. The npm dist is fully bundled, so npx fetches a
+          # single package and runs it. The flake pins the version; npm owns
+          # the bits. Deploy stays on wrangler until cf leaves beta.
+          cfVersion = "1.0.0-beta.16";
+          cf-cli = pkgs.writeShellApplication {
+            name = "cf";
+            runtimeInputs = [ pkgs.nodejs_22 ];
+            text = ''exec npx --yes "cf@${cfVersion}" "$@"'';
+          };
         in
         {
           devShells.default = pkgs.mkShell {
-            packages = with pkgs; [
-              zig_0_16
-              zls_0_16
-              ziglint
-              zigdoc
-              zizmor
-              pinact
-              just
-              python3
-            ];
+            packages =
+              with pkgs;
+              [
+                zig_0_16
+                zls_0_16
+                ziglint
+                zigdoc
+                zizmor
+                pinact
+                just
+                python3
+                wrangler
+              ]
+              ++ [ cf-cli ];
           };
         };
     };
