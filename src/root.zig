@@ -12,6 +12,7 @@ pub const netx = @import("netx.zig");
 pub const posixx = @import("posixx.zig");
 pub const simdx = @import("simdx.zig");
 pub const SliceBuffer = @import("slice_buffer.zig").SliceBuffer;
+pub const stdio = @import("stdio.zig");
 
 test {
     std.testing.refAllDecls(@This());
