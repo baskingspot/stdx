@@ -165,6 +165,22 @@ accumulate immortals?); thread model (single-owner first is a very
 different cut); metrics surface shape. First cut without the mover is
 a few hundred lines in patterns this repo has already shipped.
 
+## testingx — checked off, rejected
+
+std.testing 0.16 already covers the would-be pitch: `tmpDir`, string
+diffing inside `expectEqualSlices` (`BytesDiffer`),
+`checkAllAllocationFailures` (fault-injection testing, better than
+Go's), `Smith` structured fuzz input, and mock `Io.Reader` doubles with
+call recording.
+
+The one real gap was benchmarks — no `std.bench` — and that home is
+already taken: github.com/mattrobenolt/zig-benchmark (the fastmem
+precedent: specialist packages stay separate, stdx stays thin).
+
+testify: rejected — its assert/require split exists because Go's
+helpers don't return errors; Zig's `try` is `require`. The mock/suite
+machinery fights the inline-test idiom.
+
 ## From the Rust ecosystem
 
 Rust's std is thin by design, so the crate ecosystem is a decade's
