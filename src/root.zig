@@ -1,9 +1,4 @@
-//! stdx — shared standard-library extensions.
-//!
-//! Modules mirror std namespaces where they extend one (`memx` ↔ `std.mem`,
-//! `netx` ↔ `std.Io.net`, `fmtx` ↔ `std.fmt`); single data structures lift
-//! to top-level names, and concepts with multiple flavors get a package of
-//! short names (`multi_array.{Array, Buffer}`, like `std.array_hash_map.Auto`).
+//! stdx — shared standard-library extensions for Zig.
 
 const std = @import("std");
 
