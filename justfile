@@ -3,10 +3,14 @@
 
 default: test
 
-# Render API docs into docs/ (the wasm viewer `zig std` uses; open
-# docs/index.html)
+# Render API docs into zig-out/zig-docs/ (the wasm viewer `zig std`
+# uses; open zig-out/zig-docs/index.html)
 doc:
-    zig test src/root.zig -femit-docs -fno-emit-bin
+    zig build docs
+
+# Serve the rendered docs at http://localhost:8000
+serve: doc
+    python3 -m http.server -d zig-out/zig-docs 8000
 
 # Unit tests (Debug)
 test:
