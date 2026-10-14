@@ -32,3 +32,17 @@ Zig 0.16. `nix develop` gives you the toolchain, ziglint, and zigdoc.
 
 MIT licensed — see `LICENSE`. A few pieces were adapted from other code;
 `THIRD_PARTY.md` says which, and under what terms.
+
+## Related projects
+
+Other pieces of the same effort — low-level primitives Zig is missing:
+
+- [fastmem](https://github.com/mattrobenolt/fastmem-zig) — SIMD
+  memcpy, memmove, and memset
+- [ztls](https://github.com/mattrobenolt/ztls) — a TLS library
+- [zcompress](https://github.com/mattrobenolt/zcompress) — fast,
+  self-contained compression codecs
+- [ztest](https://github.com/mattrobenolt/ztest) — a test runner that
+  writes plain text instead of a TUI
+- [zig-benchmark](https://github.com/mattrobenolt/zig-benchmark) — a
+  benchmark harness
