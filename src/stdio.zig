@@ -20,7 +20,6 @@ const Io = std.Io;
 const io = std.Options.debug_io;
 const testing = std.testing;
 const posix = std.posix;
-const linux = std.os.linux;
 
 /// One buffered stream over a std file, with the buffer and the file
 /// writer embedded, so an instance owns its whole state.
@@ -82,12 +81,9 @@ test Stream {
 
     // A pipe-backed instance drives the whole surface without touching
     // the process's own stdio: buffering, content fidelity, no auto
-    // newline, and the failure latch.
-    var fds: [2]posix.fd_t = undefined;
-    switch (posix.errno(linux.pipe2(&fds, .{ .NONBLOCK = true }))) {
-        .SUCCESS => {},
-        else => |e| return posix.unexpectedErrno(e),
-    }
+    // newline, and the failure latch. Io.Threaded.pipe2 is the portable
+    // constructor: pipe2 where the OS has it, pipe + fcntl elsewhere.
+    const fds = try Io.Threaded.pipe2(.{ .NONBLOCK = true });
 
     var stream: Stream = undefined;
     stream = .{
@@ -117,7 +113,7 @@ test Stream {
     // The first failed write latches: with the read end closed, the next
     // flush takes EPIPE; no method errors, and a later write that must
     // drain (larger than the buffer) reports zero accepted.
-    _ = linux.close(fds[0]);
+    Io.Threaded.closeFd(fds[0]);
     stream.flush();
     const big = "x" ** 8192;
     try testing.expectEqual(@as(usize, 0), stream.write(big));
