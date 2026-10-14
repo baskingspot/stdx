@@ -1,8 +1,8 @@
 //! RFC 9562 UUIDs: generate (v4, v7), parse, format.
 //!
-//! Generation takes an `Io`: v4 draws all 128 bits from `Io.random`, v7
-//! takes its timestamp from `Io.Timestamp` (`.real`) and the rest from
-//! `Io.random`. v7 is ordered across milliseconds but not within one —
+//! Generation is Io-less: v4 draws all 128 bits from `randomx.fill`, v7
+//! takes its timestamp from `timex.now(.real)` and the rest from
+//! `randomx.fill`. v7 is ordered across milliseconds but not within one —
 //! the monotonic counter of RFC 9562 §5.2 needs mutable state, which a
 //! bare constructor refuses to smuggle, so callers that need same-ms
 //! ordering serialize at their end.
@@ -16,6 +16,9 @@ const Io = std.Io;
 const fmt = std.fmt;
 const mem = std.mem;
 const testing = std.testing;
+
+const randomx = @import("randomx.zig");
+const timex = @import("timex.zig");
 
 const Uuid = @This();
 
@@ -50,13 +53,12 @@ pub fn version(self: Uuid) Version {
 }
 
 /// Generate a v4 (random) UUID. Six bits are fixed: version 4, variant 10.
-/// The bits come from `io.random`: a CSPRNG seeded from the kernel via
-/// `randomSecure` — std's contract — satisfying RFC 9562 §6.2. Use
-/// `io.randomSecure` (always a syscall, no stored state) only for threat
-/// models where RNG state in process memory is itself a liability.
-pub fn v4(io: Io) Uuid {
+/// The bits come from `randomx.fill`: a per-thread CSPRNG seeded from the
+/// platform's secure source, the `Io.random` semantics — satisfying RFC
+/// 9562 §6.2. Every thread's RNG state is its own, never shared.
+pub fn v4() Uuid {
     var u: Uuid = undefined;
-    io.random(&u.bytes);
+    randomx.fill(&u.bytes);
     u.bytes[6] = (u.bytes[6] & 0x0f) | 0x40;
     u.bytes[8] = (u.bytes[8] & 0x3f) | 0x80;
     return u;
@@ -65,10 +67,10 @@ pub fn v4(io: Io) Uuid {
 /// Generate a v7 UUID: the leading 48 bits are the Unix timestamp in
 /// milliseconds, big-endian; the rest is random. Ordered across
 /// milliseconds, unordered within one — see the module doc.
-pub fn v7(io: Io) Uuid {
+pub fn v7() Uuid {
     var u: Uuid = undefined;
-    io.random(&u.bytes);
-    const ms: u64 = @intCast(@max(0, Io.Timestamp.now(io, .real).toMilliseconds()));
+    randomx.fill(&u.bytes);
+    const ms: u64 = @intCast(timex.now(.real).toMilliseconds());
     u.bytes[0] = @truncate(ms >> 40);
     u.bytes[1] = @truncate(ms >> 32);
     u.bytes[2] = @truncate(ms >> 24);
@@ -116,24 +118,22 @@ pub fn eql(a: Uuid, b: Uuid) bool {
 }
 
 test Uuid {
-    const io = testing.io;
-
     // nil round-trips.
     try testing.expect(Uuid.nil.eql(try Uuid.parse("00000000-0000-0000-0000-000000000000")));
 
     // v4: fixed version/variant bits, distinct draws.
-    const a = Uuid.v4(io);
-    const b = Uuid.v4(io);
+    const a = Uuid.v4();
+    const b = Uuid.v4();
     try testing.expect(a.version() == .v4);
     try testing.expectEqual(@as(u8, 0x40), a.bytes[6] & 0xf0);
     try testing.expectEqual(@as(u8, 0x80), a.bytes[8] & 0xc0);
     try testing.expect(!a.eql(b));
 
     // v7: wall-aligned timestamp in the leading 48 bits, fixed bits.
-    const c = Uuid.v7(io);
+    const c = Uuid.v7();
     try testing.expect(c.version() == .v7);
     const ts = mem.readInt(u48, c.bytes[0..6], .big);
-    const now = Io.Timestamp.now(io, .real).toMilliseconds();
+    const now = timex.now(.real).toMilliseconds();
     try testing.expect(@abs(@as(i64, @intCast(ts)) - now) < 5_000);
 
     // Round trip: format then parse, either case.
