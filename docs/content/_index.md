@@ -224,7 +224,7 @@ When the map is full, `put` fails for a new key. It still updates an existing ke
 
 `std.StaticStringMap` also builds a table at compile time, for string keys. `static_map` differs in these ways:
 
-- Key types: std takes `[]const u8` only. `static_map.Auto` takes any key type that `std.hash.autoHash` accepts, such as integers and enums. `static_map.Custom` takes your own hash and equality context, and `static_map.String` is the string-keyed form.
+- Key types: std takes `[]const u8` only. `static_map.Auto` takes key types that `std.hash.autoHash` accepts and that are at least a byte wide, such as `u8`, `u32`, and enums with a tag type of that size. A narrower key, such as a `u2` or an enum with three tags, builds but fails every lookup. `static_map.Custom` takes your own hash and equality context, and `static_map.String` is the string-keyed form.
 - Lookup: std finds a key by its length, then compares it against each key of that length. `static_map` hashes the key and probes a table.
 - Duplicates: std accepts a duplicate key, and which of its values `get` returns is unspecified. `static_map` rejects a duplicate key at compile time.
 - Order: std orders `keys()` and `values()` by key length. `static_map` keeps the order of your literal.
