@@ -27,16 +27,24 @@ pub const Ip4 = struct {
 
     pub const ParseError = Ip4Address.ParseError;
 
-    pub fn init(octets: [4]u8) Ip4 {
-        return .{ .bytes = octets };
+    pub fn init(bytes: [4]u8) Ip4 {
+        return .{ .bytes = bytes };
     }
 
     /// Parse dotted-quad notation, with `Ip4Address.parse` semantics:
     /// hostnames and IPv6 are parse errors, and non-canonical quads (leading
     /// zeros) are too.
     pub fn parse(buf: []const u8) ParseError!Ip4 {
-        const std_addr = try Ip4Address.parse(buf, 0);
+        const std_addr: Ip4Address = try .parse(buf, 0);
         return .{ .bytes = std_addr.bytes };
+    }
+
+    /// Parses at compile time, reporting the offending string and error on
+    /// failure. For literal-driven comptime tables, where `parse` +
+    /// `catch unreachable` only says "reached unreachable code".
+    pub fn parseComptime(comptime s: []const u8) Ip4 {
+        return comptime Ip4.parse(s) catch |err|
+            @compileError(@errorName(err) ++ " in: " ++ s);
     }
 
     /// Converts from an IPv4-mapped IPv6 address, or returns null.
@@ -93,6 +101,12 @@ pub const Ip4 = struct {
     /// 169.254.0.0/16.
     pub fn isLinkLocalUnicast(self: Ip4) bool {
         return self.bytes[0] == 169 and self.bytes[1] == 254;
+    }
+
+    /// 224.0.0.0/24, RFC 4291 §2.7.1: the link-local multicast block. All
+    /// such addresses are also isMulticast.
+    pub fn isLinkLocalMulticast(self: Ip4) bool {
+        return self.bytes[0] == 224 and self.bytes[1] == 0;
     }
 
     pub fn isBroadcast(self: Ip4) bool {
@@ -177,47 +191,58 @@ test Ip4 {
     try testing.expectError(error.Incomplete, Ip4.parse(""));
     try testing.expectError(error.NonCanonical, Ip4.parse("10.01.2.3"));
 
+    // parseComptime folds to a constant in a literal table.
+    const table = [_]Ip4{ .parseComptime("127.0.0.1"), .parseComptime("10.0.0.1") };
+    try testing.expect(table[0].isLoopback());
+    try testing.expect(table[1].isPrivate());
+
+    // Classification, Go netip semantics: link-local multicast block.
+    try testing.expect(Ip4.parseComptime("224.0.0.1").isLinkLocalMulticast());
+    try testing.expect(!Ip4.parseComptime("225.0.0.1").isLinkLocalMulticast());
+    try testing.expect(!Ip4.parseComptime("1.2.3.4").isLinkLocalMulticast());
+    try testing.expect(!Ip4.parseComptime("169.254.0.1").isLinkLocalMulticast());
+
     // Conversions mirror Ip4Address: fromIp6 unwraps IPv4-mapped IPv6,
     // fromAny takes either arm of IpAddress.
-    const mapped = Ip6Address.fromIp4(.{ .bytes = addr.bytes, .port = 0 });
+    const mapped: Ip6Address = .fromIp4(.{ .bytes = addr.bytes, .port = 0 });
     try testing.expect(Ip4.fromIp6(mapped).?.eql(addr));
     try testing.expect(Ip4.fromAny(.{ .ip4 = .{ .bytes = addr.bytes, .port = 0 } }).?.eql(addr));
     try testing.expect(Ip4.fromAny(.{ .ip6 = mapped }).?.eql(addr));
-    try testing.expect(Ip4.fromIp6(Ip6Address.loopback(0)) == null);
+    try testing.expect(Ip4.fromIp6(.loopback(0)) == null);
 
     // Classification, matching Go netip semantics.
-    try testing.expect(testIp("127.0.0.1").isLoopback());
-    try testing.expect(!testIp("126.255.255.255").isLoopback());
-    try testing.expect(testIp("10.0.0.1").isPrivate());
-    try testing.expect(testIp("172.31.255.1").isPrivate());
-    try testing.expect(!testIp("172.32.0.1").isPrivate());
-    try testing.expect(testIp("192.168.0.1").isPrivate());
-    try testing.expect(!testIp("192.169.0.1").isPrivate());
-    try testing.expect(testIp("224.0.0.1").isMulticast());
-    try testing.expect(testIp("239.255.255.255").isMulticast());
-    try testing.expect(!testIp("240.0.0.1").isMulticast());
-    try testing.expect(testIp("169.254.0.1").isLinkLocalUnicast());
-    try testing.expect(!testIp("169.253.0.1").isLinkLocalUnicast());
-    try testing.expect(testIp("255.255.255.255").isBroadcast());
-    try testing.expect(testIp("8.8.8.8").isGlobalUnicast());
+    try testing.expect(Ip4.parseComptime("127.0.0.1").isLoopback());
+    try testing.expect(!Ip4.parseComptime("126.255.255.255").isLoopback());
+    try testing.expect(Ip4.parseComptime("10.0.0.1").isPrivate());
+    try testing.expect(Ip4.parseComptime("172.31.255.1").isPrivate());
+    try testing.expect(!Ip4.parseComptime("172.32.0.1").isPrivate());
+    try testing.expect(Ip4.parseComptime("192.168.0.1").isPrivate());
+    try testing.expect(!Ip4.parseComptime("192.169.0.1").isPrivate());
+    try testing.expect(Ip4.parseComptime("224.0.0.1").isMulticast());
+    try testing.expect(Ip4.parseComptime("239.255.255.255").isMulticast());
+    try testing.expect(!Ip4.parseComptime("240.0.0.1").isMulticast());
+    try testing.expect(Ip4.parseComptime("169.254.0.1").isLinkLocalUnicast());
+    try testing.expect(!Ip4.parseComptime("169.253.0.1").isLinkLocalUnicast());
+    try testing.expect(Ip4.parseComptime("255.255.255.255").isBroadcast());
+    try testing.expect(Ip4.parseComptime("8.8.8.8").isGlobalUnicast());
     // Private addresses are global unicast, matching Go.
-    try testing.expect(testIp("10.1.2.3").isGlobalUnicast());
-    try testing.expect(!testIp("127.0.0.1").isGlobalUnicast());
+    try testing.expect(Ip4.parseComptime("10.1.2.3").isGlobalUnicast());
+    try testing.expect(!Ip4.parseComptime("127.0.0.1").isGlobalUnicast());
     try testing.expect(!Ip4.unspecified.isGlobalUnicast());
 
     // Ordering: lexicographic octet order is numeric order.
-    try testing.expect(testIp("10.0.0.2").order(testIp("10.0.0.3")) == .lt);
-    try testing.expect(testIp("10.0.0.3").order(testIp("10.0.0.2")) == .gt);
+    try testing.expect(Ip4.parseComptime("10.0.0.2").order(.parseComptime("10.0.0.3")) == .lt);
+    try testing.expect(Ip4.parseComptime("10.0.0.3").order(.parseComptime("10.0.0.2")) == .gt);
     try testing.expect(addr.order(try .parse("10.1.2.3")) == .eq);
-    try testing.expect(testIp("10.0.0.255").order(testIp("10.0.1.0")) == .lt);
-    try testing.expect(testIp("2.0.0.0").order(testIp("10.0.0.0")) == .lt);
+    try testing.expect(Ip4.parseComptime("10.0.0.255").order(.parseComptime("10.0.1.0")) == .lt);
+    try testing.expect(Ip4.parseComptime("2.0.0.0").order(.parseComptime("10.0.0.0")) == .lt);
 
     // Arithmetic.
-    try testing.expectEqual(testIp("10.0.0.2"), testIp("10.0.0.1").next());
+    try testing.expectEqual(Ip4.parseComptime("10.0.0.2"), Ip4.parseComptime("10.0.0.1").next());
     // Octet carry.
-    try testing.expectEqual(testIp("10.0.1.0"), testIp("10.0.0.255").next());
+    try testing.expectEqual(Ip4.parseComptime("10.0.1.0"), Ip4.parseComptime("10.0.0.255").next());
     try testing.expect(Ip4.broadcast.next() == null);
-    try testing.expectEqual(testIp("10.0.0.1"), testIp("10.0.0.2").prev());
+    try testing.expectEqual(Ip4.parseComptime("10.0.0.1"), Ip4.parseComptime("10.0.0.2").prev());
     try testing.expect(Ip4.unspecified.prev() == null);
 
     // fromSlice.
@@ -231,10 +256,6 @@ test Ip4 {
     var buf: [32]u8 = undefined;
     const formatted = try std.fmt.bufPrint(&buf, "{f}", .{addr});
     try testing.expectEqualStrings("10.1.2.3", formatted);
-}
-
-fn testIp(comptime s: []const u8) Ip4 {
-    return Ip4.parse(s) catch unreachable;
 }
 
 /// IPv4 CIDR prefix: an `Ip4` network address plus a prefix length in bits.
@@ -258,7 +279,7 @@ pub const Prefix4 = struct {
             return error.NoSlash;
         // Address first, like Go netip: an IPv6 string reports the address
         // error, not the bits error its /128 would produce under v4 rules.
-        const addr = try Ip4.parse(addr_str);
+        const addr: Ip4 = try .parse(addr_str);
         // Canonical CIDR bits, like Go netip: leading zeros are a parse
         // error (InvalidBits via atoi), and "/0" alone is valid. Empty bits
         // and non-digits also fail inside atoi.
@@ -266,6 +287,13 @@ pub const Prefix4 = struct {
             return error.InvalidBits;
         if (bits > 32) return error.BitsOutOfRange;
         return .{ .addr = addr, .bits = bits };
+    }
+
+    /// Parses at compile time, reporting the offending string and error on
+    /// failure, like `Ip4.parseComptime`.
+    pub fn parseComptime(comptime s: []const u8) Prefix4 {
+        return comptime Prefix4.parse(s) catch |err|
+            @compileError(@errorName(err) ++ " in: " ++ s);
     }
 
     /// Containment by octet-prefix compare: whole octets match exactly, then
@@ -302,24 +330,34 @@ pub const Prefix4 = struct {
     pub fn overlaps(self: Prefix4, other: Prefix4) bool {
         return self.contains(other.addr) or other.contains(self.addr);
     }
+
+    /// Whether the prefix contains exactly one address: 32 bits.
+    pub fn isSingleIp(self: Prefix4) bool {
+        return self.bits == 32;
+    }
+
+    pub fn format(self: Prefix4, w: *Io.Writer) Io.Writer.Error!void {
+        try self.addr.format(w);
+        try w.print("/{d}", .{self.bits});
+    }
 };
 
 test Prefix4 {
     const p8: Prefix4 = try .parse("10.0.0.0/8");
-    try testing.expect(p8.contains(testIp("10.255.0.1")));
-    try testing.expect(!p8.contains(testIp("11.0.0.1")));
+    try testing.expect(p8.contains(.parseComptime("10.255.0.1")));
+    try testing.expect(!p8.contains(.parseComptime("11.0.0.1")));
 
     // Non-octet-aligned prefix length: exercises the masked partial octet.
     const p20: Prefix4 = try .parse("10.1.16.0/20");
-    try testing.expect(p20.contains(testIp("10.1.31.255")));
-    try testing.expect(!p20.contains(testIp("10.1.32.0")));
+    try testing.expect(p20.contains(.parseComptime("10.1.31.255")));
+    try testing.expect(!p20.contains(.parseComptime("10.1.32.0")));
 
     const p32: Prefix4 = try .parse("1.2.3.4/32");
-    try testing.expect(p32.contains(testIp("1.2.3.4")));
-    try testing.expect(!p32.contains(testIp("1.2.3.5")));
+    try testing.expect(p32.contains(.parseComptime("1.2.3.4")));
+    try testing.expect(!p32.contains(.parseComptime("1.2.3.5")));
 
     const p0: Prefix4 = try .parse("0.0.0.0/0");
-    try testing.expect(p0.contains(testIp("255.255.255.255")));
+    try testing.expect(p0.contains(.parseComptime("255.255.255.255")));
 
     try testing.expectError(error.NoSlash, Prefix4.parse("10.0.0.0"));
     try testing.expectError(error.BitsOutOfRange, Prefix4.parse("10.0.0.0/33"));
@@ -343,7 +381,8 @@ test Prefix4 {
     try testing.expectError(error.InvalidBits, Prefix4.parse("10.0.0.0/08"));
     try testing.expectError(error.InvalidBits, Prefix4.parse("10.0.0.0/00"));
     try testing.expectError(error.InvalidBits, Prefix4.parse("0.0.0.0/032"));
-    try testing.expect((try Prefix4.parse("0.0.0.0/0")).contains(testIp("255.255.255.255")));
+    const all: Prefix4 = try .parse("0.0.0.0/0");
+    try testing.expect(all.contains(.parseComptime("255.255.255.255")));
 
     // masked: host bits zeroed to canonical form.
     try testing.expectEqual(
@@ -360,7 +399,7 @@ test Prefix4 {
     try testing.expect(p20.overlaps(p20));
 
     // addr.prefix(bits).
-    const from_addr = try testIp("10.1.2.3").prefix(20);
+    const from_addr = try Ip4.parseComptime("10.1.2.3").prefix(20);
     try testing.expectEqual(try Prefix4.parse("10.1.0.0/20"), from_addr);
-    try testing.expectError(error.BitsOutOfRange, testIp("10.0.0.1").prefix(33));
+    try testing.expectError(error.BitsOutOfRange, Ip4.parseComptime("10.0.0.1").prefix(33));
 }
