@@ -43,6 +43,70 @@ faster. No pasted user yet — design it when something needs it.
 
 Vyukov's bounded MPMC array. Real work, no user. Parked.
 
+## pages — whole-kernel-page memory primitives (from handoff)
+
+The strongest handoff bring-in: `allocator`/`size`/`reserve`/
+`unreserve`/`whole`/`release`, exactly the "low-level primitives Zig
+is missing" framing. Four general contracts: page-exact geometry
+(no heap header offset, pages share no tenants), lifetime past cleanup
+(no state to deinit behind a detached thread), a free that returns pages
+(munmap hands a scratch page back; arena frees do nothing non-LIFO),
+and ceiling-scale untouched reservation (no allocator undefined-fill
+touching a slot-space-sized mapping wholesale). Tests already generic:
+4-page block, edge bytes preserved, zero-refill. Composes with
+heap.SlabAllocator (page-backed slab story).
+
+Porting: strip the D13/D20/D38/D43/D44 and handoff-specific references
+(watchdog, log ring, sink, Server) — state the four contracts in stdx
+terms. `release` is raw `linux.madvise(MADV.DONTNEED)` — Linux-only
+as written; the portability pass time got: the comptime platform
+guard, plus a macOS verification of MADV_DONTNEED's zero-refill
+semantics on anonymous memory (Darwin's man page wording needs
+checking; if Darwin does not guarantee zero-fill, the doc must say
+what it does guarantee per-OS).
+
+## RateLimit — one line per interval (from handoff)
+
+`admit(now: Io.Timestamp) ?u32`: null = hold the line, a count = log
+it with the lines held back since the last. ~40 lines, saturation
+tested (u32 saturating, i64 interval math). Every long-running process
+logs recurring conditions; the smallest genuine win. Home: next to
+time — `src/time/rate_limit.zig`, re-exported from time.zig; the
+`Io.Timestamp` parameter composes with `time.now(.awake)` and
+`CachedClock` samples directly. `interval_ms: i64` default 1000,
+next_ms/suppressed fields — file-as-a-struct, nearly as-is.
+
+## Set — algebra over Map(K, void)
+
+`V = void` works in both maps today; what's missing is set
+vocabulary and algebra. Thin wrapper composing
+bounded_array_hash_map (the bloom precedent), in-place algebra
+needs no allocation: `intersect(other)`, `unite(other)`,
+`subtract(other)` — iterate self, contains-check against other.
+Queries: `subsetOf` / `supersetOf` / `disjointWith`.
+`set.Custom/Auto/String` family shape over the map's primitives.
+
+## Static map — comptime-generated, arbitrary keys
+
+std covers strings (`StaticStringMap(V)` — `initComptime`, length-
+bucketed, comptime-generated, zero runtime init; `StaticStringMap(void)`
++ `has` IS the static string set — don't build it) and dense enums
+(`EnumMap`); sparse non-string keys (opcode tables, protocol
+constants) have nothing. The stdx version: a comptime instantiation
+of the bounded map's own Robin Hood probe logic — the table built at
+comptime from a literal, immutable, in `.rodata`, zero init. Same
+algorithm, built during compilation — the StaticBitSet pattern bloom
+already composes with.
+
+## BTree — ordered map, pending a real use case
+
+Rust ships `BTreeMap` for sorted iteration and range queries
+(floor/ceiling/range) over a comparator — what neither the robin
+(insertion-ordered) nor swiss (slot-ordered) maps give. Biggest item
+in this conversation's class; only worth building if a use case
+actually wants sorted iteration or range queries. Rust envy is not
+a gap.
+
 ## Timer set
 
 Not the clock — that's `std.Io.Timestamp`. Not per-op deadlines —

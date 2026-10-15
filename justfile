@@ -44,3 +44,10 @@ ci: test test-release-safe test-release-fast lint
 # Run benchmarks (e.g. `just bench -Doptimize=ReleaseFast -- --benchtime=250ms --filter=Swiss`)
 bench *ARGS:
     zig build bench {{ ARGS }}
+
+# Zig 0.16: --fuzz takes an iteration budget with a K/M/G suffix, not a
+# duration. ReleaseSafe forces the LLVM backend, dodging the 0.16.0
+# self-hosted-backend bug in Debug fuzz mode (ziglang/zig#30655).
+# Run the fuzzer with an iteration budget (e.g. just fuzz 50M)
+fuzz LIMIT="10M":
+    zig build test -Doptimize=ReleaseSafe --fuzz={{ LIMIT }}

@@ -1055,6 +1055,22 @@ const AllCollideContext = struct {
     }
 };
 
+/// A context whose hash is the same for every key: the whole map becomes one
+/// Robin Hood displacement chain, the hashbrown worst-case-hash class.
+const ConstHashContext = struct {
+    pub fn hash(self: ConstHashContext, key: u16) u32 {
+        _ = self;
+        _ = key;
+        return 0x9e3779b1;
+    }
+
+    pub fn eql(self: ConstHashContext, a: u16, b: u16, b_index: usize) bool {
+        _ = self;
+        _ = b_index;
+        return a == b;
+    }
+};
+
 test "deletion under collisions" {
     const Map = Custom(u32, u32, AllCollideContext, 32);
     var map: Map = .init;
@@ -1113,6 +1129,192 @@ test "deletion under collisions" {
         try testing.expectEqual(@as(?u32, @as(u32, @intCast(i)) * 10), map.get(@intCast(i)));
     }
     try testing.expectEqual(@as(usize, 24), @as(usize, map.count()));
+}
+
+test "adversarial constant hash" {
+    // hashbrown's worst-case-hash tests: every key shares one hash, so the
+    // whole map is one Robin Hood displacement chain at full load.
+    const Map = Custom(u16, u32, ConstHashContext, 64);
+    var map: Map = .init;
+
+    for (0..64) |i| try map.put(@intCast(i), @intCast(i * 10));
+    try testing.expectEqual(@as(usize, 64), @as(usize, map.count()));
+    for (0..64) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+        try testing.expect(map.contains(@intCast(i)));
+    }
+    try testing.expectError(error.NoSpaceLeft, map.put(64, 640));
+
+    // Remove half, verify the remainder and the absences, then reinsert.
+    for (0..32) |i| try testing.expect(map.orderedRemove(@intCast(i * 2)));
+    try testing.expectEqual(@as(usize, 32), @as(usize, map.count()));
+    for (0..64) |i| {
+        if (i % 2 == 0) {
+            try testing.expectEqual(@as(?u32, null), map.get(@intCast(i)));
+            try testing.expect(!map.contains(@intCast(i)));
+        } else {
+            try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+        }
+    }
+    for (0..32) |i| try map.put(@intCast(i * 2), @intCast(i * 20));
+    try testing.expectEqual(@as(usize, 64), @as(usize, map.count()));
+    for (0..64) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+    }
+}
+
+test "delete everything then reuse" {
+    // Go's empty-map regression class: after the last removal the map must
+    // behave like a fresh one, and the same capacity must be reusable.
+    const Map = Auto(u16, u32, 64);
+    var map: Map = .init;
+
+    for (0..64) |i| try map.put(@intCast(i), @intCast(i * 10));
+    try testing.expectEqual(@as(usize, 64), @as(usize, map.count()));
+
+    for (0..64) |i| {
+        const removed = if (i % 2 == 0)
+            map.orderedRemove(@intCast(i))
+        else
+            map.swapRemove(@intCast(i));
+        try testing.expect(removed);
+        try testing.expectEqual(63 - i, @as(usize, map.count()));
+        try testing.expectEqual(@as(?u32, null), map.get(@intCast(i)));
+        try testing.expect(!map.contains(@intCast(i)));
+    }
+    try testing.expectEqual(@as(usize, 0), @as(usize, map.count()));
+    var iterator = map.iterator();
+    try testing.expect(iterator.next() == null);
+
+    // Refill with a disjoint key set at the same capacity.
+    for (1000..1064) |i| try map.put(@intCast(i), @intCast(i * 10));
+    try testing.expectEqual(@as(usize, 64), @as(usize, map.count()));
+    for (1000..1064) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+    }
+    for (0..64) |i| try testing.expectEqual(@as(?u32, null), map.get(@intCast(i)));
+    try testing.expectError(error.NoSpaceLeft, map.put(2000, 0));
+}
+
+test "insertion order independence" {
+    // The same key set inserted ascending, descending and LCG-permuted:
+    // every key reads the same value in all three maps and contains agrees
+    // on present and absent keys. Iteration order is never compared; the
+    // three maps deliberately iterate in three different orders.
+    const key_count = 64;
+    const Map = Auto(u16, u32, key_count);
+    var maps: [3]Map = .{ .init, .init, .init };
+
+    for (&maps, 0..) |*map, order| {
+        for (0..key_count) |i| {
+            const key: u16 = switch (order) {
+                0 => @intCast(i),
+                1 => @intCast(key_count - 1 - i),
+                else => @intCast((i * 37 + 11) % key_count),
+            };
+            try map.put(key, @as(u32, key) * 3);
+        }
+    }
+
+    for (0..key_count) |i| {
+        const key: u16 = @intCast(i);
+        for (&maps) |*map| {
+            try testing.expectEqual(@as(?u32, @as(u32, key) * 3), map.get(key));
+            try testing.expect(map.contains(key));
+            try testing.expectEqual(@as(usize, key_count), @as(usize, map.count()));
+        }
+    }
+    for (key_count..key_count + 8) |i| {
+        const key: u16 = @intCast(i);
+        for (&maps) |*map| {
+            try testing.expectEqual(@as(?u32, null), map.get(key));
+            try testing.expect(!map.contains(key));
+        }
+    }
+}
+
+test "full map error atomicity" {
+    // The check-before-mutate class: a put that fails with NoSpaceLeft must
+    // leave the map byte-identical.
+    const Map = Auto(u16, u32, 8);
+    var map: Map = .init;
+    for (0..8) |i| try map.put(@intCast(i), @intCast(i * 10));
+
+    // Snapshot everything the map exposes: keys, values, iteration order
+    // and the index header.
+    var keys_before: [8]u16 = undefined;
+    var values_before: [8]u32 = undefined;
+    @memcpy(&keys_before, map.keys());
+    @memcpy(&values_before, map.values());
+    const index_before = map.index_buffer;
+
+    try testing.expectError(error.NoSpaceLeft, map.put(99, 990));
+    try testing.expectEqual(@as(usize, 8), @as(usize, map.count()));
+    try testing.expectEqualSlices(u16, &keys_before, map.keys());
+    try testing.expectEqualSlices(u32, &values_before, map.values());
+    try testing.expectEqualSlices(
+        u8,
+        std.mem.asBytes(&index_before),
+        std.mem.asBytes(&map.index_buffer),
+    );
+    try testing.expectEqual(@as(?u32, null), map.get(99));
+    try testing.expect(!map.contains(99));
+
+    var iterator = map.iterator();
+    var n: usize = 0;
+    while (iterator.next()) |entry| : (n += 1) {
+        try testing.expectEqual(keys_before[n], entry.key_ptr.*);
+        try testing.expectEqual(values_before[n], entry.value_ptr.*);
+    }
+    try testing.expectEqual(@as(usize, 8), n);
+
+    // getOrPut fails the same way; an existing key at capacity still works.
+    try testing.expectError(error.NoSpaceLeft, map.getOrPut(99));
+    try testing.expectEqualSlices(u16, &keys_before, map.keys());
+    try testing.expectEqualSlices(u32, &values_before, map.values());
+    const existing = try map.getOrPut(3);
+    try testing.expect(existing.found_existing);
+    try testing.expectEqual(@as(u32, 30), existing.value_ptr.*);
+}
+
+test "robin hood displacement at worst case" {
+    // The class backward-shift deletion exists for: remove the head of a
+    // fully displaced chain and the repair must keep every remaining key
+    // findable.
+    const Map = Custom(u16, u32, ConstHashContext, 64);
+
+    var map: Map = .init;
+    for (0..64) |i| try map.put(@intCast(i), @intCast(i * 10));
+
+    // The first-inserted key is the head of the chain (distance 0).
+    try testing.expect(map.orderedRemove(0));
+    try testing.expectEqual(@as(?u32, null), map.get(0));
+    for (1..64) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+    }
+
+    // Remove the new head repeatedly; every removal shifts the run down.
+    for (1..32) |i| try testing.expect(map.orderedRemove(@intCast(i)));
+    try testing.expectEqual(@as(usize, 32), @as(usize, map.count()));
+    for (32..64) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+    }
+
+    // swapRemove of the head repoints the moved last entry's slot.
+    var swap_map: Map = .init;
+    for (0..64) |i| try swap_map.put(@intCast(i), @intCast(i * 10));
+    try testing.expect(swap_map.swapRemove(0));
+    try testing.expectEqual(@as(?u32, null), swap_map.get(0));
+    for (1..64) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), swap_map.get(@intCast(i)));
+    }
+
+    // Refill the freed head slots and re-verify the whole map.
+    for (0..32) |i| try map.put(@intCast(i), @intCast(i * 10));
+    try testing.expectEqual(@as(usize, 64), @as(usize, map.count()));
+    for (0..64) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+    }
 }
 
 const DifferentialItem = struct {
@@ -1278,4 +1480,114 @@ test "collision-heavy differential against std" {
 
     var bounded: Custom(u16, u32, NarrowHashContext, 64) = .init;
     try runDifferentialOps(64, 64, &reference, &bounded, &differential_items);
+}
+
+test "fuzz bounded churn vs model" {
+    // Native fuzzing, the fastmem convention: a fixed 128-op churn sequence
+    // per iteration against std.array_hash_map.Auto, decoded from one
+    // smith-generated byte buffer. The 64-key space is deliberate — random
+    // streams must force collisions and displacement chains — and the
+    // 16-entry bound makes the full-map NoSpaceLeft path common rather than
+    // a rarity at 128 ops.
+    const key_space = 64;
+    const op_count = 128;
+    const capacity = 16;
+
+    try testing.fuzz({}, struct {
+        fn run(_: void, smith: *testing.Smith) anyerror!void {
+            var bytes: [op_count * 2]u8 = undefined;
+            smith.bytes(&bytes);
+
+            // The port source is the oracle, as in the deterministic
+            // differential: index agreement is checked at getOrPut time.
+            const Reference = std.array_hash_map.Auto(u16, u32);
+            var reference: Reference = .empty;
+            defer reference.deinit(testing.allocator);
+
+            var map: Auto(u16, u32, capacity) = .init;
+
+            var i: usize = 0;
+            while (i < op_count) : (i += 1) {
+                const op = bytes[i * 2];
+                const key: u16 = bytes[i * 2 + 1] % key_space;
+                const value: u32 = bytes[i * 2 + 1];
+                switch (op % 5) {
+                    0 => {
+                        // A full map rejects a new key with NoSpaceLeft and
+                        // stays unchanged; mirror the failure into the oracle
+                        // by skipping it there too.
+                        if (map.put(key, value)) |_| {
+                            try reference.put(testing.allocator, key, value);
+                        } else |err| {
+                            try testing.expectEqual(error.NoSpaceLeft, err);
+                            try testing.expect(!reference.contains(key));
+                            try testing.expectEqual(@as(?u32, null), map.get(key));
+                        }
+                    },
+                    1 => {
+                        // The high bit picks the removal kind; both maps get
+                        // the same one, so entry order stays comparable.
+                        const ordered = op & 0x80 != 0;
+                        const removed = if (ordered)
+                            map.orderedRemove(key)
+                        else
+                            map.swapRemove(key);
+                        const reference_removed = if (ordered)
+                            reference.orderedRemove(key)
+                        else
+                            reference.swapRemove(key);
+                        try testing.expectEqual(reference_removed, removed);
+                    },
+                    2 => {
+                        if (map.getOrPut(key)) |result| {
+                            const reference_result = try reference.getOrPut(testing.allocator, key);
+                            try testing.expectEqual(
+                                reference_result.found_existing,
+                                result.found_existing,
+                            );
+                            try testing.expectEqual(
+                                reference_result.index,
+                                @as(usize, result.index),
+                            );
+                            reference_result.value_ptr.* = value;
+                            result.value_ptr.* = value;
+                        } else |err| {
+                            try testing.expectEqual(error.NoSpaceLeft, err);
+                            try testing.expect(!reference.contains(key));
+                        }
+                    },
+                    3 => {
+                        try testing.expectEqual(reference.contains(key), map.contains(key));
+                    },
+                    4 => {
+                        // Clear is rare by design: only when the next op also
+                        // decodes to clear. A clear-heavy stream would reset
+                        // the map before the churn gets deep.
+                        if (i + 1 < op_count and bytes[(i + 1) * 2] % 5 == 4) {
+                            reference.clearRetainingCapacity();
+                            map.clear();
+                            i += 1;
+                        }
+                    },
+                    else => unreachable,
+                }
+                // Every sixteenth op and the final op: one full-equivalence
+                // check probes the whole key space on both maps (~30x one
+                // churn op), so checking after every op would spend the
+                // budget on the oracle instead of on churn; every 16 still
+                // catches a divergence within 16 ops of the corruption and
+                // the final check closes every iteration.
+                if (i % 16 == 15) try expectEquivalent(&reference, &map, key_space);
+            }
+            try expectEquivalent(&reference, &map, key_space);
+        }
+    }.run, .{
+        .corpus = &.{
+            "",
+            // Eight distinct puts: the 8th crosses the first grow boundary.
+            &.{ 0, 0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7 },
+            // Five puts then eight removes: the remove-heavy shape.
+            &.{ 0, 0, 0, 1, 0, 2, 0, 3, 0, 4, 1, 0, 1, 1, 1, 2, 1, 3, 1, 4, 1, 5, 1, 6, 1, 7 },
+        },
+    });
 }

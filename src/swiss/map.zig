@@ -1031,6 +1031,36 @@ const NarrowHashContext = struct {
     }
 };
 
+/// A context whose hash is the same for every key: one probe chain and one
+/// H2 tag for the whole table, the hashbrown worst-case-hash class.
+const ConstHashContext = struct {
+    pub fn hash(self: ConstHashContext, key: u16) u64 {
+        _ = self;
+        _ = key;
+        return 0x9e3779b97f4a7c15;
+    }
+
+    pub fn eql(self: ConstHashContext, a: u16, b: u16) bool {
+        _ = self;
+        return a == b;
+    }
+};
+
+/// A context the wrapped-probe test steers: the hash's low bits are the
+/// key's own low bits, so H1 can be aimed at the final buckets, and the top
+/// bits vary with the key so H2 stays a real fingerprint.
+const WrapHashContext = struct {
+    pub fn hash(self: WrapHashContext, key: u16) u64 {
+        _ = self;
+        return (@as(u64, key) << 57) | (key & 0xF);
+    }
+
+    pub fn eql(self: WrapHashContext, a: u16, b: u16) bool {
+        _ = self;
+        return a == b;
+    }
+};
+
 test "collision-heavy small map" {
     // Every key starts in one of three buckets: the probe chains and
     // tombstone reuse both get exercised.
@@ -1134,6 +1164,232 @@ test "deinit" {
     try map.put(testing.allocator, 1, 1);
     try testing.expectEqual(@as(?u32, 1), map.get(1));
     map.deinit(testing.allocator);
+}
+
+test "adversarial constant hash" {
+    // hashbrown's worst-case-hash tests: every key shares one hash, so every
+    // probe walks one chain and every group lane carries the same H2 tag.
+    var map: Custom(ConstHashContext, u16, u32) = .empty;
+    defer map.deinit(testing.allocator);
+
+    for (0..200) |i| try map.put(testing.allocator, @intCast(i), @intCast(i * 10));
+    // 200 keys force several growths; the one chain must have walked into
+    // the fresh tables and every entry must survive.
+    try testing.expect(map.bucket_count >= 256);
+    for (0..200) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+        try testing.expect(map.contains(@intCast(i)));
+    }
+
+    // Remove half, verify the remainder and the absences, then reinsert.
+    for (0..100) |i| try testing.expect(map.remove(@intCast(i * 2)));
+    try testing.expectEqual(@as(usize, 100), map.count());
+    for (0..200) |i| {
+        if (i % 2 == 0) {
+            try testing.expectEqual(@as(?u32, null), map.get(@intCast(i)));
+            try testing.expect(!map.contains(@intCast(i)));
+        } else {
+            try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+        }
+    }
+    for (0..100) |i| try map.put(testing.allocator, @intCast(i * 2), @intCast(i * 20));
+    try testing.expectEqual(@as(usize, 200), map.count());
+    for (0..200) |i| try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+}
+
+test "grow across every small boundary" {
+    // Go's TestMapGrow class: after each single insert every key so far
+    // reads back and the count is exact, so a capacity-arithmetic off-by-one
+    // in the 8..256 bucket region cannot hide behind random probes.
+    var map: Auto(u16, u32) = .empty;
+    defer map.deinit(testing.allocator);
+
+    for (0..200) |i| {
+        const key: u16 = @intCast(i);
+        try map.put(testing.allocator, key, @as(u32, key) * 10);
+        try testing.expectEqual(i + 1, map.count());
+        var probe: u16 = 0;
+        while (probe <= key) : (probe += 1) {
+            try testing.expectEqual(@as(?u32, @as(u32, probe) * 10), map.get(probe));
+        }
+        try testing.expectEqual(@as(?u32, null), map.get(key + 1));
+    }
+
+    // The stream crossed the 8, 16, 32, 64, 128 and 256 bucket thresholds
+    // (7, 14, 28, 56, 112 and 224 entries).
+    try testing.expect(map.bucket_count >= 256);
+    try testing.expectEqual(@as(usize, 200), map.count());
+}
+
+test "delete everything then reuse" {
+    // Go's empty-map regression class: after the last removal the map must
+    // behave like a fresh one, and the retained table must refill through
+    // its empty slots without growing.
+    var map: Auto(u16, u32) = .empty;
+    defer map.deinit(testing.allocator);
+
+    for (0..100) |i| try map.put(testing.allocator, @intCast(i), @intCast(i * 10));
+    const buckets = map.bucket_count;
+    try testing.expectEqual(@as(usize, 100), map.count());
+
+    for (0..100) |i| {
+        try testing.expect(map.remove(@intCast(i)));
+        try testing.expectEqual(99 - i, map.count());
+        try testing.expectEqual(@as(?u32, null), map.get(@intCast(i)));
+        try testing.expect(!map.contains(@intCast(i)));
+    }
+    try testing.expectEqual(@as(usize, 0), map.count());
+    var iterator = map.iterator();
+    try testing.expect(iterator.next() == null);
+
+    // Refill with a disjoint key set: the empty slots left by the removals
+    // are reclaimed through the normal paths, so no growth.
+    for (1000..1100) |i| try map.put(testing.allocator, @intCast(i), @intCast(i * 10));
+    try testing.expectEqual(buckets, map.bucket_count);
+    try testing.expectEqual(@as(usize, 100), map.count());
+    for (1000..1100) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+    }
+    for (0..100) |i| try testing.expectEqual(@as(?u32, null), map.get(@intCast(i)));
+}
+
+test "insertion order independence" {
+    // The same key set inserted ascending, descending and LCG-permuted:
+    // every key reads the same value in all three maps and contains agrees
+    // on present and absent keys. Iteration order is never compared.
+    const key_count = 64;
+    const Map = Auto(u16, u32);
+    var maps: [3]Map = .{ .empty, .empty, .empty };
+    defer {
+        for (&maps) |*map| map.deinit(testing.allocator);
+    }
+
+    for (&maps, 0..) |*map, order| {
+        for (0..key_count) |i| {
+            const key: u16 = switch (order) {
+                0 => @intCast(i),
+                1 => @intCast(key_count - 1 - i),
+                else => @intCast((i * 37 + 11) % key_count),
+            };
+            try map.put(testing.allocator, key, @as(u32, key) * 3);
+        }
+    }
+
+    for (0..key_count) |i| {
+        const key: u16 = @intCast(i);
+        for (&maps) |*map| {
+            try testing.expectEqual(@as(?u32, @as(u32, key) * 3), map.get(key));
+            try testing.expect(map.contains(key));
+            try testing.expectEqual(@as(usize, key_count), map.count());
+        }
+    }
+    for (key_count..key_count + 8) |i| {
+        const key: u16 = @intCast(i);
+        for (&maps) |*map| {
+            try testing.expectEqual(@as(?u32, null), map.get(key));
+            try testing.expect(!map.contains(key));
+        }
+    }
+}
+
+test "wrapped probe" {
+    // Keys whose H1 lands in the final buckets: their probe groups read
+    // past the bucket array end into the mirrored tail.
+    var map: Custom(WrapHashContext, u16, u32) = .empty;
+    defer map.deinit(testing.allocator);
+
+    // Seven keys fill the 8-bucket table; keys 7 and 15 both start in the
+    // final bucket (H1 = 7), so their groups wrap.
+    for ([_]u16{ 0, 1, 2, 3, 4, 7, 15 }) |key| {
+        try map.put(testing.allocator, key, @as(u32, key) * 10);
+    }
+    try testing.expectEqual(@as(usize, 8), map.bucket_count);
+    try testing.expectEqual(@as(usize, 7), map.count());
+
+    // Remove two keys, then insert wrapped keys that reuse the tombstones
+    // the wrapped probes left behind.
+    try testing.expect(map.remove(0));
+    try testing.expect(map.remove(2));
+    try map.put(testing.allocator, 23, 230);
+    try map.put(testing.allocator, 31, 310);
+    try testing.expectEqual(@as(usize, 8), map.bucket_count);
+
+    // Every present key is found and the removed ones are gone.
+    for ([_]u16{ 1, 3, 4, 7, 15, 23, 31 }) |key| {
+        try testing.expectEqual(@as(?u32, @as(u32, key) * 10), map.get(key));
+    }
+    try testing.expectEqual(@as(?u32, null), map.get(0));
+    try testing.expectEqual(@as(?u32, null), map.get(2));
+    try testing.expectEqual(@as(usize, 7), map.count());
+}
+
+test "tombstone reuse safety" {
+    // The class the old bounded simulation falsified: new keys land on
+    // tombstones that lie on pre-existing keys' probe paths, and both the
+    // new and the pre-existing keys must stay findable.
+    var map: Custom(NarrowHashContext, u16, u32) = .empty;
+    defer map.deinit(testing.allocator);
+
+    // 28 keys fill a 32-bucket table; every probe starts in buckets 0..2
+    // and walks forward, so the keys occupy consecutive buckets.
+    for (0..28) |i| try map.put(testing.allocator, @intCast(i), @intCast(i * 10));
+    try testing.expectEqual(@as(usize, 32), map.bucket_count);
+    try testing.expectEqual(@as(usize, 28), map.count());
+
+    // Remove the head of the chains: buckets 0..13 become tombstones.
+    for (0..14) |i| try testing.expect(map.remove(@intCast(i)));
+
+    // New keys whose probes cross those tombstones and land on them.
+    for (1000..1014) |i| try map.put(testing.allocator, @intCast(i), @intCast(i * 10));
+    try testing.expectEqual(@as(usize, 32), map.bucket_count);
+    try testing.expectEqual(@as(usize, 28), map.count());
+
+    for (1000..1014) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+    }
+    for (14..28) |i| {
+        try testing.expectEqual(@as(?u32, @intCast(i * 10)), map.get(@intCast(i)));
+    }
+    for (0..14) |i| {
+        try testing.expectEqual(@as(?u32, null), map.get(@intCast(i)));
+        try testing.expect(!map.contains(@intCast(i)));
+    }
+}
+
+test "capacity arithmetic exhaustiveness" {
+    // For every requested capacity up to 200 the derived table holds exactly
+    // bucketsToCapacity entries, keeps at least one bucket empty, and grows
+    // when one more entry arrives.
+    const Map = Auto(u16, u32);
+    for (0..200) |requested| {
+        const buckets = Map.capacityToBuckets(requested);
+        try testing.expect(std.math.isPowerOfTwo(buckets));
+        try testing.expect(buckets >= 8);
+        try testing.expect(Map.bucketsToCapacity(buckets) >= requested);
+        try testing.expect(Map.bucketsToCapacity(buckets) < buckets);
+
+        var map: Map = .empty;
+        defer map.deinit(testing.allocator);
+        const cap = Map.bucketsToCapacity(buckets);
+        try map.ensureTotalCapacity(testing.allocator, cap);
+        try testing.expectEqual(buckets, map.bucket_count);
+
+        for (0..cap) |i| try map.put(testing.allocator, @intCast(i), @intCast(i));
+        try testing.expectEqual(cap, map.count());
+        // The 7/8 load target leaves at least one bucket empty.
+        try testing.expect(map.used < map.bucket_count);
+        for (0..cap) |i| {
+            try testing.expectEqual(@as(?u32, @intCast(i)), map.get(@intCast(i)));
+        }
+
+        // One more entry crosses the load target and doubles the table.
+        try map.put(testing.allocator, @intCast(cap), @intCast(cap));
+        try testing.expectEqual(buckets * 2, map.bucket_count);
+        try testing.expect(map.capacity() >= cap + 1);
+        for (0..cap + 1) |i| {
+            try testing.expectEqual(@as(?u32, @intCast(i)), map.get(@intCast(i)));
+        }
+    }
 }
 
 const DifferentialItem = struct {
@@ -1303,4 +1559,84 @@ test "collision-heavy differential against std" {
     defer map.deinit(testing.allocator);
 
     try runDifferentialOps(&reference, &map, &differential_items, 64);
+}
+
+test "fuzz swiss churn vs model" {
+    // Native fuzzing, the fastmem convention: a fixed 128-op churn sequence
+    // per iteration against std.AutoHashMapUnmanaged, decoded from one
+    // smith-generated byte buffer. The 64-key space is deliberate — a large
+    // space would never force the collisions, tombstone reuse and growth
+    // crossings that are the point.
+    const key_space = 64;
+    const op_count = 128;
+
+    try testing.fuzz({}, struct {
+        fn run(_: void, smith: *testing.Smith) anyerror!void {
+            var bytes: [op_count * 2]u8 = undefined;
+            smith.bytes(&bytes);
+
+            const Reference = std.AutoHashMapUnmanaged(u16, u32);
+            var reference: Reference = .empty;
+            defer reference.deinit(testing.allocator);
+
+            var map: Auto(u16, u32) = .empty;
+            defer map.deinit(testing.allocator);
+
+            var i: usize = 0;
+            while (i < op_count) : (i += 1) {
+                const op = bytes[i * 2];
+                const key: u16 = bytes[i * 2 + 1] % key_space;
+                const value: u32 = bytes[i * 2 + 1];
+                switch (op % 5) {
+                    0 => {
+                        try reference.put(testing.allocator, key, value);
+                        try map.put(testing.allocator, key, value);
+                    },
+                    1 => {
+                        try testing.expectEqual(reference.remove(key), map.remove(key));
+                    },
+                    2 => {
+                        const reference_result = try reference.getOrPut(testing.allocator, key);
+                        const map_result = try map.getOrPut(testing.allocator, key);
+                        try testing.expectEqual(
+                            reference_result.found_existing,
+                            map_result.found_existing,
+                        );
+                        reference_result.value_ptr.* = value;
+                        map_result.value_ptr.* = value;
+                    },
+                    3 => {
+                        try testing.expectEqual(reference.contains(key), map.contains(key));
+                    },
+                    4 => {
+                        // Clear is rare by design: only when the next op also
+                        // decodes to clear. A clear-heavy stream would reset
+                        // the map before the churn gets deep.
+                        if (i + 1 < op_count and bytes[(i + 1) * 2] % 5 == 4) {
+                            reference.clearRetainingCapacity();
+                            map.clearRetainingCapacity();
+                            i += 1;
+                        }
+                    },
+                    else => unreachable,
+                }
+                // Every sixteenth op and the final op: one full-equivalence
+                // check probes the whole key space on both maps (~30x one
+                // churn op), so checking after every op would spend the
+                // budget on the oracle instead of on churn; every 16 still
+                // catches a divergence within 16 ops of the corruption and
+                // the final check closes every iteration.
+                if (i % 16 == 15) try expectEquivalent(&reference, &map, key_space);
+            }
+            try expectEquivalent(&reference, &map, key_space);
+        }
+    }.run, .{
+        .corpus = &.{
+            "",
+            // Eight distinct puts: the 8th crosses the first grow boundary.
+            &.{ 0, 0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7 },
+            // Five puts then eight removes: the remove-heavy shape.
+            &.{ 0, 0, 0, 1, 0, 2, 0, 3, 0, 4, 1, 0, 1, 1, 1, 2, 1, 3, 1, 4, 1, 5, 1, 6, 1, 7 },
+        },
+    });
 }

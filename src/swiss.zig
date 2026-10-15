@@ -42,10 +42,18 @@ pub const deleted = 0xFE;
 /// replicates real bytes instead.
 pub const sentinel = 0xFF;
 
-/// Group width: 16 where the target has 128-bit vectors, 8 scalar. The
-/// whole family's own shape — hashbrown and Abseil run 16 on SSE2 and 8
-/// elsewhere; Zig's native vector-to-mask idiom is the reason 16 works
-/// on aarch64 too, where hashbrown's hand-written NEON chose 8.
+/// Group width: 16 where the target has 128-bit vectors, 8 scalar.
+///
+/// The cap is design, not hardware: the group width is welded to the
+/// table's arithmetic — the 7/8 load factor, the empties-per-group math,
+/// the `bucket_mask < 8` small-table branches (which exist because a
+/// 16-wide group is wider than the smallest tables), the probe stride,
+/// the mirror size. This port is hashbrown's 16-group design, validated
+/// at 16 and 8 only; a wider group is a different table whose arithmetic
+/// needs re-deriving, not a wider load. (Contrast mem's scan functions,
+/// where the vector width is a pure perf knob and rides suggestVectorLength
+/// uncapped.) Zig's native vector-to-mask idiom is why 16 works on
+/// aarch64, where hashbrown's hand-written NEON chose 8.
 pub const group_width = if (std.simd.suggestVectorLength(u8)) |width|
     @min(width, 16)
 else
