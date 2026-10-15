@@ -7,10 +7,11 @@ Extensions to the Zig 0.16 standard library: fixed-capacity containers, strict p
 The same helpers kept showing up copy-pasted across projects: strict number parsing, IPv4 and CIDR handling, fixed-capacity buffers, a bounded writer, a slab allocator. stdx is where they live. Each module is tested on its own, and the package has no dependencies.
 
 - [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
-- [Strict parsers](#strict-parsing) for machine-written input: `fmt.atoi`, `net.Ip4`, `net.Prefix4`, and `Uuid`.
-- [IPv4 and CIDR types](#ip-addresses) modeled on Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
-- [Clocks](#timekeeping), randomness, and stdio that need no `Io` value: a per-tick cached clock, wall time derived from a monotonic sample, and a log rate limiter.
-- A resizable Swiss-table hash map, a slab allocator, and rapidhash.
+- [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
+- [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
+- [UUIDs](#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
+- [Timekeeping](#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.
+- The [module list](#modules) covers the rest: Swiss-table maps, a slab allocator, rapidhash, secure random, and buffered stdio.
 
 This guide explains how to choose modules and combine them. The [API reference](/api/) documents every symbol.
 
@@ -113,17 +114,17 @@ Most stdx containers have a fixed capacity. The capacity is part of the type, th
 
 Find the need in the table. Then read the section for that type in [Fixed-capacity containers](#fixed-capacity-containers).
 
-| You need                                  | Use                                        | Notes                                                   |
-| ----------------------------------------- | ------------------------------------------ | ------------------------------------------------------- |
-| A list with a known maximum length        | `buffer.Array`                             | Storage inside the value.                               |
-| The same list over memory you already own | `buffer.Slice`                             | Same methods. The capacity is the slice length.         |
-| One array per struct field                | `multi_array.Buffer`                       | Runtime length. `multi_array.Array` has a fixed length. |
-| The smallest item first                   | `priority_queue.Custom`                    | A binary heap. You supply the comparison.               |
-| A map that keeps insertion order          | `bounded_array_hash_map.Auto` or `.String` | Fixed capacity.                                         |
-| A set                                     | `set.Auto` or `.String`                    | A map with no values, plus set algebra.                 |
-| A constant lookup table                   | `static_map.Auto`                          | The compiler builds it from a literal.                  |
-| A cheap "have I seen this" test           | `bloom.Auto`                               | Can report a key that was never added.                  |
-| A map that grows                          | `swiss.Auto` or `.String`                  | Uses an allocator. Order is not insertion order.        |
+| You need                                  | Use                                        | Notes                                                                                   |
+| ----------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
+| A list with a known maximum length        | `buffer.Array`                             | Storage inside the value.                                                               |
+| The same list over memory you already own | `buffer.Slice`                             | Same methods. The capacity is the slice length.                                         |
+| One array per struct field                | `multi_array.Buffer`                       | Runtime length. `multi_array.Array` has a fixed length.                                 |
+| The smallest item first                   | `priority_queue.Custom`                    | A binary heap. You supply the comparison.                                               |
+| A map that keeps insertion order          | `bounded_array_hash_map.Auto` or `.String` | Fixed capacity.                                                                         |
+| A set                                     | `set.Auto` or `.String`                    | A map with no values, plus set algebra.                                                 |
+| A constant lookup table                   | `static_map.Auto` or `.String`             | Built at compile time from a literal. Not the same as `std.StaticStringMap`: see below. |
+| A cheap "have I seen this" test           | `bloom.Auto`                               | Can report a key that was never added.                                                  |
+| A map that grows                          | `swiss.Auto` or `.String`                  | Uses an allocator. Order is not insertion order.                                        |
 
 ## Pick a fixed capacity when
 
@@ -139,7 +140,7 @@ Find the need in the table. Then read the section for that type in [Fixed-capaci
 
 ## Check std first
 
-- `std.StaticStringMap` builds a string-keyed table at compile time. Use `static_map` when the keys are not strings.
+- `std.StaticStringMap` also builds a lookup table at compile time, but only for string keys. [Build a table at compile time](#build-a-table-at-compile-time) lists how `static_map` differs. Use `static_map` when the keys are not strings, or when you want a compile error for a duplicate key.
 - `std.EnumMap` covers dense enum keys.
 - `std.PriorityQueue`, `std.ArrayList`, and `std.AutoArrayHashMap` allocate. The stdx types of the same shape do not.
 
@@ -220,6 +221,16 @@ When the map is full, `put` fails for a new key. It still updates an existing ke
 ```zig
 {{ load_data(path="examples/containers_static_map.zig", format="plain") | trim_end }}
 ```
+
+`std.StaticStringMap` also builds a table at compile time, for string keys. `static_map` differs in these ways:
+
+- Key types: std takes `[]const u8` only. `static_map.Auto` takes any key type that `std.hash.autoHash` accepts, such as integers and enums. `static_map.Custom` takes your own hash and equality context, and `static_map.String` is the string-keyed form.
+- Lookup: std finds a key by its length, then compares it against each key of that length. `static_map` hashes the key and probes a table.
+- Duplicates: std accepts a duplicate key, and which of its values `get` returns is unspecified. `static_map` rejects a duplicate key at compile time.
+- Order: std orders `keys()` and `values()` by key length. `static_map` keeps the order of your literal.
+- What only std has: `getLongestPrefix`, which finds the longest key that starts a string, and `init`, which builds the map at runtime with an allocator. `static_map` has neither.
+
+For string keys, use std unless you want one of those properties from `static_map`. For a dense enum key, `std.EnumMap` fits. For any other key type, std has no table of this kind.
 
 ## Test membership cheaply
 

@@ -9,22 +9,18 @@ docs := if env("STDX_DOCS_SHELL", "") == "1" { "" } else { "nix develop .#docs -
 
 # Build the site into zig-out/site/: the guide (Zola, from docs/) at the
 # root and the API reference (the wasm viewer `zig std` uses) under /api/.
-# Open zig-out/site/index.html through `just doc-serve`, not file://.
+# The API viewer fetches its wasm, so serve the directory over HTTP; opening
+# the files directly does not work.
 doc:
     {{ docs }} zig build docs
     {{ docs }} zola --root docs build --output-dir zig-out/site --force
     mkdir -p zig-out/site/api
     cp -R zig-out/zig-docs/. zig-out/site/api/
 
-# Edit the guide with live reload (http://127.0.0.1:1111). No API reference
-# here; `doc-serve` has the whole site.
+# Edit the guide with live reload (http://127.0.0.1:1111). The API reference
+# is part of the built site only (`just doc`), so /api/ is a 404 here.
 guide:
     {{ docs }} zola --root docs serve
-
-# Serve the built site at http://127.0.0.1:PORT (default 8000; override with
-# an argument or the PORT env var)
-doc-serve port=env("PORT", "8000"): doc
-    {{ docs }} python3 -m http.server -d zig-out/site -b 127.0.0.1 "{{ port }}"
 
 # Deploy the rendered docs to Cloudflare as an assets-only Worker (config in
 # wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus

@@ -15,3 +15,8 @@ test "lookup in a comptime table" {
     try std.testing.expect(Opcode.has(0x02));
     try std.testing.expectEqual(3, Opcode.count);
 }
+
+// The keys and values keep the order of the literal.
+test "iteration follows the literal" {
+    try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x02, 0xff }, Opcode.keys);
+}
