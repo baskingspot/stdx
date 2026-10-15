@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }) orelse unreachable;
         const benchmarks_root = b.createModule(.{
-            .root_source_file = b.path("src/benchmarks.zig"),
+            .root_source_file = b.path("src/bench.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{.{ .name = "stdx", .module = mod }},

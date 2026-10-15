@@ -22,6 +22,7 @@
 const std = @import("std");
 const testing = std.testing;
 const mem = std.mem;
+const rapidhash = @This();
 
 /// The V3 secret schedule, upstream's values verbatim. `secret[7]` feeds
 /// only the final avalanche.
@@ -299,6 +300,74 @@ pub fn hashNano(seed: u64, input: []const u8) u64 {
     return nanoInternal(seed, input);
 }
 
+// --- Hash map contexts ---
+// Mirrors `std.hash_map.StringContext` and `std.hash_map.AutoContext`
+// (via `getAutoHashFn`/`getAutoEqlFn`), with rapidhash as the mixer. Any
+// stdx or std map taking a Context accepts these: `stdx.swiss.Custom(
+// rapidhash.StringContext, []const u8, V)` is a string-keyed swiss map
+// hashing with rapidhash.
+
+/// The string-keyed context, `std.hash_map.StringContext`'s shape: one
+/// rapidhash call per key, hashing the bytes of the string. Key memory is
+/// managed by the caller.
+pub const StringContext = struct {
+    pub fn hash(_: StringContext, s: []const u8) u64 {
+        return rapidhash.hash(0, s);
+    }
+
+    pub fn eql(_: StringContext, a: []const u8, b: []const u8) bool {
+        return mem.eql(u8, a, b);
+    }
+};
+
+/// The auto-keyed context, `std.hash_map.AutoContext`'s shape. The key
+/// is walked by `std.hash.autoHash`, which normalizes as it goes — bool as
+/// 0/1, enums as tags, signed as unsigned, narrow ints trimmed, structs
+/// field-by-field so padding never enters the stream — and every chunk
+/// seed-chains through rapidhash. Unique-representation keys walk to a
+/// single chunk, so they are exactly one one-shot call; everything else
+/// pays one call per chunk. Slices are rejected, exactly as std's
+/// AutoContext rejects them: hash string contents with `StringContext`.
+pub fn AutoContext(comptime T: type) type {
+    comptime {
+        if (T == []const u8) {
+            @compileError("rapidhash.AutoContext does not allow slices here (" ++
+                @typeName(T) ++
+                ") because the intent is unclear. " ++
+                "Hash string contents with rapidhash.StringContext, or provide a custom context.");
+        }
+    }
+    return struct {
+        const Self = @This();
+
+        pub fn hash(_: Self, key: T) u64 {
+            var hasher: Chained = .{ .h = 0 };
+            std.hash.autoHash(&hasher, key);
+            return hasher.final();
+        }
+
+        pub fn eql(_: Self, a: T, b: T) bool {
+            return std.meta.eql(a, b);
+        }
+    };
+}
+
+/// The walker's hasher: rapidhash has no streaming state, so each chunk
+/// feeds the running hash as the next seed — the one-shot signature
+/// doubling as the chain step. Chained from zero, a single chunk is
+/// exactly the one-shot call.
+const Chained = struct {
+    h: u64,
+
+    pub fn update(self: *Chained, data: []const u8) void {
+        self.h = rapidhash.hash(self.h, data);
+    }
+
+    pub fn final(self: *const Chained) u64 {
+        return self.h;
+    }
+};
+
 // The test inputs are prefixes of one comptime LCG stream, so inputs of
 // different lengths are different strings by construction.
 const test_data_len = 16 * 1024;
@@ -416,3 +485,105 @@ test "seed sensitivity" {
     try Test.check(hashMicro);
     try Test.check(hashNano);
 }
+
+test StringContext {
+    // One rapidhash call per string, spreading distinct strings apart.
+    const ctx: StringContext = .{};
+    const a = ctx.hash("hello");
+    const b = ctx.hash("hello");
+    const c = ctx.hash("hellp");
+    try testing.expectEqual(a, b);
+    try testing.expect(a != c);
+    try testing.expect(ctx.eql("hello", "hello"));
+    try testing.expect(!ctx.eql("hello", "hellp"));
+}
+
+test AutoContext {
+    // Unique representation: one chunk, exactly the one-shot call.
+    const ctx: AutoContext(u64) = .{};
+    var v: u64 = 42;
+    try testing.expectEqual(ctx.hash(42), hash(0, mem.asBytes(&v)));
+    try testing.expect(ctx.hash(42) != ctx.hash(43));
+    try testing.expect(ctx.eql(42, 42));
+    try testing.expect(!ctx.eql(42, 43));
+
+    // Non-unique representation: the walker normalizes — padded structs,
+    // bool as 0/1 — so equal keys hash equal regardless of padding bytes.
+    const Padded = struct { a: u32, b: u8 };
+    const pctx: AutoContext(Padded) = .{};
+    const p1: Padded = .{ .a = 1, .b = 2 };
+    const p2: Padded = .{ .a = 1, .b = 2 };
+    try testing.expectEqual(pctx.hash(p1), pctx.hash(p2));
+
+    const bctx: AutoContext(bool) = .{};
+    try testing.expectEqual(bctx.hash(true), bctx.hash(true));
+    try testing.expect(bctx.hash(true) != bctx.hash(false));
+
+    // Composite keys: the walker recurses.
+    const Nested = struct { id: u32, tags: [3]u16, flag: bool };
+    const nctx: AutoContext(Nested) = .{};
+    const n1: Nested = .{ .id = 7, .tags = .{ 1, 2, 3 }, .flag = true };
+    const n2: Nested = .{ .id = 7, .tags = .{ 1, 2, 3 }, .flag = true };
+    try testing.expectEqual(nctx.hash(n1), nctx.hash(n2));
+    const n3: Nested = .{ .id = 8, .tags = .{ 1, 2, 3 }, .flag = true };
+    try testing.expect(nctx.hash(n1) != nctx.hash(n3));
+}
+
+test "AutoContext rejects non-unique representations" {}
+
+test "contexts as drop-in map contexts" {
+    // The composition the contexts exist for: any map taking a Context
+    // accepts these. A differential run of the swiss map with
+    // rapidhash contexts vs std's, same op sequence, equivalence
+    // asserted — never iteration order.
+    const stdx = @import("../root.zig");
+    const Reference = std.hash_map.AutoHashMapUnmanaged(u64, u64);
+    var reference: Reference = .empty;
+    defer reference.deinit(testing.allocator);
+
+    var rapid: stdx.swiss.Custom(AutoContext(u64), u64, u64) = .empty;
+    defer rapid.deinit(testing.allocator);
+
+    for (comptime_keys) |k| {
+        try reference.put(testing.allocator, k, k *% 31);
+        try rapid.put(testing.allocator, k, k *% 31);
+    }
+    for (comptime_keys) |k| {
+        try testing.expectEqual(reference.get(k), rapid.get(k));
+    }
+    for (comptime_keys[0 .. comptime_keys.len / 2]) |k| {
+        try testing.expectEqual(reference.remove(k), rapid.remove(k));
+    }
+    for (comptime_keys) |k| {
+        try testing.expectEqual(reference.get(k), rapid.get(k));
+    }
+
+    // StringContext through the same map's Custom.
+    var rapid_str: stdx.swiss.Custom(StringContext, []const u8, u64) = .empty;
+    defer rapid_str.deinit(testing.allocator);
+    var reference_str: std.hash_map.StringHashMapUnmanaged(u64) = .empty;
+    defer reference_str.deinit(testing.allocator);
+
+    const strings = [_][]const u8{ "alpha", "beta", "gamma", "delta" };
+    for (strings, 0..) |s, i| {
+        try reference_str.put(testing.allocator, s, i);
+        try rapid_str.put(testing.allocator, s, i);
+    }
+    for (strings, 0..) |s, i| {
+        try testing.expectEqual(reference_str.get(s), rapid_str.get(s));
+        try testing.expectEqual(i, rapid_str.get(s));
+    }
+    _ = rapid_str.remove("beta");
+    try testing.expect(rapid_str.get("beta") == null);
+}
+
+const comptime_keys = blk: {
+    @setEvalBranchQuota(4000);
+    var keys: [100]u64 = undefined;
+    var state: u64 = 0x9e3779b97f4a7c15;
+    for (&keys) |*k| {
+        state = state *% 6364136223846793005 +% 1442695040888963407;
+        k.* = state;
+    }
+    break :blk keys;
+};
