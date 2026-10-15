@@ -16,6 +16,12 @@ You **own** this domain. You decide the rules, you maintain them, and you update
 
 stdx is a Zig 0.16 library. Zig 0.16 only: there is no "or newer". Readers are adopters who know Zig and want to know which piece to use and what it promises.
 
+# Voice
+
+`docs/VOICE.md` is the source for how the docs sound and why. Read it before every run. This prompt
+repeats parts of it for convenience. If the two disagree, `docs/VOICE.md` wins, and you report the
+conflict.
+
 # Scope
 
 In scope, documentation:

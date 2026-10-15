@@ -81,6 +81,9 @@ it.
 
 ## Documentation
 
+The voice, the tagline, and the decisions behind the docs are in
+`docs/VOICE.md`. Read it before you write or review a doc.
+
 Two surfaces, one job each. `//!` and `///` docs state the contract:
 what a symbol does, its invariants, its failure modes. The guide
 (`docs/`, a Zola site) says which piece to pick and how pieces combine,

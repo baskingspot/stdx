@@ -49,13 +49,13 @@ test-release-fast:
 lint:
     ziglint
     zig fmt --check src docs/examples build.zig
-    oxfmt --check README.md docs/content docs/static
+    oxfmt --check README.md docs/VOICE.md docs/content docs/static
     just --fmt --check
 
 # Format everything lint checks
 fmt:
     zig fmt src docs/examples build.zig
-    oxfmt README.md docs/content docs/static
+    oxfmt README.md docs/VOICE.md docs/content docs/static
     just --fmt
 
 # Everything the test lanes run. The site build is its own CI job: `just doc`.
