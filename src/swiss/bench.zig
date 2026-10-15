@@ -113,3 +113,22 @@ pub fn benchmarkSwissLargeMiss(b: *bench.B) !void {
     }
     b.keepAlive(sink);
 }
+
+/// One op: grow an empty map to `growth_target` entries. The timed op IS
+/// the doubling chain, so allocs/op is the true count (~3 per doubling,
+/// not amortized to a printed zero), and B/op is the sum of every
+/// intermediate table size.
+pub fn benchmarkSwissGrow(b: *bench.B) !void {
+    var map: swiss.Auto(u64, u64) = .empty;
+    defer map.deinit(b.allocator);
+    while (try b.loop()) {
+        map.clearAndFree(b.allocator);
+        var k: u64 = 0;
+        while (k < growth_target) : (k += 1) {
+            try map.put(b.allocator, k, k);
+        }
+    }
+    b.keepAlive(map.count());
+}
+
+const growth_target = 1024;
