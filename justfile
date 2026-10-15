@@ -22,6 +22,10 @@ guide:
     {{ docs }} zig build docs
     {{ docs }} zola --root docs serve
 
+# Squeeze the site's SVGs in place. Rerunning changes nothing.
+svgo:
+    {{ docs }} svgo --multipass docs/static/*.svg
+
 # Deploy the rendered docs to Cloudflare as an assets-only Worker (config in
 # wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus
 # CLOUDFLARE_ACCOUNT_ID if the token can see more than one account —

@@ -72,6 +72,7 @@
                   zig_0_16
                   zola
                   just
+                  svgo
                 ]
                 ++ [ wrangler ];
               # Tells the justfile it is already here, so it does not nest.
