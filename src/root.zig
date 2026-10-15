@@ -17,6 +17,7 @@ pub const posix = @import("posix.zig");
 pub const priority_queue = @import("priority_queue.zig");
 pub const random = @import("random.zig");
 pub const set = @import("set.zig");
+pub const static_map = @import("static_map.zig");
 pub const stdio = @import("stdio.zig");
 pub const swiss = @import("swiss.zig");
 pub const time = @import("time.zig");
