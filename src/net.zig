@@ -25,11 +25,7 @@ pub const Ip4 = struct {
 
     pub const broadcast: Ip4 = .{ .bytes = .{ 255, 255, 255, 255 } };
 
-    pub const ParseError = Ip4Address.ParseError || error{
-        /// The input is an IPv6 literal (it contains a `:`). IPv6 is
-        /// unsupported by design; the sniff runs on the error path only.
-        Ipv6,
-    };
+    pub const ParseError = Ip4Address.ParseError;
 
     pub fn init(bytes: [4]u8) Ip4 {
         return .{ .bytes = bytes };
@@ -37,15 +33,9 @@ pub const Ip4 = struct {
 
     /// Parse dotted-quad notation, with `Ip4Address.parse` semantics:
     /// hostnames and IPv6 are parse errors, and non-canonical quads (leading
-    /// zeros) are too. An IPv6 literal reports error.Ipv6 rather than the
-    /// octet overflow its first group would otherwise produce ("2001:db8"
-    /// overflows a u8 before the parser reaches the colon).
+    /// zeros) are too.
     pub fn parse(buf: []const u8) ParseError!Ip4 {
-        const addr = Ip4Address.parse(buf, 0) catch |err| {
-            if (mem.findScalarPos(u8, buf, 0, ':') != null) return error.Ipv6;
-            return err;
-        };
-        return fromIp4(addr);
+        return fromIp4(try .parse(buf, 0));
     }
 
     /// Parses at compile time, reporting the offending string and error on
@@ -197,8 +187,7 @@ test Ip4 {
 
     // Parse errors mirror Ip4Address.ParseError.
     try testing.expectError(error.InvalidCharacter, Ip4.parse("host"));
-    try testing.expectError(error.Ipv6, Ip4.parse("::1"));
-    try testing.expectError(error.Ipv6, Ip4.parse("2001:db8::1"));
+    try testing.expectError(error.InvalidCharacter, Ip4.parse("::1"));
     try testing.expectError(error.Incomplete, Ip4.parse(""));
     try testing.expectError(error.NonCanonical, Ip4.parse("10.01.2.3"));
 
@@ -376,10 +365,11 @@ test Prefix4 {
 
     try testing.expectError(error.NoSlash, Prefix4.parse("10.0.0.0"));
     try testing.expectError(error.BitsOutOfRange, Prefix4.parse("10.0.0.0/33"));
-    // IPv6 is unsupported end to end: both report error.Ipv6, not the
-    // octet overflow "2001" would otherwise produce.
-    try testing.expectError(error.Ipv6, Prefix4.parse("::1/128"));
-    try testing.expectError(error.Ipv6, Prefix4.parse("2001:db8::/32"));
+    // IPv6 is unsupported end to end: the address errors pass through.
+    try testing.expectError(error.InvalidCharacter, Prefix4.parse("::1/128"));
+    // "2001" overflows a u8 octet; "::1" is a non-digit: both pass
+    // through from the address parser.
+    try testing.expectError(error.Overflow, Prefix4.parse("2001:db8::/32"));
     try testing.expectError(error.InvalidCharacter, Prefix4.parse("bogus/8"));
     try testing.expectError(error.InvalidBits, Prefix4.parse("10.0.0.0/"));
 
