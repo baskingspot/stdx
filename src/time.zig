@@ -20,6 +20,7 @@ const linux = std.os.linux;
 const c = std.c;
 const assert = std.debug.assert;
 const testing = std.testing;
+const time = std.time;
 const builtin = @import("builtin");
 
 pub const CachedClock = @import("time/cached_clock.zig").CachedClock;
@@ -60,7 +61,7 @@ pub fn now(clock: Io.Clock) Io.Timestamp {
         .macos => assert(c.clock_gettime(clk, &ts) == 0),
         else => unreachable,
     }
-    const ns = @as(i96, @intCast(ts.sec)) * std.time.ns_per_s + @as(i96, @intCast(ts.nsec));
+    const ns = @as(i96, @intCast(ts.sec)) * time.ns_per_s + @as(i96, @intCast(ts.nsec));
     return .fromNanoseconds(ns);
 }
 
@@ -107,14 +108,14 @@ test WallFromAwake {
     // The offset is real minus awake: decades-scale, because real is
     // decades past the epoch and awake is at most days of uptime.
     const offset: WallFromAwake = .compute();
-    try testing.expect(offset.offset_ns > std.time.ns_per_day * 365 * 20);
+    try testing.expect(offset.offset_ns > time.ns_per_day * 365 * 20);
 
     // Derived wall tracks real time: toWall of a fresh awake sample lands
     // within a window of a fresh real read.
     const awake = now(.awake);
     const wall = offset.toWall(awake);
     const real = now(.real);
-    try testing.expect(@abs(wall.nanoseconds - real.nanoseconds) < std.time.ns_per_s);
+    try testing.expect(@abs(wall.nanoseconds - real.nanoseconds) < time.ns_per_s);
 
     // Ordering is preserved: two awake samples in order derive wall times
     // in the same order — the never-backwards property, structurally.
@@ -127,7 +128,7 @@ test WallFromAwake {
     // direct, and the derivation stays correct on that direct sample.
     var mono: CachedClock(.awake) = .init;
     const derived = offset.toWall(mono.now());
-    try testing.expect(derived.nanoseconds > std.time.ns_per_day * 365 * 20);
+    try testing.expect(derived.nanoseconds > time.ns_per_day * 365 * 20);
 
     // And with a refreshed one: toWall(mono.now()) is the same sample the
     // loop would act on.
@@ -143,7 +144,7 @@ test now {
     // mappings — a wall reading is decades past the epoch, a monotonic
     // reading is at most days of uptime — so a swapped mapping fails
     // here, where every "the clock advances" test would pass it.
-    const wall_scale = std.time.ns_per_day * 365 * 20;
+    const wall_scale = time.ns_per_day * 365 * 20;
     try testing.expect(now(.real).nanoseconds > wall_scale);
     try testing.expect(now(.awake).nanoseconds < wall_scale);
 }
