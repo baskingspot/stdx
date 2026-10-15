@@ -41,6 +41,6 @@ lint:
 # Everything CI runs
 ci: test test-release-safe test-release-fast lint
 
-# Run benchmarks (e.g. `just bench -- --benchtime=250ms --filter=Swiss --benchmem`)
+# Run benchmarks (e.g. `just bench -Doptimize=ReleaseFast -- --benchtime=250ms --filter=Swiss`)
 bench *ARGS:
-    zig build bench -- {{ ARGS }}
+    zig build bench {{ ARGS }}

@@ -1,4 +1,5 @@
 //! Swiss-table hash maps: the hashbrown / Abseil / Go 1.24 lineage.
+//! The resizable map built on these primitives is `swiss/map.zig`.
 //!
 //! The control-byte encoding is Abseil's, for its stated reasons: `empty`
 //! is `0x80` so an empty match is a sign-style test; `deleted` is `0xFE`
@@ -18,15 +19,15 @@
 //! bytes and the mask's lane index can be taken modulo the bucket
 //! count — the hashbrown/Abseil trick (their `kWidth - 1` cloned
 //! bytes). `sentinel` is reserved by the encoding but never appears
-//! in a `bounded` table's control bytes.
+//! in a table's control bytes.
 
 const std = @import("std");
 const testing = std.testing;
 
-const bounded = @import("swiss/bounded.zig");
-pub const Custom = bounded.Custom;
-pub const Auto = bounded.Auto;
-pub const String = bounded.String;
+const map = @import("swiss/map.zig");
+pub const Custom = map.Custom;
+pub const Auto = map.Auto;
+pub const String = map.String;
 
 /// Top bit set, all others clear: an empty slot. Enables a sign-style
 /// empty match on a group of bytes.
@@ -37,7 +38,7 @@ pub const empty = 0x80;
 pub const deleted = 0xFE;
 
 /// `0xFF`. Reserved by the Abseil/Go encoding for whole-array bulk
-/// operations; a `bounded` table never stores it — its mirrored tail
+/// operations; a table never stores it — its mirrored tail
 /// replicates real bytes instead.
 pub const sentinel = 0xFF;
 

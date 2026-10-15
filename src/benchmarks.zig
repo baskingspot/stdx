@@ -1,9 +1,9 @@
-//! stdx benchmarks: the bounded maps against each other, the pairing the
-//! IDEAS ledger cares about — `bounded_array_hash_map.Auto` (robin) is the
-//! small-table map, `swiss.Auto` the large-table one, and the numbers
-//! are the crossover story: same keys, same capacities, both sizes. The
-//! Bloom filter follows with its steady-state `add` and `contains` cost,
-//! then rapidhash against Wyhash on small keys and a 16 KiB buffer.
+//! stdx benchmarks: the maps against each other, the pairing the IDEAS
+//! ledger cares about — `bounded_array_hash_map.Auto` (robin) is the
+//! small-table map, `swiss.Auto` the resizable large-table one, and the
+//! numbers are the crossover story: same keys, both sizes. The Bloom filter
+//! follows with its steady-state `add` and `contains` cost, then rapidhash
+//! against Wyhash on small keys and a 16 KiB buffer.
 
 const std = @import("std");
 
@@ -14,8 +14,10 @@ const robin = stdx.bounded_array_hash_map;
 const bloom = stdx.bloom;
 const rapidhash = stdx.rapidhash;
 
-// The small workload: 3000 keys in 3584 capacity (~83% load), u64 keys —
-// the table sits in cache and fingerprint precision decides.
+// The small workload: 3000 keys, u64 keys — robin is declared at 3584
+// capacity and swiss grows to the same 4096 buckets (3584 capacity), so the
+// pairing stays like-for-like. The table sits in cache and fingerprint
+// precision decides.
 const small_capacity = 3584;
 const small_keys = blk: {
     @setEvalBranchQuota(20000);
@@ -28,15 +30,16 @@ const small_keys = blk: {
     break :blk ks;
 };
 
-// The large workload: 7M keys in 8M capacity (~87% load), u32 keys — the
-// metadata (swiss ~16MB ctrl vs robin ~150MB header+hash+entries)
-// overflows cache and probe traffic decides. Filled once, shared by the
-// large benchmarks; setup is excluded from timing.
+// The large workload: 7M keys, u32 keys — swiss grows to 8.4M buckets
+// (~72MB: 8MB ctrl + 64MB entries) and robin is declared at 8M capacity
+// (~160MB: 64MB index + 96MB entries), so both overflow cache and probe
+// traffic decides. Filled once, shared by the large benchmarks; setup is
+// excluded from timing.
 const large_capacity = 8_000_000;
 const large_fill = 7_000_000;
 const large_probe_keys = 4096;
 
-var large_swiss: swiss.Auto(u32, u32, large_capacity) = .empty;
+var large_swiss: swiss.Auto(u32, u32) = .empty;
 var large_robin: robin.Auto(u32, u32, large_capacity) = .empty;
 var large_hit_keys: [large_probe_keys]u32 = undefined;
 var large_miss_keys: [large_probe_keys]u32 = undefined;
@@ -52,7 +55,7 @@ fn ensureLargeFilled() !void {
     while (i < large_fill) : (i += 1) {
         state = state *% 6364136223846793005 +% 1442695040888963407;
         const k: u32 = @truncate(state >> 32);
-        try large_swiss.put(k, k);
+        try large_swiss.put(std.heap.smp_allocator, k, k);
         try large_robin.put(k, k);
         if (i % (large_fill / large_probe_keys) == 0 and saved < large_probe_keys) {
             large_hit_keys[saved] = k;
@@ -65,8 +68,9 @@ fn ensureLargeFilled() !void {
 }
 
 pub fn benchmarkSwissSmall(b: *bench.B) !void {
-    var map: swiss.Auto(u64, u64, small_capacity) = .empty;
-    for (small_keys) |k| try map.put(k, k);
+    var map: swiss.Auto(u64, u64) = .empty;
+    defer map.deinit(b.allocator);
+    for (small_keys) |k| try map.put(b.allocator, k, k);
     var sink: u64 = 0;
     while (try b.loop()) {
         for (b.blackBox(&small_keys)) |k| {
@@ -89,8 +93,9 @@ pub fn benchmarkRobinSmall(b: *bench.B) !void {
 }
 
 pub fn benchmarkSwissSmallMiss(b: *bench.B) !void {
-    var map: swiss.Auto(u64, u64, small_capacity) = .empty;
-    for (small_keys) |k| try map.put(k, k);
+    var map: swiss.Auto(u64, u64) = .empty;
+    defer map.deinit(b.allocator);
+    for (small_keys) |k| try map.put(b.allocator, k, k);
     var sink: u64 = 0;
     while (try b.loop()) {
         for (small_keys) |k| {
