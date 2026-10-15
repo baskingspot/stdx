@@ -32,6 +32,10 @@ const linux = std.os.linux;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const testing = std.testing;
+const pageSize = std.heap.pageSize;
+/// The intentional `std.heap.page_allocator`. See the module doc for the
+/// contracts that make an allocation through this alias deliberate.
+pub const allocator: Allocator = std.heap.page_allocator;
 const builtin = @import("builtin");
 
 comptime {
@@ -40,16 +44,6 @@ comptime {
         else => @compileError("pages supports Linux only"),
     }
 }
-
-/// The intentional `std.heap.page_allocator`. See the module doc for the
-/// contracts that make an allocation through this alias deliberate.
-pub const allocator: Allocator = std.heap.page_allocator;
-
-/// The kernel page size that `whole` rounds to.
-pub fn size() usize {
-    return std.heap.pageSize();
-}
-
 /// Reserve `n` items of `T` as one private anonymous mapping, untouched:
 /// the kernel supplies zero pages at first touch. Nothing here rides
 /// `Allocator.alloc` — its undefined-fill touches every byte of the
@@ -61,7 +55,7 @@ pub fn reserve(comptime T: type, n: usize) []T {
     if (bytes_len == 0) return &.{};
     const bytes = allocator.rawAlloc(
         bytes_len,
-        .fromByteUnits(size()),
+        .fromByteUnits(pageSize()),
         @returnAddress(),
     ) orelse @panic("OOM");
     // The mapping is page-aligned, so any element alignment fits; the
@@ -76,25 +70,25 @@ pub fn unreserve(memory: anytype) void {
     if (memory.len == 0) return;
     const T = std.meta.Child(@TypeOf(memory));
     const bytes: []u8 = @as([*]u8, @ptrCast(memory.ptr))[0 .. memory.len * @sizeOf(T)];
-    allocator.rawFree(bytes, .fromByteUnits(size()), @returnAddress());
+    allocator.rawFree(bytes, .fromByteUnits(pageSize()), @returnAddress());
 }
 
-/// A block of `n` pages aligned to `size()`, for tests. Free it with
+/// A block of `n` pages aligned to `pageSize()`, for tests. Free it with
 /// `freeForTest`.
 pub fn allocForTest(gpa: Allocator, n: usize) ![]u8 {
-    const len = n * size();
-    const ptr = gpa.rawAlloc(len, .fromByteUnits(size()), @returnAddress()) orelse
+    const len = n * pageSize();
+    const ptr = gpa.rawAlloc(len, .fromByteUnits(pageSize()), @returnAddress()) orelse
         return error.OutOfMemory;
     return ptr[0..len];
 }
 
 pub fn freeForTest(gpa: Allocator, block: []u8) void {
-    gpa.rawFree(block, .fromByteUnits(size()), @returnAddress());
+    gpa.rawFree(block, .fromByteUnits(pageSize()), @returnAddress());
 }
 
 /// The whole kernel pages inside `bytes`: empty when `bytes` spans none.
 pub fn whole(bytes: []u8) []u8 {
-    const page = size();
+    const page = pageSize();
     const base = @intFromPtr(bytes.ptr);
     const start = mem.alignForward(usize, base, page);
     const end = mem.alignBackward(usize, base + bytes.len, page);
@@ -111,7 +105,7 @@ pub fn release(bytes: []u8) void {
 }
 
 test "only whole pages go back, and they come back zeroed" {
-    const page = size();
+    const page = pageSize();
     const block = try allocForTest(testing.allocator, 4);
     defer freeForTest(testing.allocator, block);
     @memset(block, 0xa5);
@@ -136,7 +130,7 @@ test "reserve and unreserve" {
     const reserved = reserve(Block, 10_000);
     defer unreserve(reserved);
     try testing.expect(reserved.len == 10_000);
-    try testing.expect(@intFromPtr(reserved.ptr) % size() == 0);
+    try testing.expect(@intFromPtr(reserved.ptr) % pageSize() == 0);
     // Untouched pages read as zero on first touch.
     try testing.expect(reserved[9999].header == 0);
     // An empty reservation is nothing to map or unmap.
@@ -144,7 +138,7 @@ test "reserve and unreserve" {
 }
 
 test "whole is empty for sub-page and misaligned ranges" {
-    const page = size();
+    const page = pageSize();
     const block = try allocForTest(testing.allocator, 3);
     defer freeForTest(testing.allocator, block);
     @memset(block, 0xa5);

@@ -247,7 +247,7 @@ split. API: `add`, `contains`, `clear`, `count`, comptime `p`
 surfaced as a constant. Probabilistic contract documented: no
 false negatives, `p` false positives at capacity.
 
-## rapidhash
+## rapidhash — SHIPPED as stdx.hash.RapidHash
 
 The current fast non-crypto general-purpose hash (wyhash lineage,
 SMHasher-verified) — the one projects adopt over xxhash3 when

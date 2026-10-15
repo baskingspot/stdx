@@ -19,7 +19,7 @@ reproduced in `LICENSE-ZIG`, per its terms.
 Upstream: https://github.com/Nicoshev/rapidhash (`rapidhash.h`, tag `rapidhash_v3`, commit `bc4b4ba`).
 License: MIT, Copyright (C) 2025 Nicolas De Carli — notice reproduced below; also carried at the top of the ported file.
 
-The algorithm structure and all constants in `src/rapidhash.zig` are
+The algorithm structure and all constants in `src/hash/rapidhash.zig` are
 transcribed verbatim from upstream's `rapidhash.h`. Adaptations: Zig
 `readInt(.little)` reads (endian-independent), `u128` multiply for the
 64×64→128 fold, per-variant internal functions. The widely mirrored

@@ -10,7 +10,7 @@ standalone, no dependencies.
 
 The modules mirror the std namespaces they extend (`mem`, `fmt`,
 `net`, `posix`, `heap`); concepts std lacks get concept names
-(`bloom`, `swiss`, `rapidhash`); container families follow
+(`bloom`, `swiss`, `hash`); container families follow
 `std.array_hash_map`'s shape — the module carries the concept
 (`bounded_array_hash_map`), the constructors inside are bare
 (`Custom`/`Auto`/`String`). The

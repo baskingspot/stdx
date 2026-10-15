@@ -32,7 +32,7 @@ it.
   `fmt` ↔ `std.fmt`, `net` ↔ `std.Io.net`, `posix` ↔ `std.posix`,
   `heap` ↔ `std.heap`.
 - Concepts std lacks get concept-named modules, lowercase:
-  `bloom`, `swiss`, `rapidhash`, `stdio`.
+  `bloom`, `swiss`, `hash`, `stdio`.
 - Container families follow `std.array_hash_map`'s newer shape: the
   module name carries the concept (`bounded_array_hash_map`), and the
   constructors inside are bare — `Custom(Context, ...)` the underlying
