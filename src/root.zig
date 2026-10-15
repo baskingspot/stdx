@@ -12,6 +12,7 @@ pub const heap = @import("heap.zig");
 pub const mem = @import("mem.zig");
 pub const multi_array = @import("multi_array.zig");
 pub const net = @import("net.zig");
+pub const pages = @import("pages.zig");
 pub const posix = @import("posix.zig");
 pub const priority_queue = @import("priority_queue.zig");
 pub const random = @import("random.zig");
