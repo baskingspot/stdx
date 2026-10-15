@@ -90,6 +90,8 @@ pub fn now(clock: Io.Clock) Io.Timestamp {
 pub const WallFromAwake = struct {
     offset_ns: i64,
 
+    pub const uninitialized: WallFromAwake = .{ .offset_ns = 0 };
+
     /// The startup offset: read both clocks once and store the value
     /// wherever the process keeps startup state.
     pub fn compute() WallFromAwake {
