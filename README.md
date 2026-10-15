@@ -54,14 +54,10 @@ MIT licensed — see `LICENSE`. A few pieces were adapted from other code;
 
 ## Related projects
 
-Other pieces of the same effort — low-level primitives Zig is missing:
+stdx is one of several libraries for low-level primitives that Zig lacks:
 
-- [fastmem](https://github.com/mattrobenolt/fastmem-zig) — SIMD
-  memcpy, memmove, and memset
-- [ztls](https://github.com/mattrobenolt/ztls) — a TLS library
-- [zcompress](https://github.com/mattrobenolt/zcompress) — fast,
-  self-contained compression codecs
-- [ztest](https://github.com/mattrobenolt/ztest) — a test runner that
-  writes plain text instead of a TUI
-- [zig-benchmark](https://github.com/mattrobenolt/zig-benchmark) — a
-  benchmark harness
+- [fastmem](https://github.com/mattrobenolt/fastmem-zig): SIMD memcpy, memmove, and memset.
+- [ztls](https://github.com/mattrobenolt/ztls): a sans-I/O TLS 1.3 state machine.
+- [zcompress](https://github.com/mattrobenolt/zcompress): fast, self-contained compression codecs.
+- [ztest](https://github.com/mattrobenolt/ztest): a test runner that writes plain, parseable text instead of a TUI.
+- [zig-benchmark](https://github.com/mattrobenolt/zig-benchmark): Go-style benchmarking with allocation metrics.

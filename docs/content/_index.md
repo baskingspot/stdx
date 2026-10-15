@@ -411,3 +411,13 @@ A failure that repeats for each connection can write one line per event. `RateLi
 `admit` returns `null` when the caller must hold the line back. Pass it a monotonic sample, such as `clock.now()` from a `CachedClock(.awake)`.
 
 `RateLimit.default` has a one-second interval. `RateLimit.init` takes any `Io.Duration`.
+
+# Related projects
+
+stdx is one of several libraries for low-level primitives that Zig lacks.
+
+- [fastmem](https://github.com/mattrobenolt/fastmem-zig): SIMD memcpy, memmove, and memset.
+- [ztls](https://github.com/mattrobenolt/ztls): a sans-I/O TLS 1.3 state machine.
+- [zcompress](https://github.com/mattrobenolt/zcompress): fast, self-contained compression codecs.
+- [ztest](https://github.com/mattrobenolt/ztest): a test runner that writes plain, parseable text instead of a TUI.
+- [zig-benchmark](https://github.com/mattrobenolt/zig-benchmark): Go-style benchmarking with allocation metrics.
