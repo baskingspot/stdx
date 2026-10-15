@@ -25,7 +25,11 @@ pub const Ip4 = struct {
 
     pub const broadcast: Ip4 = .{ .bytes = .{ 255, 255, 255, 255 } };
 
-    pub const ParseError = Ip4Address.ParseError;
+    pub const ParseError = Ip4Address.ParseError || error{
+        /// The input is an IPv6 literal (it contains a `:`). IPv6 is
+        /// unsupported by design; the sniff runs on the error path only.
+        Ipv6,
+    };
 
     pub fn init(bytes: [4]u8) Ip4 {
         return .{ .bytes = bytes };
@@ -33,10 +37,15 @@ pub const Ip4 = struct {
 
     /// Parse dotted-quad notation, with `Ip4Address.parse` semantics:
     /// hostnames and IPv6 are parse errors, and non-canonical quads (leading
-    /// zeros) are too.
+    /// zeros) are too. An IPv6 literal reports error.Ipv6 rather than the
+    /// octet overflow its first group would otherwise produce ("2001:db8"
+    /// overflows a u8 before the parser reaches the colon).
     pub fn parse(buf: []const u8) ParseError!Ip4 {
-        const std_addr: Ip4Address = try .parse(buf, 0);
-        return .{ .bytes = std_addr.bytes };
+        const std_addr: Ip4Address = Ip4Address.parse(buf, 0) catch |err| {
+            if (mem.findScalarPos(u8, buf, 0, ':') != null) return error.Ipv6;
+            return err;
+        };
+        return fromIp4(std_addr);
     }
 
     /// Parses at compile time, reporting the offending string and error on
@@ -56,14 +65,14 @@ pub const Ip4 = struct {
 
     /// Given an `Ip4Address`, converts it to an `Ip4` stripping the port.
     pub fn fromIp4(ip4: Ip4Address) Ip4 {
-        return .{ .bytes = ip4.bytes };
+        return init(ip4.bytes);
     }
 
     /// Given an `IpAddress`, converts it to an `Ip4` directly, or from an
     /// IPv4-mapped IPv6 address, or returns null.
     pub fn fromAny(addr: IpAddress) ?Ip4 {
         return switch (addr) {
-            .ip4 => |ip4| .{ .bytes = ip4.bytes },
+            .ip4 => |ip4| fromIp4(ip4),
             .ip6 => |ip6| fromIp6(ip6),
         };
     }
@@ -139,7 +148,7 @@ pub const Ip4 = struct {
         if (value == math.maxInt(u32)) return null;
         var bytes: [4]u8 = undefined;
         mem.writeInt(u32, &bytes, value + 1, .big);
-        return .{ .bytes = bytes };
+        return init(bytes);
     }
 
     /// The previous address in numeric order, or null before 0.0.0.0.
@@ -148,14 +157,14 @@ pub const Ip4 = struct {
         if (value == 0) return null;
         var bytes: [4]u8 = undefined;
         mem.writeInt(u32, &bytes, value - 1, .big);
-        return .{ .bytes = bytes };
+        return init(bytes);
     }
 
     /// The prefix of `bits` bits with this address as its network address,
     /// masked to canonical form, like Go's `Addr.Prefix`.
     pub fn prefix(self: Ip4, bits: u8) error{BitsOutOfRange}!Prefix4 {
         if (bits > 32) return error.BitsOutOfRange;
-        const p: Prefix4 = .{ .addr = self, .bits = bits };
+        const p: Prefix4 = .init(self, bits);
         return p.masked();
     }
 
@@ -163,7 +172,7 @@ pub const Ip4 = struct {
     /// `AddrFromSlice`.
     pub fn fromSlice(slice: []const u8) ?Ip4 {
         if (slice.len != 4) return null;
-        return .{ .bytes = slice[0..4].* };
+        return init(slice[0..4].*);
     }
 
     pub fn withPort(self: Ip4, port: u16) Ip4Address {
@@ -187,7 +196,8 @@ test Ip4 {
 
     // Parse errors mirror Ip4Address.ParseError.
     try testing.expectError(error.InvalidCharacter, Ip4.parse("host"));
-    try testing.expectError(error.InvalidCharacter, Ip4.parse("::1"));
+    try testing.expectError(error.Ipv6, Ip4.parse("::1"));
+    try testing.expectError(error.Ipv6, Ip4.parse("2001:db8::1"));
     try testing.expectError(error.Incomplete, Ip4.parse(""));
     try testing.expectError(error.NonCanonical, Ip4.parse("10.01.2.3"));
 
@@ -274,6 +284,10 @@ pub const Prefix4 = struct {
         BitsOutOfRange,
     };
 
+    pub fn init(addr: Ip4, bits: u8) Prefix4 {
+        return .{ .addr = addr, .bits = bits };
+    }
+
     pub fn parse(s: []const u8) ParseError!Prefix4 {
         const addr_str, const bits_str = mem.cutScalar(u8, s, '/') orelse
             return error.NoSlash;
@@ -286,7 +300,7 @@ pub const Prefix4 = struct {
         const bits = fmt.atoiWith(u8, bits_str, .{ .leading_zeros = .reject }) catch
             return error.InvalidBits;
         if (bits > 32) return error.BitsOutOfRange;
-        return .{ .addr = addr, .bits = bits };
+        return init(addr, bits);
     }
 
     /// Parses at compile time, reporting the offending string and error on
@@ -361,11 +375,10 @@ test Prefix4 {
 
     try testing.expectError(error.NoSlash, Prefix4.parse("10.0.0.0"));
     try testing.expectError(error.BitsOutOfRange, Prefix4.parse("10.0.0.0/33"));
-    // IPv6 is unsupported end to end: the address errors pass through.
-    try testing.expectError(error.InvalidCharacter, Prefix4.parse("::1/128"));
-    // "2001" overflows a u8 octet; "::1" is a non-digit: both pass
-    // through from the address parser.
-    try testing.expectError(error.Overflow, Prefix4.parse("2001:db8::/32"));
+    // IPv6 is unsupported end to end: both report error.Ipv6, not the
+    // octet overflow "2001" would otherwise produce.
+    try testing.expectError(error.Ipv6, Prefix4.parse("::1/128"));
+    try testing.expectError(error.Ipv6, Prefix4.parse("2001:db8::/32"));
     try testing.expectError(error.InvalidCharacter, Prefix4.parse("bogus/8"));
     try testing.expectError(error.InvalidBits, Prefix4.parse("10.0.0.0/"));
 
