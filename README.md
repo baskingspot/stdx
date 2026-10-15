@@ -15,7 +15,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 ## Install
 
 ```sh
-zig fetch --save git+https://github.com/mattrobenolt/stdx.git
+zig fetch --save git+https://github.com/mattrobenolt/stdx
 ```
 
 Add the module to your build:
