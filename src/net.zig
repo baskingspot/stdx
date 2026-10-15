@@ -41,11 +41,11 @@ pub const Ip4 = struct {
     /// octet overflow its first group would otherwise produce ("2001:db8"
     /// overflows a u8 before the parser reaches the colon).
     pub fn parse(buf: []const u8) ParseError!Ip4 {
-        const std_addr: Ip4Address = Ip4Address.parse(buf, 0) catch |err| {
+        const addr = Ip4Address.parse(buf, 0) catch |err| {
             if (mem.findScalarPos(u8, buf, 0, ':') != null) return error.Ipv6;
             return err;
         };
-        return fromIp4(std_addr);
+        return fromIp4(addr);
     }
 
     /// Parses at compile time, reporting the offending string and error on
@@ -58,9 +58,10 @@ pub const Ip4 = struct {
 
     /// Converts from an IPv4-mapped IPv6 address, or returns null.
     pub fn fromIp6(ip6: Ip6Address) ?Ip4 {
-        return if (mem.eql(u8, ip6.bytes[0..12], &.{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff })) .{
-            .bytes = ip6.bytes[12..].*,
-        } else null;
+        return if (mem.eql(u8, ip6.bytes[0..12], &.{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff }))
+            init(ip6.bytes[12..].*)
+        else
+            null;
     }
 
     /// Given an `Ip4Address`, converts it to an `Ip4` stripping the port.
