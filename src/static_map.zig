@@ -79,7 +79,8 @@ pub fn Auto(comptime K: type, comptime V: type, comptime kvs: anytype) type {
     return Custom(K, V, std.hash_map.AutoContext(K), kvs);
 }
 
-/// A static string-keyed map, `std.StaticStringMap`'s non-string counterpart.
+/// A static string-keyed map, like `std.StaticStringMap` — string keys are
+/// a separate entry point because `std.hash.autoHash` rejects slices.
 pub fn String(comptime V: type, comptime kvs: anytype) type {
     return Custom([]const u8, V, std.hash_map.StringContext, kvs);
 }

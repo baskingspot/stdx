@@ -39,15 +39,12 @@ pub fn Custom(comptime K: type, comptime Context: type, capacity: comptime_int) 
             return self.map.contains(key);
         }
 
-        /// Add `key`. Infallible: the capacity is fixed and slots are
-        /// shared. Returns true if `key` was not already present.
-        pub fn add(self: *Self, key: K) bool {
-            if (self.map.getOrPut(key)) |result| {
-                const was_new = !result.found_existing;
-                return was_new;
-            } else |_| {
-                return false;
-            }
+        /// Add `key`. Returns true if `key` was newly added, false if
+        /// already present. A new key that does not fit the fixed capacity
+        /// returns error.NoSpaceLeft and is not added.
+        pub fn add(self: *Self, key: K) error{NoSpaceLeft}!bool {
+            const result = try self.map.getOrPut(key);
+            return !result.found_existing;
         }
 
         /// Remove `key`. Returns false when absent.
@@ -82,18 +79,10 @@ pub fn Custom(comptime K: type, comptime Context: type, capacity: comptime_int) 
             }
         }
 
-        /// Add every key of `other`. Returns true if every key fit;
-        /// false when self reached capacity — the adds that fit are kept.
-        pub fn unite(self: *Self, other: *Self) bool {
-            var ok = true;
-            for (other.map.keys()) |key| {
-                _ = self.add(key);
-                if (self.count() == self.map.keys().len) {
-                    // At capacity and possibly beyond on the next add.
-                    ok = false;
-                }
-            }
-            return ok;
+        /// Add every key of `other`. Returns error.NoSpaceLeft when self
+        /// reached capacity — the adds that fit are kept.
+        pub fn unite(self: *Self, other: *Self) error{NoSpaceLeft}!void {
+            for (other.map.keys()) |key| _ = try self.add(key);
         }
 
         /// Remove every key of `other`. Returns nothing: absent keys are
@@ -140,9 +129,10 @@ pub fn String(comptime capacity: comptime_int) type {
 
 test "add, contains, remove, count" {
     var set: Auto(u32, 8) = .empty;
-    _ = set.add(1);
-    _ = set.add(2);
-    _ = set.add(1); // duplicate: no count change
+    try testing.expect(try set.add(1));
+    try testing.expect(try set.add(2));
+    // duplicate: no count change
+    try testing.expect(!try set.add(1));
     try testing.expect(set.count() == 2);
     try testing.expect(set.contains(1));
     try testing.expect(!set.contains(3));
@@ -155,8 +145,8 @@ test "add, contains, remove, count" {
 test "intersect" {
     var a: Auto(u32, 8) = .empty;
     var b: Auto(u32, 8) = .empty;
-    for ([_]u32{ 1, 2, 3, 4 }) |k| _ = a.add(k);
-    for ([_]u32{ 3, 4, 5 }) |k| _ = b.add(k);
+    for ([_]u32{ 1, 2, 3, 4 }) |k| _ = try a.add(k);
+    for ([_]u32{ 3, 4, 5 }) |k| _ = try b.add(k);
 
     a.intersect(&b);
     try testing.expectEqual(@as(usize, 2), a.count());
@@ -168,7 +158,7 @@ test "intersect" {
 
     // Disjoint intersect empties.
     var c: Auto(u32, 8) = .empty;
-    for ([_]u32{ 9, 10 }) |k| _ = c.add(k);
+    for ([_]u32{ 9, 10 }) |k| _ = try c.add(k);
     a.intersect(&c);
     try testing.expectEqual(@as(usize, 0), a.count());
 }
@@ -176,8 +166,8 @@ test "intersect" {
 test "subtract" {
     var a: Auto(u32, 8) = .empty;
     var b: Auto(u32, 8) = .empty;
-    for ([_]u32{ 1, 2, 3, 4 }) |k| _ = a.add(k);
-    for ([_]u32{ 2, 4, 9 }) |k| _ = b.add(k);
+    for ([_]u32{ 1, 2, 3, 4 }) |k| _ = try a.add(k);
+    for ([_]u32{ 2, 4, 9 }) |k| _ = try b.add(k);
 
     a.subtract(&b);
     try testing.expectEqual(@as(usize, 2), a.count());
@@ -190,8 +180,8 @@ test "subtract" {
 test "subsetOf, supersetOf, disjointWith" {
     var a: Auto(u32, 8) = .empty;
     var b: Auto(u32, 8) = .empty;
-    for ([_]u32{ 1, 2, 3 }) |k| _ = a.add(k);
-    for ([_]u32{ 1, 2 }) |k| _ = b.add(k);
+    for ([_]u32{ 1, 2, 3 }) |k| _ = try a.add(k);
+    for ([_]u32{ 1, 2 }) |k| _ = try b.add(k);
 
     try testing.expect(b.subsetOf(&a));
     try testing.expect(!a.subsetOf(&b));
@@ -200,7 +190,7 @@ test "subsetOf, supersetOf, disjointWith" {
 
     // Equal sets: subset both ways, not disjoint.
     var c: Auto(u32, 8) = .empty;
-    for ([_]u32{ 1, 2 }) |k| _ = c.add(k);
+    for ([_]u32{ 1, 2 }) |k| _ = try c.add(k);
     try testing.expect(c.subsetOf(&b));
     try testing.expect(b.subsetOf(&c));
     try testing.expect(!b.disjointWith(&c));
@@ -214,11 +204,11 @@ test "subsetOf, supersetOf, disjointWith" {
 test "unite at capacity" {
     var a: Auto(u32, 4) = .empty;
     var b: Auto(u32, 4) = .empty;
-    for ([_]u32{ 1, 2 }) |k| _ = a.add(k);
-    for ([_]u32{ 3, 4, 5 }) |k| _ = b.add(k);
+    for ([_]u32{ 1, 2 }) |k| _ = try a.add(k);
+    for ([_]u32{ 3, 4, 5 }) |k| _ = try b.add(k);
 
     // Full union needs 5 slots; capacity 4. The 5th add is refused.
-    try testing.expect(!a.unite(&b));
+    try testing.expectError(error.NoSpaceLeft, a.unite(&b));
     try testing.expectEqual(@as(usize, 4), a.count());
     try testing.expect(a.contains(5) == false);
     // The adds that fit are kept.
@@ -228,14 +218,14 @@ test "unite at capacity" {
 
 test "String construction" {
     var set: String(4) = .empty;
-    _ = set.add("alpha");
-    _ = set.add("beta");
+    _ = try set.add("alpha");
+    _ = try set.add("beta");
     try testing.expect(set.contains("alpha"));
     try testing.expect(!set.contains("gamma"));
 
     var other: String(4) = .empty;
-    _ = other.add("beta");
-    _ = other.add("gamma");
+    _ = try other.add("beta");
+    _ = try other.add("gamma");
 
     set.intersect(&other);
     try testing.expectEqual(@as(usize, 1), set.count());

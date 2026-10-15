@@ -65,7 +65,6 @@ pub fn String(
 /// `std.hash_map.StringContext` — the std `AutoHashMap`/`StringHashMap` split,
 /// because `std.hash.autoHash` rejects slices: string keys are a separate
 /// entry point, not silent routing.
-/// does not compile.
 ///
 /// The parameters are named `item_count` and `target_rate` rather than
 /// `expected_items` and `requested_rate` because a container declaration
