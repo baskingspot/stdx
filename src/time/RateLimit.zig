@@ -8,20 +8,31 @@ const std = @import("std");
 const math = std.math;
 const testing = std.testing;
 const Io = std.Io;
+const assert = std.debug.assert;
 
 const RateLimit = @This();
 
-interval_ms: i64 = 1000,
 /// The earliest time the next line may go out.
-next_ms: i64 = math.minInt(i64),
+next_ms: u64 = 0,
 /// Lines held back since the last one that went out.
 suppressed: u32 = 0,
+
+interval_ms: u32,
+
+pub const default: RateLimit = .{ .interval_ms = 1_000 };
+
+pub fn init(interval: Io.Duration) RateLimit {
+    const ms = interval.toMilliseconds();
+    assert(ms >= 0);
+    assert(ms < math.maxInt(u32));
+    return .{ .interval_ms = @intCast(ms) };
+}
 
 /// Null: hold this line back. Otherwise log it, with the returned count of
 /// the lines held back since the previous one. `now` is a monotonic
 /// sample.
 pub fn admit(self: *RateLimit, now: Io.Timestamp) ?u32 {
-    const now_ms = now.toMilliseconds();
+    const now_ms: u64 = @intCast(now.toMilliseconds());
     if (now_ms < self.next_ms) {
         self.suppressed +|= 1;
         return null;
@@ -38,7 +49,7 @@ fn atMs(x: i64) Io.Timestamp {
 }
 
 test "one line per interval, carrying the count it held back" {
-    var limit: RateLimit = .{};
+    var limit: RateLimit = .default;
     try testing.expectEqual(@as(?u32, 0), limit.admit(atMs(5_000)));
     // A storm inside the interval: nothing goes out.
     for (0..49) |i| {
@@ -55,14 +66,18 @@ test "one line per interval, carrying the count it held back" {
 }
 
 test "the held-back count saturates instead of wrapping" {
-    var limit: RateLimit = .{ .next_ms = math.maxInt(i64), .suppressed = math.maxInt(u32) };
+    var limit: RateLimit = .{
+        .interval_ms = 1_000,
+        .next_ms = math.maxInt(u64),
+        .suppressed = math.maxInt(u32),
+    };
     try testing.expectEqual(@as(?u32, null), limit.admit(atMs(0)));
     try testing.expectEqual(math.maxInt(u32), limit.suppressed);
 }
 
 test "admit composes with time.now" {
     const time = @import("../time.zig");
-    var limit: RateLimit = .{};
+    var limit: RateLimit = .default;
     // A fresh monotonic sample on the admitted path, a suppressed one after.
     try testing.expectEqual(@as(?u32, 0), limit.admit(time.now(.awake)));
     try testing.expectEqual(@as(?u32, null), limit.admit(time.now(.awake)));

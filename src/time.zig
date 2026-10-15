@@ -24,7 +24,7 @@ const time = std.time;
 const builtin = @import("builtin");
 
 pub const CachedClock = @import("time/cached_clock.zig").CachedClock;
-pub const RateLimit = @import("time/RateLimit.zig").RateLimit;
+pub const RateLimit = @import("time/RateLimit.zig");
 
 comptime {
     switch (builtin.os.tag) {
@@ -150,4 +150,8 @@ test now {
     const wall_scale = time.ns_per_day * 365 * 20;
     try testing.expect(now(.real).nanoseconds > wall_scale);
     try testing.expect(now(.awake).nanoseconds < wall_scale);
+}
+
+test {
+    testing.refAllDecls(@This());
 }
