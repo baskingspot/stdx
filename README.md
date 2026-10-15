@@ -1,4 +1,9 @@
-# stdx
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/static/logo-dark.svg">
+    <img src="docs/static/logo.svg" alt="stdx" height="48">
+  </picture>
+</h1>
 
 Extensions to the Zig 0.16 standard library: fixed-capacity containers, strict parsers, IPv4 types, and the primitives std lacks.
 
