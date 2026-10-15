@@ -31,12 +31,15 @@ pub fn build(b: *std.Build) void {
         .name = "stdx",
         .root_module = mod,
     });
+    // The site serves the API reference under /api/, and Zola copies
+    // docs/static as is, so the reference installs there. `zig-out` is not the
+    // destination because Zola owns the site output directory.
     const docs_install = b.addInstallDirectory(.{
         .source_dir = mod_docs.getEmittedDocs(),
-        .install_dir = .prefix,
-        .install_subdir = "zig-docs",
+        .install_dir = .{ .custom = "../docs/static/api" },
+        .install_subdir = "",
     });
-    const docs_step = b.step("docs", "Generate API docs");
+    const docs_step = b.step("docs", "Generate API docs into docs/static/api");
     docs_step.dependOn(&docs_install.step);
 
     // The benchmark dependency is lazy: only the `bench` step imports it, so
