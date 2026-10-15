@@ -24,6 +24,7 @@ const time = std.time;
 const builtin = @import("builtin");
 
 pub const CachedClock = @import("time/cached_clock.zig").CachedClock;
+pub const RateLimit = @import("time/RateLimit.zig").RateLimit;
 
 comptime {
     switch (builtin.os.tag) {
