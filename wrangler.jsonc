@@ -7,8 +7,8 @@
   // Pure static site: no worker script, so no `main` and no `binding`.
   // Asset requests are free and served from cache without any invocation.
   "assets": {
-    // Output of `zig build docs` (see justfile `doc`).
-    "directory": "./zig-out/zig-docs",
+    // Guide at the root, API reference under /api/ (see justfile `doc`).
+    "directory": "./zig-out/site",
     // Plain 404 for unknown paths (not an SPA, no 404.html).
     "not_found_handling": "none",
     "html_handling": "auto-trailing-slash"

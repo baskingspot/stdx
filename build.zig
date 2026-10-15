@@ -16,6 +16,17 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run stdx tests");
     test_step.dependOn(&run_mod_tests.step);
 
+    // The guide's examples (docs/examples) are real programs against the
+    // public module, tested with everything else.
+    const examples_mod = b.createModule(.{
+        .root_source_file = b.path("docs/examples/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "stdx", .module = mod }},
+    });
+    const example_tests = b.addTest(.{ .root_module = examples_mod });
+    test_step.dependOn(&b.addRunArtifact(example_tests).step);
+
     const mod_docs = b.addObject(.{
         .name = "stdx",
         .root_module = mod,

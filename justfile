@@ -3,15 +3,24 @@
 
 default: test
 
-# Render API docs into zig-out/zig-docs/ (the wasm viewer `zig std`
-# uses; open zig-out/zig-docs/index.html)
+# Build the site into zig-out/site/: the guide (Zola, from docs/) at the
+# root and the API reference (the wasm viewer `zig std` uses) under /api/.
+# Open zig-out/site/index.html through `just doc-serve`, not file://.
 doc:
     zig build docs
+    zola --root docs build --output-dir zig-out/site --force
+    mkdir -p zig-out/site/api
+    cp -R zig-out/zig-docs/. zig-out/site/api/
 
-# Serve the rendered docs at http://127.0.0.1:PORT (default 8000;
-# override with an argument or the PORT env var)
+# Edit the guide with live reload (http://127.0.0.1:1111). No API reference
+# here; `doc-serve` has the whole site.
+guide:
+    zola --root docs serve
+
+# Serve the built site at http://127.0.0.1:PORT (default 8000; override with
+# an argument or the PORT env var)
 doc-serve port=env("PORT", "8000"): doc
-    python3 -m http.server -d zig-out/zig-docs -b 127.0.0.1 "{{ port }}"
+    python3 -m http.server -d zig-out/site -b 127.0.0.1 "{{ port }}"
 
 # Deploy the rendered docs to Cloudflare as an assets-only Worker (config in
 # wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus
@@ -32,14 +41,21 @@ test-release-safe:
 test-release-fast:
     zig build test -Doptimize=ReleaseFast --summary all
 
-# Lint: ziglint, Zig formatting, justfile formatting
+# Lint: ziglint, Zig, markdown and CSS, and justfile formatting
 lint:
     ziglint
-    zig fmt --check src build.zig
+    zig fmt --check src docs/examples build.zig
+    oxfmt --check README.md docs/content docs/static
     just --fmt --check
 
+# Format everything lint checks
+fmt:
+    zig fmt src docs/examples build.zig
+    oxfmt README.md docs/content docs/static
+    just --fmt
+
 # Everything CI runs
-ci: test test-release-safe test-release-fast lint
+ci: test test-release-safe test-release-fast lint doc
 
 # Run benchmarks (e.g. `just bench -Doptimize=ReleaseFast -- --benchtime=250ms --filter=Swiss`)
 bench *ARGS:

@@ -60,6 +60,8 @@
                 pinact
                 just
                 python3
+                zola
+                oxfmt
               ]
               ++ [ wrangler ];
           };

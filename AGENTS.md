@@ -76,6 +76,38 @@ it.
 - Comptime options over runtime flags when they change code shape
   (`fmt.AtoiOptions`); each configuration compiles to its own loop.
 
+## Documentation
+
+Two surfaces, one job each. `//!` and `///` docs state the contract:
+what a symbol does, its invariants, its failure modes. The guide
+(`docs/`, a Zola site) says which piece to pick and how pieces combine,
+organized by task, not by module.
+
+- The guide is one page: `docs/content/_index.md`. Each `#` is a chapter
+  and each `##` a section; Zola builds the sidebar contents from them, and
+  a heading's slug is its anchor, so renaming a heading breaks links to it.
+  Split into pages only when one page stops being searchable with Cmd+F.
+- Guide examples are complete files in `docs/examples/`, listed in
+  `docs/examples/root.zig`, and run under `just test`. A page embeds one
+  with `load_data(path="examples/x.zig", format="plain")` inside a `zig`
+  fence. Never paste a code block into a page that the compiler has not
+  seen. Name files `<module>_<topic>.zig`.
+- Examples write bindings the way an adopter should: `const timex =
+  stdx.time;`, `const fmtx = stdx.fmt;`. The `x` suffix only when std's
+  namesake is usually in scope; `buffer`, `stdio`, `net` stay bare.
+  Inside `src/` module bindings never take a suffix.
+- Example imports: a file that uses one stdx module writes
+  `const buffer = @import("stdx").buffer;`. Only a file that uses several
+  writes `const stdx = @import("stdx");` first. Bind a module at the top
+  and never spell it out inline (`priority_queue.Custom(...)`, not
+  `stdx.priority_queue.Custom(...)`). Prefer decl literals and inferred
+  types: `.broadcast`, `try .parse("10.1.2.3")`, `.loopback(0)`.
+- Examples are generic programs. Never name a downstream project.
+- Fence languages are strict (`error_on_missing_language`). The
+  highlighter has no `zon` grammar: label `.zon` snippets `zig`.
+- Guide prose follows the technical-writing rules: short active
+  sentences, no contractions.
+
 ## Adding code
 
 The bar: std genuinely lacks it, it is general purpose rather than
