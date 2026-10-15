@@ -11,12 +11,12 @@
     "directory": "./zig-out/site",
     // Plain 404 for unknown paths (not an SPA, no 404.html).
     "not_found_handling": "none",
-    "html_handling": "auto-trailing-slash"
+    "html_handling": "auto-trailing-slash",
   },
   // stdx.withmatt.com is attached via Terraform in ~/code/cloudflare
   // (cloudflare_workers_custom_domain). No routes here: the CI deploy
   // token is script-scoped and cannot touch DNS or domains, so deploys
   // are pure version uploads. Keep the workers.dev subdomain off so the
   // site has a single canonical origin.
-  "workers_dev": false
+  "workers_dev": false,
 }
