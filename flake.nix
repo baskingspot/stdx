@@ -48,10 +48,9 @@
         in
         {
           formatter = pkgs.nixfmt-tree;
-          devShells.default = pkgs.mkShell {
-            packages =
-              with pkgs;
-              [
+          devShells = {
+            default = pkgs.mkShell {
+              packages = with pkgs; [
                 zig_0_16
                 zls_0_16
                 ziglint
@@ -59,11 +58,26 @@
                 zizmor
                 pinact
                 just
-                python3
-                zola
                 oxfmt
-              ]
-              ++ [ wrangler ];
+              ];
+            };
+
+            # Just what building and deploying the site needs. The justfile's
+            # doc recipes enter this shell themselves, so `just doc` works from
+            # the default shell too. CI uses it directly.
+            docs = pkgs.mkShell {
+              packages =
+                with pkgs;
+                [
+                  zig_0_16
+                  zola
+                  just
+                  python3
+                ]
+                ++ [ wrangler ];
+              # Tells the justfile it is already here, so it does not nest.
+              env.STDX_DOCS_SHELL = "1";
+            };
           };
         };
     };

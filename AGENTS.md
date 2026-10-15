@@ -4,8 +4,10 @@ Working notes for AI coding agents in stdx.
 
 ## Environment
 
-Zig 0.16 only. `nix develop` provides zig, zls, ziglint, zigdoc, just.
-The flake is the tool contract: nothing on PATH outside the devshell.
+Zig 0.16 only. `nix develop` provides zig, zls, ziglint, zigdoc, oxfmt,
+just. The site tools (zola, wrangler) live in a second, lighter shell,
+`nix develop .#docs`, which the doc recipes enter themselves. The flake is
+the tool contract: nothing on PATH outside the devshell.
 
 The justfile is the command interface. Run recipes, not raw zig
 commands:
@@ -15,7 +17,8 @@ just lint test
 ```
 
 Takes multiple targets — `just lint test` does both. `just ci` is
-the full CI set; the darwin cross-compile is the macOS CI lane's job,
+the full set the test lanes run; the site build is its own CI job
+(`just doc`). The darwin cross-compile is the macOS CI lane's job,
 not a local one. When the change touches generic code, run the option
 matrix too: `just test-release-safe test-release-fast`. Lazy analysis
 hides code that only instantiates under a different element type or

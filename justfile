@@ -3,30 +3,34 @@
 
 default: test
 
+# The doc recipes run their tools from the docs shell (flake.nix). Inside it
+# already, STDX_DOCS_SHELL is set and the prefix is empty.
+docs := if env("STDX_DOCS_SHELL", "") == "1" { "" } else { "nix develop .#docs --command" }
+
 # Build the site into zig-out/site/: the guide (Zola, from docs/) at the
 # root and the API reference (the wasm viewer `zig std` uses) under /api/.
 # Open zig-out/site/index.html through `just doc-serve`, not file://.
 doc:
-    zig build docs
-    zola --root docs build --output-dir zig-out/site --force
+    {{ docs }} zig build docs
+    {{ docs }} zola --root docs build --output-dir zig-out/site --force
     mkdir -p zig-out/site/api
     cp -R zig-out/zig-docs/. zig-out/site/api/
 
 # Edit the guide with live reload (http://127.0.0.1:1111). No API reference
 # here; `doc-serve` has the whole site.
 guide:
-    zola --root docs serve
+    {{ docs }} zola --root docs serve
 
 # Serve the built site at http://127.0.0.1:PORT (default 8000; override with
 # an argument or the PORT env var)
 doc-serve port=env("PORT", "8000"): doc
-    python3 -m http.server -d zig-out/site -b 127.0.0.1 "{{ port }}"
+    {{ docs }} python3 -m http.server -d zig-out/site -b 127.0.0.1 "{{ port }}"
 
 # Deploy the rendered docs to Cloudflare as an assets-only Worker (config in
 # wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus
 # CLOUDFLARE_ACCOUNT_ID if the token can see more than one account —
 doc-deploy: doc
-    wrangler deploy
+    {{ docs }} wrangler deploy
 
 # Unit tests (Debug)
 test:
@@ -54,8 +58,8 @@ fmt:
     oxfmt README.md docs/content docs/static
     just --fmt
 
-# Everything CI runs
-ci: test test-release-safe test-release-fast lint doc
+# Everything the test lanes run. The site build is its own CI job: `just doc`.
+ci: test test-release-safe test-release-fast lint
 
 # Run benchmarks (e.g. `just bench -Doptimize=ReleaseFast -- --benchtime=250ms --filter=Swiss`)
 bench *ARGS:

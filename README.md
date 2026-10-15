@@ -38,10 +38,11 @@ stdx builds with Zig 0.16 only.
 just test
 ```
 
-Zig 0.16. `nix develop` gives you the toolchain, ziglint, zigdoc, zola,
+Zig 0.16. `nix develop` gives you the toolchain, ziglint, zigdoc, oxfmt,
 and just — the justfile carries the rest (`just ci` for the full set).
-`just guide` serves the guide with live reload; `just doc-serve` builds
-and serves the whole site.
+The site tools live in a lighter shell, `nix develop .#docs`, which the
+doc recipes enter on their own: `just guide` serves the guide with live
+reload, and `just doc-serve` builds and serves the whole site.
 
 MIT licensed — see `LICENSE`. A few pieces were adapted from other code;
 `THIRD_PARTY.md` says which, and under what terms.

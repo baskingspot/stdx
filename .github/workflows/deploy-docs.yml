@@ -24,7 +24,7 @@ jobs:
         with:
           use-flakehub: false
       - name: Build and deploy docs
-        run: nix develop --command just doc-deploy
+        run: nix develop .#docs --command just doc-deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
