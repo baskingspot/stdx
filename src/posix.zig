@@ -1,9 +1,10 @@
 //! POSIX extensions to `std.posix`.
 //!
-//! Raw-layer calls std forgot to wrap, with errno decoded by hand instead of
-//! routed through `posix.unexpectedErrno`. For callers that own raw socket
-//! handles (io_uring data paths); code holding an `Io.net.Socket` should
-//! prefer the typed APIs instead.
+//! Socket address queries by fd, returning a typed `net.Ip4Address`. std's
+//! `posix.getpeername` fills a caller-supplied `sockaddr`, and std 0.16 has
+//! no `posix.getsockname`. For callers that own raw socket handles (io_uring
+//! data paths); code holding an `Io.net.Socket` should prefer the typed APIs
+//! instead.
 
 const std = @import("std");
 const mem = std.mem;

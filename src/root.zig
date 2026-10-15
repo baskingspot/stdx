@@ -1,4 +1,14 @@
-//! stdx — shared standard-library extensions.
+//! Extensions to the Zig 0.16 standard library: fixed-capacity containers,
+//! strict parsers, IPv4 types, and the primitives std lacks.
+//!
+//! A module that extends a std namespace takes its name (`mem`, `fmt`, `net`,
+//! `posix`, `heap`, `hash`). A concept std lacks gets its own (`bloom`,
+//! `swiss`, `set`). A container family follows `std.array_hash_map`: the
+//! module names the concept, and the constructors inside are `Custom`, `Auto`,
+//! and `String`.
+//!
+//! The guide at <https://stdx.withmatt.com> says which module to use for a
+//! task, with examples. These pages are the reference for each symbol.
 
 const std = @import("std");
 const builtin = @import("builtin");

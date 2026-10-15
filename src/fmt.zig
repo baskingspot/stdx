@@ -1,8 +1,8 @@
 //! Format extensions to `std.fmt`.
 //!
 //! Strict decode and parse helpers where `std.fmt` is liberal: no bases, no
-//! underscores, no leftover characters — and bad comptime literals are
-//! compile errors, not runtime ones.
+//! underscores — and bad comptime literals are compile errors, not runtime
+//! ones.
 
 const std = @import("std");
 const testing = std.testing;

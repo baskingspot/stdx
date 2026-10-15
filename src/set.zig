@@ -3,8 +3,10 @@
 //! `Custom`/`Auto`/`String` construction and insertion-ordered iteration;
 //! this module adds the in-place algebra — `intersect`, `unite`,
 //! `subtract` — and the membership predicates — `subsetOf`, `disjointWith`.
-//! All algebra is in-place, allocation-free, and symmetric: the smaller
-//! side iterates.
+//! All algebra is in-place and allocation-free. `intersect`, `subsetOf`, and
+//! `disjointWith` iterate `self`; `unite` and `subtract` iterate `other`. No
+//! operation picks the smaller side. Pass the smaller set as `other` to
+//! `unite` and `subtract`, and call the other three on the smaller set.
 
 const std = @import("std");
 const testing = std.testing;
