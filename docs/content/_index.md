@@ -8,6 +8,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 
 - [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
 - [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
+- [Base32](#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
 - [UUIDs](#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
 - [Timekeeping](#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.
@@ -86,29 +87,30 @@ The [API reference](/api/) has the contract for each symbol. This guide has the 
 
 A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posix`, `heap`, `hash`. A concept std lacks gets its own: `bloom`, `swiss`, `set`. A container family follows `std.array_hash_map`. The module names the concept, and the constructors inside are `Custom`, `Auto`, and `String`.
 
-| Module                                                        | Use it for                                                                                                    |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [`bloom`](/api/#stdx.bloom)                                   | Bloom filters with a fixed capacity.                                                                          |
-| [`bounded_array_hash_map`](/api/#stdx.bounded_array_hash_map) | An insertion-ordered hash map with a fixed capacity and no allocator.                                         |
-| [`BoundedWriter`](/api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.     |
-| [`buffer`](/api/#stdx.buffer)                                 | Append buffers with a fixed capacity. `Array` owns its storage. `Slice` borrows it.                           |
-| [`fmt`](/api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                     |
-| [`hash`](/api/#stdx.hash)                                     | `RapidHash`.                                                                                                  |
-| [`heap`](/api/#stdx.heap)                                     | `SlabAllocator`.                                                                                              |
-| [`mem`](/api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                      |
-| [`multi_array`](/api/#stdx.multi_array)                       | Struct-of-arrays types with the storage inside the value.                                                     |
-| [`net`](/api/#stdx.net)                                       | IPv4 addresses and CIDR prefixes, after Go's `net/netip`: parse, classify, order, step, and test containment. |
-| [`pages`](/api/#stdx.pages)                                   | Release whole kernel pages back to the OS. Linux only.                                                        |
-| [`posix`](/api/#stdx.posix)                                   | `getsockname` and `getpeername` on raw socket handles.                                                        |
-| [`priority_queue`](/api/#stdx.priority_queue)                 | A priority queue with a fixed capacity.                                                                       |
-| [`random`](/api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                    |
-| [`set`](/api/#stdx.set)                                       | A bounded set with set algebra.                                                                               |
-| [`slot_ring`](/api/#stdx.slot_ring)                           | A bounded MPSC ring for log lines: producers never block, and one consumer drains. Linux only.                |
-| [`static_map`](/api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                        |
-| [`stdio`](/api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                |
-| [`swiss`](/api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                              |
-| [`time`](/api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, and a log rate limiter.                                    |
-| [`Uuid`](/api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                  |
+| Module                                                        | Use it for                                                                                                                                                        |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`base32`](/api/#stdx.base32)                                 | Crockford base32 codec for fixed-shape machine tokens: lowercase-only `encode` and `decode`, where the decode is the validation.                                  |
+| [`bloom`](/api/#stdx.bloom)                                   | Bloom filters with a fixed capacity.                                                                                                                              |
+| [`bounded_array_hash_map`](/api/#stdx.bounded_array_hash_map) | An insertion-ordered hash map with a fixed capacity and no allocator.                                                                                             |
+| [`BoundedWriter`](/api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                         |
+| [`buffer`](/api/#stdx.buffer)                                 | Append buffers with a fixed capacity. `Array` owns its storage. `Slice` borrows it.                                                                               |
+| [`fmt`](/api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                                                                         |
+| [`hash`](/api/#stdx.hash)                                     | `RapidHash`.                                                                                                                                                      |
+| [`heap`](/api/#stdx.heap)                                     | `SlabAllocator`.                                                                                                                                                  |
+| [`mem`](/api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                          |
+| [`multi_array`](/api/#stdx.multi_array)                       | Struct-of-arrays types with the storage inside the value.                                                                                                         |
+| [`net`](/api/#stdx.net)                                       | IPv4 addresses and CIDR prefixes, after Go's `net/netip`: parse, classify, order, step, and test containment. `Ip4Endpoint` holds the octets and port in 6 bytes. |
+| [`pages`](/api/#stdx.pages)                                   | Release whole kernel pages back to the OS. Linux only.                                                                                                            |
+| [`posix`](/api/#stdx.posix)                                   | `getsockname`, `getpeername`, `setsockopt`, and `getsockopt` on raw socket handles.                                                                               |
+| [`priority_queue`](/api/#stdx.priority_queue)                 | A priority queue with a fixed capacity.                                                                                                                           |
+| [`random`](/api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                                                                        |
+| [`set`](/api/#stdx.set)                                       | A bounded set with set algebra.                                                                                                                                   |
+| [`slot_ring`](/api/#stdx.slot_ring)                           | A bounded MPSC ring for log lines: producers never block, and one consumer drains. Linux only.                                                                    |
+| [`static_map`](/api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                                                                            |
+| [`stdio`](/api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                                                                    |
+| [`swiss`](/api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                                                                                  |
+| [`time`](/api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, and a log rate limiter.                                                                                        |
+| [`Uuid`](/api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                      |
 
 # Choosing a container
 
@@ -284,6 +286,18 @@ An empty or malformed string returns `error.InvalidCharacter`. A number too larg
 
 `.overflow = .unchecked` skips the overflow check. The caller promises that the value fits. A value that does not fit is a safety-checked panic in Debug and ReleaseSafe, and undefined behavior in ReleaseFast. `fmt.atoiUnchecked` is the shorthand.
 
+# Base32
+
+`base32` is a Crockford base32 codec for fixed-shape machine tokens. std has base64 and no base32. A token carries a binary key whose length is a positive multiple of 5 bytes. The token is exactly `8 * N / 5` lowercase symbols for `N` bytes, so it has no padding and a fixed length.
+
+Both directions take the byte count as a comptime parameter. `base32.encode(10, &key)` returns a `[16]u8`, and `base32.decode(10, &token)` returns a `[10]u8`. `base32.SymbolCount(N)` names the token type for a field declaration. It rejects a count that is not a positive multiple of 5 at compile time.
+
+The wire form is lowercase only. `encode` emits the lowercase Crockford alphabet, which excludes `i`, `l`, `o`, and `u`. `decode` rejects every byte outside that alphabet: uppercase letters fail, and the excluded letters fail in lowercase too. There is no case folding and no `O`/`I`/`L` alias table, so two spellings never decode to one key.
+
+`decode` returns `error.InvalidSymbol` on the first bad byte. A token that decodes is valid by construction, so the decode itself is the validation. The caller runs no separate symbol check, and the fixed shape means the decode needs no length check either.
+
+{{ load_data(path="examples/base32_token.zig", format="plain") | trim_end }}
+
 # IP addresses
 
 `net.Ip4` and `net.Prefix4` follow Go's `net/netip`, with Zig names. They have the same semantics for classification, ordering, and prefix masking. They are plain values with no allocation.
@@ -350,6 +364,14 @@ An `Ip4` is four bytes with no padding. It works as a key in the hash containers
 ```zig
 {{ load_data(path="examples/net_key.zig", format="plain") | trim_end }}
 ```
+
+## Carry an address and a port
+
+`net.Ip4Endpoint` is four octets and a port in 6 bytes: the value shape without the sockaddr padding that std's `Ip4Address` carries. Use it in per-connection records and in code that owns a raw fd and calls `bind(2)` or `connect(2)` directly. `toSockaddrIn` returns the kernel struct with the port in network order. `parse` takes the address text and the port as separate arguments, because a `host:port` split is caller policy. `toStd` and `fromStd` convert to and from `Ip4Address`.
+
+## Work with a raw socket fd
+
+`posix.setsockopt` and `posix.getsockopt` set and read a one-`c_int` socket option on a raw fd. Both decode errno to named errors. `error.InvalidOptionValue` is EINVAL. std's own `posix.setsockopt` maps EINVAL to `unreachable`, so a bad option value from configuration has no error path. The stdx wrapper returns `error.InvalidOptionValue` instead. `posix.getsockname` and `posix.getpeername` return the local and peer `net.Ip4Address` of a socket, with no caller-supplied `sockaddr` buffer.
 
 ## Know the limits
 

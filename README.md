@@ -13,6 +13,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 
 - [Fixed-capacity containers](https://stdx.withmatt.com/#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
 - [Strict parsing](https://stdx.withmatt.com/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
+- [Base32](https://stdx.withmatt.com/#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](https://stdx.withmatt.com/#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
 - [UUIDs](https://stdx.withmatt.com/#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
 - [Timekeeping](https://stdx.withmatt.com/#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.

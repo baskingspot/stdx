@@ -4,6 +4,7 @@
 
 const std = @import("std");
 
+pub const base32_token = @import("base32_token.zig");
 pub const containers_bloom = @import("containers_bloom.zig");
 pub const containers_bounded_map = @import("containers_bounded_map.zig");
 pub const containers_buffer_array = @import("containers_buffer_array.zig");
