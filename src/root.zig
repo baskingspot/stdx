@@ -7,7 +7,7 @@
 //! module names the concept, and the constructors inside are `Custom`, `Auto`,
 //! and `String`.
 //!
-//! The guide at <https://stdx.withmatt.com> says which module to use for a
+//! The guide at <https://baskingspot.dev/stdx/> says which module to use for a
 //! task, with examples. These pages are the reference for each symbol.
 
 const std = @import("std");

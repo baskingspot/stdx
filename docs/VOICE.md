@@ -1,60 +1,28 @@
 # The voice of the stdx docs
 
-This file says how the public-facing docs of stdx sound and why. It covers the README, the guide
-(`docs/content/_index.md`), its examples, and the `//!` and `///` comments in `src/`. The mechanics
-(layout, build, example rules) are in the "Documentation" section of `AGENTS.md`. Read this file
-before you write or review any of them.
+This file holds what is specific to stdx. The org voice guide is the authority for everything else:
+<https://github.com/baskingspot/.github/blob/main/docs/VOICE.md>. Read both before you write or
+review a doc.
 
-## Who reads this
+It covers the README, the guide (`docs/content/_index.md`), its examples, and the `//!` and `///`
+comments in `src/`. The mechanics (layout, build, example rules) are in the "Documentation" section
+of `AGENTS.md`.
 
-An adopter who knows Zig and is deciding whether to use stdx. A second reader is the same person
-later, debugging at the end of a long day. Neither reads for pleasure. Both want the answer, the
-reason once, and the edge that will bite them.
-
-Two surfaces, one job each:
+## Two surfaces, one job each
 
 - The API docs (`//!`, `///`) state the contract. What a symbol does, its invariants, its failure
   modes.
 - The guide says which piece to pick and how the pieces combine. It is organized by task, not by
   module.
 
-## The voice
-
-Plain, specific, and dense. Every sentence carries something concrete: a symbol, a number, an error
-name, a constraint, a command. Lead with what the thing is and what sets it apart, in the words an
-adopter would search for. State the strength as a fact. Do not call anything powerful, seamless, or
-robust.
-
-Test each sentence:
-
-1. Does it carry something concrete?
-2. Could it appear in any library's docs? If yes, cut it or replace it with the specific fact.
-3. Would the reader miss it if you deleted it?
-
-### Slop to remove
-
-- Throat-clearing and recap: "it is important to note", a closing paragraph that restates the
-  chapter.
-- Inflated words: "powerful", "seamless", "robust", "comprehensive", "leverage" as a verb.
-- Hedging when the code is deterministic: "typically", "in most cases". State the condition.
-- Templates: "not X, but Y" as a pose, a three-item list built for rhythm, a bold lead-in on every
-  bullet.
-- Padded structure: a heading over one sentence, a table with two rows.
-- A doc that restates the signature.
-- Claims with no handle: "fast", "efficient", "safe". Give the number or the mechanism, or cut it.
-
-### Do not over-correct
-
-The module docs have a real voice: dense, specific, with em dashes and long sentences where the
-content needs them. That is not slop. Do not flatten a precise sentence into a vague one. Do not ban
-a punctuation mark. Slop is content that says nothing, not a style.
-
-### Two registers
+## Two registers
 
 - The guide is formal technical text. Write short active sentences. No contractions. No `should`,
   `may`, `might`, `could`, or `would`. No semicolons. Descriptive sentences stay under 25 words and
   procedural ones under 20. Code, identifiers, and quoted errors are exempt.
-- Doc comments in `src/` keep the repo voice. The ASD-STE rules do not apply to them.
+- Doc comments in `src/` keep the repo voice: dense, specific, with em dashes and long sentences
+  where the content needs them. The ASD-STE rules do not apply to them. Do not flatten a precise
+  sentence into a vague one. Slop is content that says nothing, not a style.
 
 ## One tagline
 
@@ -67,7 +35,7 @@ The same sentence appears in five places. Change all five together.
 - the first sentence of `docs/content/_index.md`
 - the first lines of `src/root.zig`
 - `description` in `docs/config.toml`
-- the GitHub About (`gh repo edit mattrobenolt/stdx --description "..."`)
+- the GitHub About (`gh repo edit baskingspot/stdx --description "..."`)
 
 The README is the condensed version of the guide's opening. It has the same tagline, the same
 origin paragraph, and the same list of what is inside. It adds install steps and links out to the
@@ -115,7 +83,8 @@ strict parsing became three chapters.
 ## Tools
 
 - `just guide` serves the guide and the API reference with live reload.
-- `just doc` builds the whole site into `zig-out/site/`.
+- `just doc` builds the whole site into `zig-out/site/stdx/`, the guide at the root and the API
+  reference under `api/`. The router in baskingspot/site serves it at `https://baskingspot.dev/stdx/`.
 - `just fmt` formats the Zig, the guide, the README, and the CSS. The Tera templates in
   `docs/templates` are not HTML, so the formatter skips them.
 - `just svgo` squeezes the SVGs. A rerun changes nothing.
@@ -129,6 +98,6 @@ strict parsing became three chapters.
 These checks run by hand or through the librarian. Each would make a small `just` recipe.
 
 - The Modules table against the exports of `src/root.zig`.
-- Every `/api/#stdx.<name>` link against those exports.
+- Every `api/#stdx.<name>` link against those exports.
 - Every file in `docs/examples/` against the guide and `docs/examples/root.zig`.
 - The README's list against the guide's opening list.
