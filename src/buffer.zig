@@ -18,7 +18,10 @@ pub fn Array(comptime T: type, comptime buffer_capacity: comptime_int) type {
     return ArrayAligned(T, .of(T), buffer_capacity);
 }
 
-fn ArrayAligned(
+/// A fixed-capacity `Array` with a caller-chosen alignment: over-
+/// aligned SIMD storage, 128-bit types, anything `.of(T)` cannot
+/// express from outside the module.
+pub fn ArrayAligned(
     comptime T: type,
     comptime alignment: Alignment,
     comptime buffer_capacity: comptime_int,
@@ -94,9 +97,19 @@ fn ArrayAligned(
             return self.buffer[self.len];
         }
 
-        pub fn resize(self: *Self, len: Index) void {
-            assert(len <= self.buffer.len);
-            self.len = len;
+        /// Set the length, e.g. after writing into the raw buffer or
+        /// `unusedCapacitySlice()` out of band.
+        ///
+        /// Takes `usize` so callers never narrow before the check: the
+        /// `Index` parameter let `resize(@intCast(n))` trap only where
+        /// `@intCast` traps — and in ReleaseFast not even there — and
+        /// it caught only values above `Index`'s max, not above
+        /// capacity. The panic is the contract: it traps in every
+        /// mode, where an `assert` compiles out of ReleaseFast and a
+        /// length past capacity becomes a silent out-of-bounds slice.
+        pub fn resize(self: *Self, new_len: usize) void {
+            if (new_len > self.buffer.len) @panic("buffer.Array.resize past capacity");
+            self.len = @intCast(new_len);
         }
 
         pub fn clear(self: *Self) void {
@@ -261,9 +274,13 @@ pub fn Slice(comptime T: type) type {
             return self.buffer[self.len];
         }
 
-        pub fn resize(self: *Self, len: usize) void {
-            assert(len <= self.buffer.len);
-            self.len = len;
+        /// Set the length, e.g. after writing into the raw buffer out
+        /// of band. The panic is the contract: it traps in every mode.
+        /// See `Array`'s `resize` for why the check cannot be an
+        /// `assert`.
+        pub fn resize(self: *Self, new_len: usize) void {
+            if (new_len > self.buffer.len) @panic("buffer.Slice.resize past capacity");
+            self.len = @intCast(new_len);
         }
 
         pub fn clear(self: *Self) void {
