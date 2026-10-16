@@ -28,6 +28,7 @@ pub const posix = @import("posix.zig");
 pub const priority_queue = @import("priority_queue.zig");
 pub const random = @import("random.zig");
 pub const set = @import("set.zig");
+const slot_ring_mod = @import("slot_ring.zig");
 pub const static_map = @import("static_map.zig");
 pub const stdio = @import("stdio.zig");
 pub const swiss = @import("swiss.zig");
@@ -37,6 +38,10 @@ pub const Uuid = @import("Uuid.zig");
 /// Linux-only by design; the comptime branch prunes the import on other
 /// platforms so the package builds on darwin.
 pub const pages = if (builtin.os.tag == .linux) pages_mod else void;
+
+/// Linux-only by design; the comptime branch prunes the import on other
+/// platforms so the package builds on darwin.
+pub const slot_ring = if (builtin.os.tag == .linux) slot_ring_mod else void;
 
 test {
     std.testing.refAllDecls(@This());

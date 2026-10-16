@@ -8,3 +8,4 @@ pub const swiss = @import("swiss/bench.zig");
 pub const bounded_array_hash_map = @import("bounded_array_hash_map_bench.zig");
 pub const bloom = @import("bloom_bench.zig");
 pub const hash = @import("hash/bench.zig");
+pub const slot_ring = @import("slot_ring_bench.zig");
