@@ -15,7 +15,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Logging transport](#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
 - The [module list](#modules) covers the rest: Swiss-table maps, a slab allocator, rapidhash, secure random, and buffered stdio.
 
-This guide explains how to choose modules and combine them. The [API reference](/api/) documents every symbol.
+This guide explains how to choose modules and combine them. The [API reference](api/) documents every symbol.
 
 # Getting started
 
@@ -24,7 +24,7 @@ This guide explains how to choose modules and combine them. The [API reference](
 Add stdx to your project:
 
 ```sh
-zig fetch --save git+https://github.com/mattrobenolt/stdx
+zig fetch --save git+https://github.com/baskingspot/stdx
 ```
 
 Add the module to your build in `build.zig`:
@@ -81,36 +81,36 @@ Every example in this guide is a complete file in `docs/examples/`. The test ste
 just test
 ```
 
-The [API reference](/api/) has the contract for each symbol. This guide has the recipes.
+The [API reference](api/) has the contract for each symbol. This guide has the recipes.
 
 # Modules
 
 A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posix`, `heap`, `hash`. A concept std lacks gets its own: `bloom`, `swiss`, `set`. A container family follows `std.array_hash_map`. The module names the concept, and the constructors inside are `Custom`, `Auto`, and `String`.
 
-| Module                                                        | Use it for                                                                                                                                                        |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`base32`](/api/#stdx.base32)                                 | Crockford base32 codec for fixed-shape machine tokens: lowercase-only `encode` and `decode`, where the decode is the validation.                                  |
-| [`bloom`](/api/#stdx.bloom)                                   | Bloom filters with a fixed capacity.                                                                                                                              |
-| [`bounded_array_hash_map`](/api/#stdx.bounded_array_hash_map) | An insertion-ordered hash map with a fixed capacity and no allocator.                                                                                             |
-| [`BoundedWriter`](/api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                         |
-| [`buffer`](/api/#stdx.buffer)                                 | Append buffers with a fixed capacity. `Array` owns its storage. `Slice` borrows it.                                                                               |
-| [`fmt`](/api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                                                                         |
-| [`hash`](/api/#stdx.hash)                                     | `RapidHash`.                                                                                                                                                      |
-| [`heap`](/api/#stdx.heap)                                     | `SlabAllocator`.                                                                                                                                                  |
-| [`mem`](/api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                          |
-| [`multi_array`](/api/#stdx.multi_array)                       | Struct-of-arrays types with the storage inside the value.                                                                                                         |
-| [`net`](/api/#stdx.net)                                       | IPv4 addresses and CIDR prefixes, after Go's `net/netip`: parse, classify, order, step, and test containment. `Ip4Endpoint` holds the octets and port in 6 bytes. |
-| [`pages`](/api/#stdx.pages)                                   | Release whole kernel pages back to the OS. Linux only.                                                                                                            |
-| [`posix`](/api/#stdx.posix)                                   | `getsockname`, `getpeername`, `setsockopt`, and `getsockopt` on raw socket handles.                                                                               |
-| [`priority_queue`](/api/#stdx.priority_queue)                 | A priority queue with a fixed capacity.                                                                                                                           |
-| [`random`](/api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                                                                        |
-| [`set`](/api/#stdx.set)                                       | A bounded set with set algebra.                                                                                                                                   |
-| [`slot_ring`](/api/#stdx.slot_ring)                           | A bounded MPSC ring for log lines: producers never block, and one consumer drains. Linux only.                                                                    |
-| [`static_map`](/api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                                                                            |
-| [`stdio`](/api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                                                                    |
-| [`swiss`](/api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                                                                                  |
-| [`time`](/api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, and a log rate limiter.                                                                                        |
-| [`Uuid`](/api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                      |
+| Module                                                       | Use it for                                                                                                                                                        |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`base32`](api/#stdx.base32)                                 | Crockford base32 codec for fixed-shape machine tokens: lowercase-only `encode` and `decode`, where the decode is the validation.                                  |
+| [`bloom`](api/#stdx.bloom)                                   | Bloom filters with a fixed capacity.                                                                                                                              |
+| [`bounded_array_hash_map`](api/#stdx.bounded_array_hash_map) | An insertion-ordered hash map with a fixed capacity and no allocator.                                                                                             |
+| [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                         |
+| [`buffer`](api/#stdx.buffer)                                 | Append buffers with a fixed capacity. `Array` owns its storage. `Slice` borrows it.                                                                               |
+| [`fmt`](api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                                                                         |
+| [`hash`](api/#stdx.hash)                                     | `RapidHash`.                                                                                                                                                      |
+| [`heap`](api/#stdx.heap)                                     | `SlabAllocator`.                                                                                                                                                  |
+| [`mem`](api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                          |
+| [`multi_array`](api/#stdx.multi_array)                       | Struct-of-arrays types with the storage inside the value.                                                                                                         |
+| [`net`](api/#stdx.net)                                       | IPv4 addresses and CIDR prefixes, after Go's `net/netip`: parse, classify, order, step, and test containment. `Ip4Endpoint` holds the octets and port in 6 bytes. |
+| [`pages`](api/#stdx.pages)                                   | Release whole kernel pages back to the OS. Linux only.                                                                                                            |
+| [`posix`](api/#stdx.posix)                                   | `getsockname`, `getpeername`, `setsockopt`, and `getsockopt` on raw socket handles.                                                                               |
+| [`priority_queue`](api/#stdx.priority_queue)                 | A priority queue with a fixed capacity.                                                                                                                           |
+| [`random`](api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                                                                        |
+| [`set`](api/#stdx.set)                                       | A bounded set with set algebra.                                                                                                                                   |
+| [`slot_ring`](api/#stdx.slot_ring)                           | A bounded MPSC ring for log lines: producers never block, and one consumer drains. Linux only.                                                                    |
+| [`static_map`](api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                                                                            |
+| [`stdio`](api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                                                                    |
+| [`swiss`](api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                                                                                  |
+| [`time`](api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, and a log rate limiter.                                                                                        |
+| [`Uuid`](api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                      |
 
 # Choosing a container
 

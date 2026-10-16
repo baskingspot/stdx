@@ -1,6 +1,6 @@
 # The stdx guide. Built with `just doc` (see the justfile); the API reference
 # is built by `zig build docs` and lands under /api/ in the same site.
-base_url = "https://stdx.withmatt.com"
+base_url = "https://baskingspot.dev/stdx"
 title = "stdx"
 description = "Extensions to the Zig 0.16 standard library: fixed-capacity containers, strict parsers, IPv4 types, and the primitives std lacks."
 
