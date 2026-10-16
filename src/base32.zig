@@ -60,7 +60,7 @@ pub fn SymbolCount(comptime N: comptime_int) type {
 /// the lowercase alphabet — uppercase and the excluded letters
 /// `i`/`l`/`o`/`u` all fail. No padding: the bit counts close by
 /// construction.
-pub fn decode(comptime N: comptime_int, src: *const [8 * N / 5]u8) error{InvalidSymbol}![N]u8 {
+pub fn decode(comptime N: comptime_int, src: *const SymbolCount(N)) error{InvalidSymbol}![N]u8 {
     var out: [N]u8 = @splat(0);
     var acc: u16 = 0;
     var bits: u4 = 0;

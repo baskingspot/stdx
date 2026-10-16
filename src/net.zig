@@ -1,6 +1,8 @@
 //! Networking extensions to `std.Io.net`.
 //!
-//! IPv4 addressing: a portless address and CIDR prefixes, following
+//! IPv4 addressing: a portless address and CIDR prefixes, plus the 6-byte
+//! `Ip4Endpoint` (octets + port) for raw-fd callers and per-connection
+//! records, following
 //! `net.Ip4Address` and Go's `net/netip`. fd-level socket helpers live in
 //! `posix`.
 

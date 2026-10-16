@@ -5,6 +5,10 @@
 //! no `posix.getsockname`. For callers that own raw socket handles (io_uring
 //! data paths); code holding an `Io.net.Socket` should prefer the typed APIs
 //! instead.
+//!
+//! `setsockopt`/`getsockopt` decode errno over the raw calls, mapping EINVAL
+//! to `error.InvalidOptionValue` — std's own wrappers map it to `unreachable`,
+//! which no caller setting options from configuration can survive.
 
 const std = @import("std");
 const mem = std.mem;
