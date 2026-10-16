@@ -5,7 +5,8 @@ Working notes for AI coding agents in stdx.
 ## Environment
 
 Zig 0.16 only. `nix develop` provides zig, zls, ziglint, zigdoc, oxfmt,
-just. The site tools (zola, wrangler) live in a second, lighter shell,
+just, and the base tools (actionlint, zizmor, pinact, fd, gh, ripgrep,
+treefmt). The site tools (zola, wrangler) live in a second, lighter shell,
 `nix develop .#docs`, which the doc recipes enter themselves. The flake is
 the tool contract: nothing on PATH outside the devshell.
 
@@ -17,9 +18,10 @@ just lint test
 ```
 
 Takes multiple targets — `just lint test` does both. `just ci` is
-the full set the test lanes run; the site build is its own CI job
-(`just doc`). The darwin cross-compile is the macOS CI lane's job,
-not a local one. When the change touches generic code, run the option
+the full set the test lanes run. The site build runs in the deploy job
+on main (`just doc-deploy`, which runs `just doc` first); CI runs Linux
+only, so the darwin arms of `time`, `random`, and `swiss` are not
+executed in CI. When the change touches generic code, run the option
 matrix too: `just test-release-safe test-release-fast`. Lazy analysis
 hides code that only instantiates under a different element type or
 build mode; u8-only tests never analyze the struct/slice element
@@ -54,7 +56,7 @@ it.
 ## Conventions
 
 - Commit messages: one line, `area: summary`, like `time: rework in
-  Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
+Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
   A short body only when the why genuinely needs it.
 
 - Tests attach to symbols (`test atoi { ... }`); a type with many
@@ -99,7 +101,7 @@ organized by task, not by module.
   fence. Never paste a code block into a page that the compiler has not
   seen. Name files `<module>_<topic>.zig`.
 - Examples write bindings the way an adopter should: `const timex =
-  stdx.time;`, `const fmtx = stdx.fmt;`. The `x` suffix only when std's
+stdx.time;`, `const fmtx = stdx.fmt;`. The `x` suffix only when std's
   namesake is usually in scope; `buffer`, `stdio`, `net` stay bare.
   Inside `src/` module bindings never take a suffix.
 - Example imports: a file that uses one stdx module writes
