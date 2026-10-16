@@ -5,55 +5,43 @@ on:
     branches: [main]
   pull_request:
 
+permissions: {}
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  ci:
     permissions:
       contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: DeterminateSystems/determinate-nix-action@d0c908e6cbe9f89f36ed8205a3ab6f092636916a # v3.23.1
-      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
-        with:
-          use-flakehub: false
-      - name: Run checks
-        run: nix develop --command just ci
+    uses: baskingspot/gh-actions/.github/workflows/ci.yml@85e49a8f95b45e59d6ea66c03fbed54d1b47ae1e # v0.2.0
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-  # The darwin arms of time, random, and swiss compile clean cross-target
-  # but have never executed anywhere; this lane runs them for real.
-  test-macos:
-    runs-on: macos-latest
+  # Deploys the docs Worker after CI passes on main. The token is scoped to
+  # the stdx Worker only, and Terraform in baskingspot/site put it in this
+  # repo's secrets.
+  deploy:
+    needs: ci
+    # Skipped until Terraform has run, which is what sets the account ID variable and the token secret.
+    if: github.ref == 'refs/heads/main' && vars.CLOUDFLARE_ACCOUNT_ID != ''
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
-      id-token: write
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: DeterminateSystems/determinate-nix-action@d0c908e6cbe9f89f36ed8205a3ab6f092636916a # v3.23.1
-      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
         with:
-          use-flakehub: false
-      - name: Run checks
-        run: nix develop --command just ci
-
-  # The guide and API reference build, from the lighter docs shell. The
-  # deploy workflow runs the same recipe on main.
-  docs:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          install_url: https://releases.nixos.org/nix/nix-2.35.3/install
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
-          persist-credentials: false
-      - uses: DeterminateSystems/determinate-nix-action@d0c908e6cbe9f89f36ed8205a3ab6f092636916a # v3.23.1
-      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
-        with:
-          use-flakehub: false
-      - name: Build the site
-        run: nix develop .#docs --command just doc
+          name: baskingspot
+          extraPullNames: mattrobenolt
+          skipPush: true
+      - name: Deploy the docs
+        run: nix develop --command just doc-deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
