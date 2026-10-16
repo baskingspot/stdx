@@ -1,0 +1,6 @@
+jobs:
+  - recipe: test
+  - recipe: test-release-safe
+  - recipe: test-release-fast
+  - recipe: lint
+  - recipe: doc
