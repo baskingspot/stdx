@@ -77,6 +77,7 @@ Do not over-correct. A precise, dense sentence is not slop. Do not flatten it in
 - **Dangling fragments.** A sentence cut in half by an edit.
 - **Docs that outlive an API change.** The signature changed and the doc still describes the old contract. Check every "returns" and `error.` claim against the current signature.
 - **Transient references.** "Previously", "formerly", "pre-port", review or PR references, and any pointer to a conversation the code does not show. Git holds that history. A durable citation is different: "RFC 1951 section 3.2.3" is a spec reference.
+- **An embed outside a fence.** Every `load_data` in the guide sits inside a ```zig fence; a bare one renders the example as plain markdown paragraphs with no code block and no highlighting — the code is still there, so a reading pass sees it as fine. Check mechanically: each `load_data` line must have the fence opener immediately above it. Seen: the Base32 chapter shipped its embed unfenced.
 - **Unresolved issue numbers.** An issue number must resolve, and its state must match the framing. Cross-repo references use the full `owner/repo#123` form.
 - **Internal labels.** Milestone codes, decision numbers, and planning ids in a document a stranger reads.
 - **Examples that do not teach the right thing.** Check what an example claims, and whether it shows the supported way.

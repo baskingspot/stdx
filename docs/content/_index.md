@@ -298,7 +298,9 @@ The wire form is lowercase only. `encode` emits the lowercase Crockford alphabet
 
 `decode` returns `error.InvalidSymbol` on the first bad byte. A token that decodes is valid by construction, so the decode itself is the validation. The caller runs no separate symbol check, and the fixed shape means the decode needs no length check either.
 
+```zig
 {{ load_data(path="examples/base32_token.zig", format="plain") | trim_end }}
+```
 
 # IP addresses
 
