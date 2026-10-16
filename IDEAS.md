@@ -125,7 +125,24 @@ in this conversation's class; only worth building if a use case
 actually wants sorted iteration or range queries. Rust envy is not
 a gap.
 
-## Timer set
+## Timer set — SHIPPED as `timers` (2026-10-16)
+
+Go's `time.Timer`/`Ticker`/`AfterFunc` mirrored onto Zig without
+goroutines, backed by `std.Treap` (intrusive caller-owned entries,
+cancel by node, `getMin` for the sleep-until query, equal deadlines
+tie-broken by a monotone seq so ties fire in arm order). The libxev
+steals: typed inlined callbacks (the wrapper derives the record type
+from the callback's first parameter and does the `@fieldParentPtr`
+recovery; one function-pointer indirection per fire, verified by
+disassembly) and `Action = enum { disarm, rearm }` — the callback
+decides the ticker's re-arm and can let it die from inside. Ember's
+adversarial round caught two blockers before landing: the
+self-rearm-plus-returned-.rearm double-insert (ReleaseFast hung the
+loop forever; fixed with the pre-callback hoist of the fired anchor
+and the conditional re-arm — the callback's own arm wins) and the
+zero-period ticker (one `expire` call = 10M fires, a spin forever;
+Go panics on `NewTicker(0)`, we assert). Single-threaded by design:
+one loop owns the set.
 
 Not the clock — that's `std.Io.Timestamp`. Not per-op deadlines —
 that's `Io.Timeout`, which every std wait already takes. The missing

@@ -28,6 +28,7 @@ pub const time_cached_clock = @import("time_cached_clock.zig");
 pub const time_deadline = @import("time_deadline.zig");
 pub const time_rate_limit = @import("time_rate_limit.zig");
 pub const time_wall_from_awake = @import("time_wall_from_awake.zig");
+pub const timers_loop = @import("timers_loop.zig");
 pub const uuid_roundtrip = @import("uuid_roundtrip.zig");
 
 test {

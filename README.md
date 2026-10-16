@@ -17,6 +17,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [IP addresses](https://baskingspot.dev/stdx/#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
 - [UUIDs](https://baskingspot.dev/stdx/#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
 - [Timekeeping](https://baskingspot.dev/stdx/#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.
+- [Timers](https://baskingspot.dev/stdx/#timers): a caller-driven set of deadlines over `Io.Timestamp`, with callbacks, removal by handle, and period re-arm without drift.
 - [Logging transport](https://baskingspot.dev/stdx/#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
 - The [module list](https://baskingspot.dev/stdx/#modules) covers the rest: Swiss-table maps, a slab allocator, rapidhash, secure random, and buffered stdio.
 

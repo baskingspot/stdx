@@ -12,6 +12,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
 - [UUIDs](#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
 - [Timekeeping](#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.
+- [Timers](#timers): a caller-driven set of deadlines over `Io.Timestamp`, with callbacks, removal by handle, and period re-arm without drift.
 - [Logging transport](#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
 - The [module list](#modules) covers the rest: Swiss-table maps, a slab allocator, rapidhash, secure random, and buffered stdio.
 
@@ -110,6 +111,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`stdio`](api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                                                                    |
 | [`swiss`](api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                                                                                  |
 | [`time`](api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, and a log rate limiter.                                                                                        |
+| [`timers`](api/#stdx.timers)                                 | A caller-driven set of timers over `Io.Timestamp`: arm and stop entries by handle, fire callbacks, and repeat on a period.                                        |
 | [`Uuid`](api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                      |
 
 # Choosing a container
@@ -446,6 +448,32 @@ A failure that repeats for each connection can write one line per event. `RateLi
 `admit` returns `null` when the caller must hold the line back. Pass it a monotonic sample, such as `clock.now()` from a `CachedClock(.awake)`.
 
 `RateLimit.default` has a one-second interval. `RateLimit.init` takes any `Io.Duration`.
+
+# Timers
+
+One operation does not need a set: every std wait already takes an `Io.Timeout`, and a `.deadline` in that value is the whole story. Use `timers.Timers` when one loop owns many deadlines. Each entry carries a calflback, removal is by handle, and a period repeats the fire.
+
+The collection owns no clock and no wake machinery. The loop samples the clock with `timex.now(.awake)`, calls `expire(now)` to fire everything due, and sleeps until `next()`. The entries are caller-owned: the caller constructs a `Timer`, standalone or embedded in a connection record, and `arm` links it. Nothing is allocated, and the node pointer is the handle. One loop owns the set: no method is thread-safe, and no atomics are involved.
+
+## Drive the loop
+
+`expire(now)` fires every timer due at or before `now`, earliest first. The loop then sleeps toward `next()` with `Io.Timeout{ .deadline = wake }`. A null `next()` means nothing is armed, and the loop sleeps on its other events. A callback runs after the tree surgery on its own entry, so it can arm, reset, or stop any timer, including its own. After every callback, `expire` re-checks the minimum, so a past-due timer armed from inside a callback fires in the same drain.
+
+`stop` and `reset` follow Go's `Timer`: each returns false for a timer that already fired or was stopped. Nothing is delivered outside `expire`, so there is no channel to drain and no stale delivery to reason about.
+
+{{ load_data(path="examples/timers_loop.zig", format="plain") | trim_end }}
+
+## Repeat on a period
+
+A `Timer` with a `period` is Go's `Ticker`: it re-arms on every fire. The next deadline is the fired deadline plus the period, never the wake time. A late `expire` does not shift the schedule, so drift does not accumulate.
+
+The callback decides the next fire: return `.rearm` to keep the timer going, or `.disarm` to let it die from inside its own fire. The callback runs between the fire and the re-arm, so it sees the entry disarmed and the decision pending. A callback that re-arms its own timer wins over its returned `.rearm`.
+
+## Recover the record
+
+A callback is typed. Its first parameter is a pointer to the record that embeds the `Timer`. The wrapper recovers the record with `@fieldParentPtr`, so the record's field must be named `timer`. A `void` first parameter arms a bare timer. `Timer.disarm` is the ready-made callback for a timer whose fire is observed through `armed` and `next()`.
+
+The wrapper inlines the typed body into the erased callback, so a fire costs one function-pointer indirection. A callback that frees its own record must return `.disarm`.
 
 # Logging transport
 
