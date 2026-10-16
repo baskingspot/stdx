@@ -48,7 +48,7 @@ lint:
     ziglint
     zig fmt --check src docs/examples build.zig
     nix fmt -- --ci
-    oxfmt --check README.md AGENTS.md docs/VOICE.md docs/content docs/static
+    oxfmt --check README.md AGENTS.md docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml
     actionlint
     zizmor .
     just --fmt --check
@@ -58,7 +58,7 @@ lint:
 fmt:
     zig fmt src docs/examples build.zig
     nix fmt
-    oxfmt README.md AGENTS.md docs/VOICE.md docs/content docs/static
+    oxfmt README.md AGENTS.md docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml
     just --fmt
 
 [doc("Everything CI runs: the unit tests, lint, and the site build")]
