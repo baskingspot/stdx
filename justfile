@@ -70,9 +70,9 @@ fmt:
     oxfmt README.md AGENTS.md docs/VOICE.md docs/content docs/static
     just --fmt
 
-[doc("Everything the test lanes run")]
+[doc("Everything CI runs: the unit tests, lint, and the site build")]
 [group("ci")]
-ci: test test-release-safe test-release-fast lint
+ci: test test-release-safe test-release-fast lint doc
 
 [doc("Run benchmarks (e.g. `just bench -Doptimize=ReleaseFast -- --benchtime=250ms --filter=Swiss`)")]
 [group("bench")]
