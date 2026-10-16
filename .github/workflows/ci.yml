@@ -11,37 +11,22 @@ jobs:
   ci:
     permissions:
       contents: read
-    uses: baskingspot/gh-actions/.github/workflows/ci.yml@85e49a8f95b45e59d6ea66c03fbed54d1b47ae1e # v0.2.0
+    uses: baskingspot/gh-actions/.github/workflows/ci.yml@9e44f3e0a78690c111f4418afdfc3965ce54fca0 # main
+    with:
+      recipes: '["test", "test-release-safe", "test-release-fast", "lint", "doc"]'
     secrets:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-  # Deploys the docs Worker after CI passes on main. The token is scoped to
-  # the stdx Worker only, and Terraform in baskingspot/site put it in this
-  # repo's secrets.
+  # Deploys the docs Worker after CI passes on main. It stays skipped until
+  # Terraform in baskingspot/site has registered the site, which sets the
+  # variable and the secret.
   deploy:
     needs: ci
-    # Skipped until Terraform has run, which is what sets the account ID variable and the token secret.
     if: github.ref == 'refs/heads/main' && vars.CLOUDFLARE_ACCOUNT_ID != ''
-    runs-on: ubuntu-26.04
     permissions:
       contents: read
-    concurrency:
-      group: deploy
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
-        with:
-          install_url: https://releases.nixos.org/nix/nix-2.35.3/install
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: baskingspot
-          extraPullNames: mattrobenolt
-          skipPush: true
-      - name: Deploy the docs
-        run: nix develop --command just doc-deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    uses: baskingspot/gh-actions/.github/workflows/deploy-docs.yml@9e44f3e0a78690c111f4418afdfc3965ce54fca0 # main
+    with:
+      account-id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
