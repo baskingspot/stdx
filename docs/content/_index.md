@@ -518,13 +518,3 @@ The policy decides the read shape. Under `.drop_oldest`, the consumer reads thro
 One message costs one CAS on the head, the payload copy into the slot, and one release store of the stamp. The wake flavor adds its own cost. `.none` adds nothing, `.eventfd` writes eight bytes to the fd, and `.futex` bumps the wake word with one RMW. The `.futex` syscall runs only when a waiter is armed. A displacement adds a cursor CAS, a stamp CAS, and one atomic increment of the displaced count. It also wakes the consumer under the two waking flavors.
 
 Linux only. The `.eventfd` and `.futex` flavors wrap Linux syscalls, and the module is `void` on other targets. `slot_size` is comptime and a cache-line multiple. Changing it instantiates a new ring type.
-
-# Related projects
-
-stdx is one of several libraries for low-level primitives that Zig lacks.
-
-- [fastmem](https://github.com/mattrobenolt/fastmem-zig): SIMD memcpy, memmove, and memset.
-- [ztls](https://github.com/mattrobenolt/ztls): a sans-I/O TLS 1.3 state machine.
-- [zcompress](https://github.com/mattrobenolt/zcompress): fast, self-contained compression codecs.
-- [ztest](https://github.com/mattrobenolt/ztest): a test runner that writes plain, parseable text instead of a TUI.
-- [zig-benchmark](https://github.com/mattrobenolt/zig-benchmark): Go-style benchmarking with allocation metrics.
