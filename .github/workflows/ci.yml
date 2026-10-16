@@ -11,9 +11,10 @@ jobs:
   ci:
     permissions:
       contents: read
-    uses: baskingspot/gh-actions/.github/workflows/ci.yml@343c8fc1f3c56cdcd64e851cb69bf5772d062231 # v0.4.0
+    uses: baskingspot/gh-actions/.github/workflows/ci.yml@081fb74a8d4731828de4f067e0106fef6df1bdec # main
     with:
-      recipes: '["test", "test-release-safe", "test-release-fast", "lint", "doc"]'
+      recipes: '["lint", "boom"]'
+      non-blocking: '["boom"]'
     secrets:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
 

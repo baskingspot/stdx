@@ -69,3 +69,8 @@ ci: test test-release-safe test-release-fast lint doc
 [group("bench")]
 bench *ARGS:
     zig build bench {{ ARGS }}
+
+[doc("Fails on purpose, for a CI experiment")]
+[group("ci")]
+boom:
+    exit 1
