@@ -4,7 +4,7 @@ Parking lot for stdx candidates. The bar (AGENTS.md): std genuinely
 lacks it, general purpose, pasted in ≥2 projects. An idea leaves this
 file when it ships or dies.
 
-## Queues (current focus)
+## Queues
 
 The one family std has nothing for — verified against 0.16: `std`
 has priority queues and nothing concurrent.
@@ -60,7 +60,7 @@ faster. No pasted user yet — design it when something needs it.
 
 Vyukov's bounded MPMC array. Real work, no user. Parked.
 
-## pages — whole-kernel-page memory primitives (from handoff)
+## pages — SHIPPED as `pages` (from handoff)
 
 The strongest handoff bring-in: `allocator`/`size`/`reserve`/
 `unreserve`/`whole`/`release`, exactly the "low-level primitives Zig
@@ -82,7 +82,7 @@ semantics on anonymous memory (Darwin's man page wording needs
 checking; if Darwin does not guarantee zero-fill, the doc must say
 what it does guarantee per-OS).
 
-## RateLimit — one line per interval (from handoff)
+## RateLimit — SHIPPED as `time.RateLimit` (from handoff)
 
 `admit(now: Io.Timestamp) ?u32`: null = hold the line, a count = log
 it with the lines held back since the last. ~40 lines, saturation
@@ -93,7 +93,7 @@ time — `src/time/rate_limit.zig`, re-exported from time.zig; the
 `CachedClock` samples directly. `interval_ms: i64` default 1000,
 next_ms/suppressed fields — file-as-a-struct, nearly as-is.
 
-## Set — algebra over Map(K, void)
+## Set — SHIPPED as `set`
 
 `V = void` works in both maps today; what's missing is set
 vocabulary and algebra. Thin wrapper composing
@@ -103,7 +103,7 @@ needs no allocation: `intersect(other)`, `unite(other)`,
 Queries: `subsetOf` / `supersetOf` / `disjointWith`.
 `set.Custom/Auto/String` family shape over the map's primitives.
 
-## Static map — comptime-generated, arbitrary keys
+## Static map — SHIPPED as `static_map`
 
 std covers strings (`StaticStringMap(V)` — `initComptime`, length-
 bucketed, comptime-generated, zero runtime init; `StaticStringMap(void)`
@@ -148,14 +148,12 @@ general enough to extract — look before deciding.
 - Read-cursor buffer: pos+len over caller storage (the harness
   `IoBuffer` shape), `buffer.Slice`'s cousin. Mechanical port when
   wanted.
-- base32: a general Crockford codec — std has base64 only. The
-  harness one is stable-token-specific; a rewrite, not a port.
+- base32: SHIPPED as `base32` (2026-10-15) — generalized fixed-shape
+  Crockford codec over any positive multiple-of-5 byte count,
+  lowercase-only both directions, decode-is-the-validation (#4).
 - Ip6 variant of net: open, deliberately deferred.
 - Compile-fail test steps for the `@compileError` paths (build
   test infra, not a data structure).
-- Publish docs to Cloudflare Pages from CI (`just doc` exists;
-  assets are static, `sources.tar` 16.2MB near the 25MB per-file
-  limit).
 
 ## memchr (the Rust crate) — split verdict
 
@@ -252,7 +250,7 @@ measured, not assumed. Composes with the repo's existing SIMD
 idioms — the compare-and-find-bits pattern already shipped in mem
 three times.
 
-## Bloom filter
+## Bloom filter — SHIPPED as `bloom`
 
 Needed before (real user, predates stdx). Nothing in std (verified
 against the container surface audit). The heapless family's purest
