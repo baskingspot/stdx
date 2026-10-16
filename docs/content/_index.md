@@ -463,7 +463,9 @@ The collection owns no clock and no wake machinery. The loop samples the clock w
 
 `stop` and `reset` follow Go's `Timer`: each returns false for a timer that already fired or was stopped. Nothing is delivered outside `expire`, so there is no channel to drain and no stale delivery to reason about.
 
+```zig
 {{ load_data(path="examples/timers_loop.zig", format="plain") | trim_end }}
+```
 
 ## Repeat on a period
 
