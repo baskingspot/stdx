@@ -77,6 +77,14 @@ Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
   std's scalarized ~85 on aarch64).
 - Error sets are named, documented per member, and pass underlying
   parse errors through rather than collapsing them.
+- Constructors are named, never a bare `.{}`: a collection or
+  value type either carries a `pub const init: Self = .{ ... }` with
+  the defaults spelled out (or `empty` when the default is empty), or
+  a `pub fn init(...)` when there are variables to set. The fields
+  themselves stay required — no defaults — so a bare `.{}` or a
+  partial literal does not compile. This is std's direction
+  (`std.array_hash_map`'s `init`/`empty`, `std.PriorityQueue.empty`):
+  the type system enforces the constructor, not convention.
 - Comptime options over runtime flags when they change code shape
   (`fmt.AtoiOptions`); each configuration compiles to its own loop.
 

@@ -34,6 +34,7 @@ pub const static_map = @import("static_map.zig");
 pub const stdio = @import("stdio.zig");
 pub const swiss = @import("swiss.zig");
 pub const time = @import("time.zig");
+pub const timers = @import("timers.zig");
 pub const Uuid = @import("Uuid.zig");
 
 /// Linux-only by design; the comptime branch prunes the import on other
