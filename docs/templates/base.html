@@ -5,8 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ config.title }}{% endblock %}</title>
   <meta name="description" content="{{ config.description }}">
+  <link rel="canonical" href="{{ current_url }}">
   <link rel="icon" href="{{ get_url(path='favicon.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ get_url(path='style.css') }}">
+  <meta name="theme-color" content="#f4f1ec" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16191d" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="baskingspot">
+  <meta property="og:url" content="{{ current_url }}">
+  <meta property="og:title" content="{{ config.title }}">
+  <meta property="og:description" content="{{ config.description }}">
+  <meta property="og:image" content="{{ get_url(path='social.png') }}">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="{{ config.title }}">
+  <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
   <header>
@@ -29,9 +42,12 @@
     </main>
   </div>
   <footer>
-    stdx is MIT licensed. See the
-    <a href="https://github.com/baskingspot/stdx/blob/main/LICENSE">license</a> and the
-    <a href="https://github.com/baskingspot/stdx/blob/main/THIRD_PARTY.md">third-party notices</a>.
+    <p>
+      stdx is MIT licensed. See the
+      <a href="https://github.com/baskingspot/stdx/blob/main/LICENSE">license</a> and the
+      <a href="https://github.com/baskingspot/stdx/blob/main/THIRD_PARTY.md">third-party notices</a>.
+    </p>
+    <a class="badge" href="https://baskingspot.dev/"><img src="{{ get_url(path='badge.svg') }}" alt="baskingspot" height="24"></a>
   </footer>
 </body>
 </html>

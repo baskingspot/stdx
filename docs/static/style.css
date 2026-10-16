@@ -1,14 +1,32 @@
+/* The baskingspot palette (baskingspot/.github, brand/README.md). Link text
+   needs 4.5:1, which heat itself does not reach on paper (4.1) or ink (3.9).
+   --link is heat, darkened on paper and lightened on ink, until it does. */
 :root {
   color-scheme: light dark;
+  --ink: #16191d;
+  --paper: #f4f1ec;
+  --heat: #d4412b;
+  --slate: #58616c;
+  --bg: light-dark(var(--paper), var(--ink));
+  --fg: light-dark(var(--ink), var(--paper));
+  --link: light-dark(#b8321d, #e8604a);
+  --rule: color-mix(in srgb, var(--fg) 18%, transparent);
+  --surface: color-mix(in srgb, var(--fg) 7%, var(--bg));
 }
 
 body {
   margin: 0 auto;
   max-width: 64rem;
   padding: 0 1rem 4rem;
+  background: var(--bg);
+  color: var(--fg);
   font:
     17px/1.6 system-ui,
     sans-serif;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--heat) 30%, transparent);
 }
 
 main {
@@ -74,7 +92,7 @@ header {
   gap: 0.5rem 1.5rem;
   align-items: center;
   padding: 1.25rem 0;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-bottom: 1px solid var(--rule);
 }
 
 header .site {
@@ -93,11 +111,19 @@ footer {
   margin-top: 4rem;
   padding-top: 1.25rem;
   font-size: 0.9rem;
-  border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-top: 1px solid var(--rule);
+}
+footer p {
+  margin: 0 0 0.75rem;
+}
+footer .badge {
+  display: inline-block;
+  line-height: 0;
 }
 
 a {
-  color: light-dark(#0b57d0, #8ab4f8);
+  color: var(--link);
+  text-underline-offset: 0.15em;
 }
 h1,
 h2,
@@ -108,7 +134,7 @@ h3 {
 h1 {
   margin-top: 3.5rem;
   padding-top: 1.5rem;
-  border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-top: 1px solid var(--rule);
 }
 h1:first-child {
   margin-top: 0;
@@ -136,10 +162,15 @@ pre {
   overflow-x: auto;
   border-radius: 6px;
 }
+/* Zola writes the highlight theme's background into each pre. Put the page's
+   surface under the code instead. The token colors stay the theme's. */
+pre.giallo {
+  background-color: var(--surface) !important;
+}
 :not(pre) > code {
   padding: 0.1em 0.3em;
   border-radius: 4px;
-  background: color-mix(in srgb, currentColor 12%, transparent);
+  background: var(--surface);
 }
 
 table {
@@ -152,5 +183,5 @@ td {
   padding: 0.35rem 0.75rem 0.35rem 0;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-bottom: 1px solid var(--rule);
 }
