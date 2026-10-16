@@ -58,6 +58,107 @@ fn fromSockAddrIn(
     };
 }
 
+pub const SetSockOptError =
+    posix.UnexpectedError ||
+    error{
+        /// The level/name/value combination is not one the kernel
+        /// accepts: a real runtime condition for config-derived option
+        /// values. std's own `posix.setsockopt` maps EINVAL to
+        /// `unreachable`, which is why callers that set options from
+        /// configuration hand-decode errno over the raw call instead.
+        InvalidOptionValue,
+        /// `SO_RCVTIMEO`/`SO_SNDTIMEO` with a timeout the kernel rejects.
+        TimeoutTooBig,
+        SystemResources,
+        PermissionDenied,
+        OperationNotSupported,
+    };
+
+/// Set a one-`c_int` socket option, decoding errno over the raw call.
+pub fn setsockopt(
+    fd: posix.socket_t,
+    level: i32,
+    optname: u32,
+    opt: c_int,
+) SetSockOptError!void {
+    const optval = mem.toBytes(opt);
+    return switch (posix.errno(posix.system.setsockopt(
+        fd,
+        level,
+        optname,
+        &optval,
+        @sizeOf(c_int),
+    ))) {
+        .SUCCESS => {},
+        .BADF => unreachable, // always a race condition
+        .NOTSOCK => unreachable, // always a race condition
+        .FAULT => unreachable,
+        .INVAL => error.InvalidOptionValue,
+        .DOM => error.TimeoutTooBig,
+        .NOPROTOOPT => error.InvalidOptionValue,
+        .NOMEM, .NOBUFS => error.SystemResources,
+        .PERM => error.PermissionDenied,
+        .OPNOTSUPP => error.OperationNotSupported,
+        else => |err| posix.unexpectedErrno(err),
+    };
+}
+
+/// Read a one-`c_int` socket option, e.g. `SO.ERROR` probes.
+pub fn getsockopt(fd: posix.socket_t, level: i32, optname: u32) SetSockOptError!c_int {
+    var value: c_int = undefined;
+    var len: posix.socklen_t = @sizeOf(c_int);
+    return switch (posix.errno(posix.system.getsockopt(
+        fd,
+        level,
+        optname,
+        @ptrCast(&value),
+        &len,
+    ))) {
+        .SUCCESS => value,
+        .BADF => unreachable, // always a race condition
+        .NOTSOCK => unreachable, // always a race condition
+        .FAULT => unreachable,
+        .INVAL => error.InvalidOptionValue,
+        .NOPROTOOPT => error.InvalidOptionValue,
+        .NOMEM, .NOBUFS => error.SystemResources,
+        .PERM => error.PermissionDenied,
+        .OPNOTSUPP => error.OperationNotSupported,
+        else => |err| posix.unexpectedErrno(err),
+    };
+}
+
+test setsockopt {
+    const io = testing.io;
+    const listen_addr: net.IpAddress = try .parseIp4("127.0.0.1", 0);
+    var listener = try listen_addr.listen(io, .{ .reuse_address = true });
+    defer listener.deinit(io);
+    const fd = listener.socket.handle;
+
+    // The listener's options go through the same wrapper handoff's
+    // listener hand-rolls errno for.
+    try setsockopt(fd, posix.SOL.SOCKET, posix.SO.KEEPALIVE, 1);
+    try testing.expectEqual(@as(c_int, 1), try getsockopt(
+        fd,
+        posix.SOL.SOCKET,
+        posix.SO.KEEPALIVE,
+    ));
+
+    // TCP_NODELAY through the same wrapper.
+    try setsockopt(fd, posix.IPPROTO.TCP, posix.TCP.NODELAY, 1);
+    try testing.expectEqual(@as(c_int, 1), try getsockopt(
+        fd,
+        posix.IPPROTO.TCP,
+        posix.TCP.NODELAY,
+    ));
+
+    // A bad level/name pair is the EINVAL runtime condition the wrapper
+    // exists to surface (std maps it to `unreachable`).
+    try testing.expectError(
+        error.InvalidOptionValue,
+        setsockopt(fd, posix.IPPROTO.TCP, 0xFFFF_FFFF, 1),
+    );
+}
+
 test getpeername {
     const io = testing.io;
     const listen_addr = try net.IpAddress.parseIp4("127.0.0.1", 0);

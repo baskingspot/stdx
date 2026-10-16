@@ -13,6 +13,7 @@ const math = std.math;
 pub const Ip4Address = net.Ip4Address;
 pub const Ip6Address = net.Ip6Address;
 pub const IpAddress = net.IpAddress;
+const posix = std.posix;
 
 const fmt = @import("fmt.zig");
 
@@ -406,4 +407,85 @@ test Prefix4 {
     const from_addr = try Ip4.parseComptime("10.1.2.3").prefix(20);
     try testing.expectEqual(try Prefix4.parse("10.1.0.0/20"), from_addr);
     try testing.expectError(error.BitsOutOfRange, Ip4.parseComptime("10.0.0.1").prefix(33));
+}
+
+/// IPv4 address as octets + port — 6 bytes, the value without the
+/// sockaddr padding. For callers that own raw fds and call `bind(2)`/
+/// `connect(2)` directly, and for per-connection records where the
+/// 16-byte `Ip4Address` carries the sockaddr shape, not the storage
+/// shape.
+pub const Ip4Endpoint = struct {
+    bytes: [4]u8,
+    port: u16,
+
+    pub fn init(bytes: [4]u8, port: u16) Ip4Endpoint {
+        return .{ .bytes = bytes, .port = port };
+    }
+
+    /// Parse the address part from dotted-quad notation; the port rides
+    /// along, not from the string — a `host:port` split is caller policy.
+    pub fn parse(buf: []const u8, port: u16) Ip4.ParseError!Ip4Endpoint {
+        return .{ .bytes = (try Ip4.parse(buf)).bytes, .port = port };
+    }
+
+    pub fn withPort(self: Ip4Endpoint, port: u16) Ip4Endpoint {
+        return .{ .bytes = self.bytes, .port = port };
+    }
+
+    pub fn toIp4(self: Ip4Endpoint) Ip4 {
+        return .{ .bytes = self.bytes };
+    }
+
+    pub fn toStd(self: Ip4Endpoint) Ip4Address {
+        return .{ .bytes = self.bytes, .port = self.port };
+    }
+
+    pub fn fromStd(addr: Ip4Address) Ip4Endpoint {
+        return .{ .bytes = addr.bytes, .port = addr.port };
+    }
+
+    /// The kernel struct, port in network order: what `bind(2)` and
+    /// `connect(2)` take.
+    pub fn toSockaddrIn(self: Ip4Endpoint) posix.sockaddr.in {
+        return .{
+            .port = mem.nativeToBig(u16, self.port),
+            .addr = @bitCast(self.bytes),
+        };
+    }
+
+    pub fn format(self: Ip4Endpoint, w: *Io.Writer) Io.Writer.Error!void {
+        const o = &self.bytes;
+        try w.print("{d}.{d}.{d}.{d}:{d}", .{ o[0], o[1], o[2], o[3], self.port });
+    }
+};
+
+test Ip4Endpoint {
+    const loopback = Ip4Endpoint.init(.{ 127, 0, 0, 1 }, 5432);
+    try testing.expectEqual(@as(u16, 5432), loopback.port);
+
+    const parsed = try Ip4Endpoint.parse("10.1.2.3", 6666);
+    try testing.expectEqualSlices(u8, &.{ 10, 1, 2, 3 }, &parsed.bytes);
+
+    // Std round trips both directions.
+    const std_addr = parsed.toStd();
+    try testing.expectEqualSlices(u8, &parsed.bytes, &std_addr.bytes);
+    try testing.expectEqual(parsed.port, std_addr.port);
+    try testing.expectEqualSlices(
+        u8,
+        &parsed.bytes,
+        &Ip4Endpoint.fromStd(std_addr).bytes,
+    );
+
+    // The sockaddr: port network-endian, octets in place.
+    const in = parsed.toSockaddrIn();
+    try testing.expectEqual(mem.nativeToBig(u16, 6666), in.port);
+    try testing.expectEqualSlices(u8, &parsed.bytes, mem.asBytes(&in.addr));
+
+    // toIp4 drops the port; withPort replaces it.
+    try testing.expect(parsed.toIp4().eql(Ip4.parseComptime("10.1.2.3")));
+    try testing.expectEqual(@as(u16, 7777), parsed.withPort(7777).port);
+
+    var buf: [32]u8 = undefined;
+    const formatted = try std.fmt.bufPrint(&buf, "{f}", .{loopback});
+    try testing.expectEqualStrings("127.0.0.1:5432", formatted);
 }
