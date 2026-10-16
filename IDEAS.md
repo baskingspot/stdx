@@ -9,7 +9,22 @@ file when it ships or dies.
 The one family std has nothing for — verified against 0.16: `std`
 has priority queues and nothing concurrent.
 
-### MPSC slot ring — port candidate
+### MPSC slot ring — SHIPPED as `slot_ring.Mpsc` (2026-10-15)
+
+Landed beyond the port: Vyukov per-slot stamps replace the originals'
+fetchAdd+written-word core (a stamp = lap<<32|len is the lease, the
+commit, and the release in one word — the originals could hand the same
+physical slot to two producers and torn-read a lapped consumer); the
+claim is a CAS so a refused claim burns no position; `on_full` is a
+comptime policy (.drop_new, .drop_oldest with CAS-before-copy reads —
+the two-reviewer consensus, crossbeam pop verbatim); the wake is a
+comptime flavor (.none/.eventfd/.futex), and the eventfd poke is gated
+on an armed waiter bit (zero syscalls disarmed, ~19ns RMW). Twelve-13ns
+round trip, asm-diffed stable across every change; perf stat counters;
+44 tests + Smith fuzzers + seeded chaos hammers; two clean 5M soaks.
+Integration into handoff (.eventfd, main's poll loop) and exosphere
+(.futex, dedicated consumer thread) pending — the two original call
+sites map directly onto the two wake flavors.
 
 `AtomicRingBuffer` in exosphere (`src/AtomicRingBuffer.zig`, 633
 lines, std-only in that copy), pasted in psbouncer and the red-team
@@ -25,6 +40,7 @@ word itself — the Linux futex waiter-bit pattern, so wakes cannot be
 lost. Hot state gets its own cache-line-aligned struct.
 
 Open questions:
+
 - Allocator retention: the slot array is allocated once at `init`;
   the slab precedent says pass the allocator per call instead.
 - Io coupling: futex wait/wake lives behind `Io` in 0.16; the
@@ -90,13 +106,14 @@ Queries: `subsetOf` / `supersetOf` / `disjointWith`.
 
 std covers strings (`StaticStringMap(V)` — `initComptime`, length-
 bucketed, comptime-generated, zero runtime init; `StaticStringMap(void)`
-+ `has` IS the static string set — don't build it) and dense enums
-(`EnumMap`); sparse non-string keys (opcode tables, protocol
-constants) have nothing. The stdx version: a comptime instantiation
-of the bounded map's own Robin Hood probe logic — the table built at
-comptime from a literal, immutable, in `.rodata`, zero init. Same
-algorithm, built during compilation — the StaticBitSet pattern bloom
-already composes with.
+
+- `has` IS the static string set — don't build it) and dense enums
+  (`EnumMap`); sparse non-string keys (opcode tables, protocol
+  constants) have nothing. The stdx version: a comptime instantiation
+  of the bounded map's own Robin Hood probe logic — the table built at
+  comptime from a literal, immutable, in `.rodata`, zero init. Same
+  algorithm, built during compilation — the StaticBitSet pattern bloom
+  already composes with.
 
 ## BTree — ordered map, pending a real use case
 
@@ -211,12 +228,14 @@ std.array_hash_map is the Robin Hood we just shipped bounded.
 The design: control groups (7 bits of hash + state tag per byte),
 SIMD byte-match screens a whole group per probe step, tombstone
 deletion kept cheap by the same walk. References to pull from:
+
 - hashbrown (Rust std's map — the Group/ctrl SIMD core)
 - Go 1.24's runtime swiss map (runtime/internal/swiss — its
   8-byte groups and the reasons for half-size)
 - Abseil flat_hash_map (the original — growth and probe policy)
 
 Two variants, both worth having:
+
 - Bounded (the bounded_array_hash_map.Auto sibling): fixed capacity — but
   Swiss has no distance field, so backward-shift deletion is
   impossible and tombstones would rot a never-rehashed table; the
@@ -268,8 +287,9 @@ metrics instead. This is memcached's actual model, minus its object
 semantics.
 
 Verified shape:
+
 - Class ladder generated at init, runtime not comptime: `chunk =
-  base × factor^i` (base ~64, factor ~1.25) up to page/2, then
+base × factor^i` (base ~64, factor ~1.25) up to page/2, then
   single-chunk pages; oversize → honest `error.OutOfMemory`. Kills
   the comptime-tier granularity complaint against heap.SlabAllocator.
 - Per-page free lists threaded through free chunks; per-page live
@@ -284,6 +304,7 @@ Verified shape:
   param (power-of-two stride over the array).
 
 The fork, stated:
+
 - vtable face is non-moving — the mem.Allocator contract promises
   stable addresses, so evacuation can never happen through it.
   Empty-page reclaim only; the slab trap (immortal sprinkled items
@@ -338,28 +359,28 @@ Once the MPSC slot ring lands, the reference set is tokio's:
 ### once_cell (the sneaky one)
 
 Zig 0.16 removed `std.once` outright. `OnceCell` — set once, read
-  many — and `Lazy` — init on first use — have no std story at all,
-  and once_cell is one of the most-downloaded crates in Rust. Design
-  question: plain single-threaded cells vs thread-safe versions
-  over `Io.Event`.
+many — and `Lazy` — init on first use — have no std story at all,
+and once_cell is one of the most-downloaded crates in Rust. Design
+question: plain single-threaded cells vs thread-safe versions
+over `Io.Event`.
 
 ### slotmap — generational arena
 
 Key = slot index plus generation, so freed handles can't alias live
-  ones (no ABA). Fixed capacity, no allocation, fits stdx DNA — and
-  the style guide already blesses generations as deliberate
-  wraparound semantics. The games/entity world runs on these.
+ones (no ABA). Fixed capacity, no allocation, fits stdx DNA — and
+the style guide already blesses generations as deliberate
+wraparound semantics. The games/entity world runs on these.
 
 ### Chase-Lev work-stealing deque (crossbeam-deque)
 
 Each worker owns a deque and steals from others' tails — the
-  worker-pool shape (the red-team harness `worker.zig` is this
-  shape). Design-heavy, no user yet.
+worker-pool shape (the red-team harness `worker.zig` is this
+shape). Design-heavy, no user yet.
 
 ### heapless — fixed-capacity everything
 
 The crate closest to stdx's DNA: fixed-capacity, allocation-free
-  containers. Status after the std-overlap audit:
+containers. Status after the std-overlap audit:
 
 - Deque: ABSORBED BY STD — `std.Deque` with `initBuffer` (caller
   storage) plus `pushFrontBounded`/`pushBackBounded` is the whole

@@ -16,6 +16,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [IP addresses](https://stdx.withmatt.com/#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
 - [UUIDs](https://stdx.withmatt.com/#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
 - [Timekeeping](https://stdx.withmatt.com/#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.
+- [Logging transport](https://stdx.withmatt.com/#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
 - The [module list](https://stdx.withmatt.com/#modules) covers the rest: Swiss-table maps, a slab allocator, rapidhash, secure random, and buffered stdio.
 
 ## Install

@@ -11,6 +11,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
 - [UUIDs](#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
 - [Timekeeping](#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.
+- [Logging transport](#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
 - The [module list](#modules) covers the rest: Swiss-table maps, a slab allocator, rapidhash, secure random, and buffered stdio.
 
 This guide explains how to choose modules and combine them. The [API reference](/api/) documents every symbol.
@@ -102,6 +103,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`priority_queue`](/api/#stdx.priority_queue)                 | A priority queue with a fixed capacity.                                                                       |
 | [`random`](/api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                    |
 | [`set`](/api/#stdx.set)                                       | A bounded set with set algebra.                                                                               |
+| [`slot_ring`](/api/#stdx.slot_ring)                           | A bounded MPSC ring for log lines: producers never block, and one consumer drains. Linux only.                |
 | [`static_map`](/api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                        |
 | [`stdio`](/api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                |
 | [`swiss`](/api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                              |
@@ -422,6 +424,50 @@ A failure that repeats for each connection can write one line per event. `RateLi
 `admit` returns `null` when the caller must hold the line back. Pass it a monotonic sample, such as `clock.now()` from a `CachedClock(.awake)`.
 
 `RateLimit.default` has a one-second interval. `RateLimit.init` takes any `Io.Duration`.
+
+# Logging transport
+
+A worker thread that writes a log line cannot block on a slow consumer. `slot_ring.Mpsc` is a bounded, lock-free ring for that shape: many threads `acquire` a slot, write, and `commit`, and one consumer drains in order. Producers never block: a refused `acquire` returns `null` and the new message drops. The module is Linux only: it is `void` on other targets. `slot_size` is a comptime option, and it must be a multiple of the cache line. `init` rounds the slot count up to a power of two.
+
+## Pick the wake flavor
+
+The consumer's shape decides the wake mechanism at compile time.
+
+| Flavor     | Consumer                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `.none`    | The caller drives every drain: a test, or a loop that drains on its own schedule.                                               |
+| `.eventfd` | A poll loop. `pollFd()` is the doorbell. Call `ackDoorbell()` when the fd reads ready, before the drain.                        |
+| `.futex`   | A dedicated consumer thread. `waitForData` parks it until data or shutdown. `requestShutdown` ends it after the producers join. |
+
+## Pick the loss policy
+
+`.drop_new` is the default and the logging choice. A full ring refuses the new message, so the loss is the newest lines. `.drop_oldest` displaces the oldest committed message instead, so the newest line wins. The displacing ring owns the consumer cursor, and the consumer reads through `read(buf)`, which copies the payload into the caller's buffer. A `read(buf)` that loses the cursor to a displacer returns `null`, and the displacer ticks `displacedCount`.
+
+## Drain in order
+
+The consumer stops at the first `null`, which marks a claim that is not committed yet. A consumer that advances past the first uncommitted claim skips the committed messages behind it. Under `.drop_new`, the caller owns the read position and `release` frees the slot. Under `.drop_oldest`, the ring owns the cursor and `read(buf)` frees the slot inside the window it claims.
+
+## Account the loss
+
+`head()` counts the claims handed out. A refused `acquire` is the caller's drop count. Under `.drop_oldest`, `displacedCount()` counts the lines that producers displaced. Every line is delivered, displaced, or refused, so the counts close the total.
+
+```zig
+{{ load_data(path="examples/slot_ring_logging.zig", format="plain") | trim_end }}
+```
+
+## Tradeoffs
+
+The ring is not a lossless queue. Overflow drops a message under either policy: `.drop_new` refuses the newest, and `.drop_oldest` displaces the oldest committed message when it can. The loss is always accounted (`head()`, a refused `acquire`, `displacedCount()`) but never prevented. A caller that must not lose a message needs a blocking channel, not this ring.
+
+One consumer thread drains by position, in order. A producer stalled mid-write stalls the drain behind its position: the cost is dropped messages, never corrupted ones. There is no out-of-order drain and no parallel drain.
+
+Producers never block. An `acquire` either wins a slot or returns `null`, and the caller drops the message. Under `.drop_oldest`, a full ring displaces the oldest committed message instead, so the newest message wins. A stalled producer still refuses the claim, and so does a displacement that cannot win the cursor.
+
+The policy decides the read shape. Under `.drop_oldest`, the consumer reads through `read(buf)` and gets a copy inside the won cursor window. `.drop_new` hands out a borrowed slice from `read(read_pos)`: the single consumer owns the position, and nothing can take the slot before `release`.
+
+One message costs one CAS on the head, the payload copy into the slot, and one release store of the stamp. The wake flavor adds its own cost. `.none` adds nothing, `.eventfd` writes eight bytes to the fd, and `.futex` bumps the wake word with one RMW. The `.futex` syscall runs only when a waiter is armed. A displacement adds a cursor CAS, a stamp CAS, and one atomic increment of the displaced count. It also wakes the consumer under the two waking flavors.
+
+Linux only. The `.eventfd` and `.futex` flavors wrap Linux syscalls, and the module is `void` on other targets. `slot_size` is comptime and a cache-line multiple. Changing it instantiates a new ring type.
 
 # Related projects
 

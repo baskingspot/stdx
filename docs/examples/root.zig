@@ -22,6 +22,7 @@ pub const net_range = @import("net_range.zig");
 pub const net_std_types = @import("net_std_types.zig");
 pub const parsing_atoi = @import("parsing_atoi.zig");
 pub const parsing_leading_zeros = @import("parsing_leading_zeros.zig");
+pub const slot_ring_logging = @import("slot_ring_logging.zig");
 pub const time_cached_clock = @import("time_cached_clock.zig");
 pub const time_deadline = @import("time_deadline.zig");
 pub const time_rate_limit = @import("time_rate_limit.zig");

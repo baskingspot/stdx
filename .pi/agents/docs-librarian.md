@@ -144,6 +144,8 @@ If a `///` starts describing how a function achieves its result, that belongs in
 - **Docs that outlive an API change.** The signature changed (an error union added, a return value removed) and the doc still describes the old contract. Check every `Returns`, `Infallible`, and `error.` claim against the current signature.
 - **Claims about a type next to the wrong type.** Platform notes, thread-safety notes, and ownership notes are easy to attach to the neighbor.
 - **Thin module docs.** A one-line `//!` that says only "X extensions to `std.X`" for a module with its own types. Report these. Do not invent content: the contract must come from reading the source.
+- **Transient references to reverted code.** Comments naming "pre-port", "formerly", "legacy", or old function names (`constSlice`, "regression hammer") describe a codebase this repo never shipped. Seen: `slot_ring` comments referencing "pre-port logging rings" and `constSlice() orelse break`. The design rationale stands without the reference; drop the reference. A regex over `src/**/*.zig` matching `(?i)\b(pre-port|formerly|legacy|constSlice|regression hammer|regression shape|previously)\b` finds the class; false positives are rare.
+- **Unresolved issue numbers.** An issue number in a comment must resolve (`github_issue` view). Seen: `slot_ring` comments citing `#413`, which is the upstream project's internal tracker number, 404 on this repo. Replace the number with the race class it names; the tests still pin the behavior.
 
 ## Status language
 
@@ -237,6 +239,8 @@ Accumulated memory. Update when you find a project rule or recurring drift class
 - Anchors without a build: every `[text](#slug)` in the guide must match a heading. Zola slugs a heading by lowercasing it, dropping punctuation, and replacing spaces with `-`. Check by reading the headings.
 
 - API link names: every `/api/#stdx.<name>` in the guide must appear as `pub const <name>` in `src/root.zig`.
+- Measurement-grounded comments: before flagging a comment citing a measurement ("measured: 35-37ns/claim", "the flat layout put the wake word two lines apart") as transient, check whether it carries both the experimental setup and the architecture-specific number. If it does, treat it as durable design rationale (the AGENTS.md precedent: `mem.lastIndexOfNonZero`'s four-instruction disassembly note). Flag it as unverified only if the parent could not re-run the measurement.
+- "Called when X" docs: verify with a test whether X is a precondition or a typical case. The phrasing reads as a precondition, but tests often prove it permissive. Seen: `slot_ring.ackDoorbell`'s "called when the fd reads ready" — the test proves it benign on an unwoken fd too.
 - Behavior claim reading cannot settle: put it under **unverified** with the call, the input, and the expected result. The parent runs it. This is how `set.unite` always returning false and `set.add` returning one value for "present" and "full" were found.
 - Orphan examples: compare `ls docs/examples/*.zig` with the `load_data` paths in the guide and the names in `docs/examples/root.zig`.
 - STE scan:
