@@ -1,5 +1,28 @@
 {
   "nodes": {
+    "baskingspot": {
+      "inputs": {
+        "flake-parts": "flake-parts",
+        "mattware": "mattware",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "treefmt-nix": "treefmt-nix_2"
+      },
+      "locked": {
+        "lastModified": 1792123423,
+        "narHash": "sha256-ybCkWPIloLvJLSjzXBEVF3lR8AZRzCPXg9ToCrOAyZk=",
+        "owner": "baskingspot",
+        "repo": "nix",
+        "rev": "a708c3a87ec7668805c51b59e9c851dd0a549f84",
+        "type": "github"
+      },
+      "original": {
+        "owner": "baskingspot",
+        "repo": "nix",
+        "type": "github"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": "nixpkgs-lib"
@@ -21,16 +44,17 @@
     "mattware": {
       "inputs": {
         "nixpkgs": [
+          "baskingspot",
           "nixpkgs"
         ],
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1791936343,
-        "narHash": "sha256-c4GK0xaQDiIN1tIzMbhBDITTFjCGr3iOQ4ZWABy5e64=",
+        "lastModified": 1792034141,
+        "narHash": "sha256-EYH6dP9/rHGfNcs/i8OLB7goJaVvpcdTdEzNyzeDkX8=",
         "owner": "mattrobenolt",
         "repo": "nixpkgs",
-        "rev": "2e158776d4cf5f80b996524f4f780f461fb045fa",
+        "rev": "0653c207c23b3d4e89fbed86bc5242512281f0a1",
         "type": "github"
       },
       "original": {
@@ -72,14 +96,18 @@
     },
     "root": {
       "inputs": {
-        "flake-parts": "flake-parts",
-        "mattware": "mattware",
+        "baskingspot": "baskingspot",
+        "flake-parts": [
+          "baskingspot",
+          "flake-parts"
+        ],
         "nixpkgs": "nixpkgs"
       }
     },
     "treefmt-nix": {
       "inputs": {
         "nixpkgs": [
+          "baskingspot",
           "mattware",
           "nixpkgs"
         ]
@@ -90,6 +118,27 @@
         "owner": "numtide",
         "repo": "treefmt-nix",
         "rev": "4cfe8d7065cc8ca91c0a50361b6dd74920eeb1f5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "type": "github"
+      }
+    },
+    "treefmt-nix_2": {
+      "inputs": {
+        "nixpkgs": [
+          "baskingspot",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791885023,
+        "narHash": "sha256-C3alQ2MEt0zVrUSho5NUDo3jmhbff72++bfwoqT9Omo=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "0d6d739a833ba9a9c93034862e4a7b061a062a1c",
         "type": "github"
       },
       "original": {

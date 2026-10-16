@@ -1,35 +1,26 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
-    mattware = {
-      url = "github:mattrobenolt/nixpkgs";
+    flake-parts.follows = "baskingspot/flake-parts";
+    baskingspot = {
+      url = "github:baskingspot/nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
   outputs =
-    inputs@{
-      flake-parts,
-      nixpkgs,
-      mattware,
-      ...
-    }:
+    inputs@{ flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "aarch64-darwin"
+      # imports and inputsFrom below mirror each other, except the toolchain
+      # version: pick that once, in the import.
+      imports = with inputs.baskingspot.flakeModules; [
+        base
+        zig."0.16"
       ];
 
       perSystem =
-        { system, ... }:
+        { pkgs, config, ... }:
         let
-          pkgs = import nixpkgs {
-            inherit system;
-            overlays = [ mattware.overlays.default ];
-          };
-
           # Wrangler as a thin wrapper: exec npx with a pinned version; the
           # flake pins the version, npm owns the bits. min-release-age is
           # overridden per-tool so day-zero wrangler releases stay installable
@@ -47,42 +38,37 @@
           };
         in
         {
-          formatter = pkgs.nixfmt-tree;
-          devShells = {
-            default = pkgs.mkShell {
-              packages =
-                with pkgs;
-                [
-                  zig_0_16
-                  zls_0_16
-                  ziglint
-                  zigdoc
-                  zizmor
-                  pinact
-                  just
-                  oxfmt
-                ]
-                # perf for the benchmark passes: hardware counters on the
-                # hot paths. Linux only; darwin has nothing equivalent.
-                ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ perf ];
-            };
+          devShells.default = pkgs.mkShell {
+            inputsFrom = with config.devShells; [
+              base
+              zig
+            ];
 
-            # Just what building and deploying the site needs. The justfile's
-            # doc recipes enter this shell themselves, so `just doc` works from
-            # the default shell too. CI uses it directly.
-            docs = pkgs.mkShell {
-              packages =
-                with pkgs;
-                [
-                  zig_0_16
-                  zola
-                  just
-                  svgo
-                ]
-                ++ [ wrangler ];
-              # Tells the justfile it is already here, so it does not nest.
-              env.STDX_DOCS_SHELL = "1";
-            };
+            packages =
+              with pkgs;
+              [
+                oxfmt
+              ]
+              # perf for the benchmark passes: hardware counters on the
+              # hot paths. Linux only; darwin has nothing equivalent.
+              ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ perf ];
+          };
+
+          # Just what building and deploying the site needs. The justfile's
+          # doc recipes enter this shell themselves, so `just doc` works from
+          # the default shell too. CI uses it directly.
+          devShells.docs = pkgs.mkShell {
+            packages =
+              with pkgs;
+              [
+                zig_0_16
+                zola
+                just
+                svgo
+              ]
+              ++ [ wrangler ];
+            # Tells the justfile it is already here, so it does not nest.
+            env.STDX_DOCS_SHELL = "1";
           };
         };
     };
