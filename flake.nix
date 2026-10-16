@@ -50,16 +50,21 @@
           formatter = pkgs.nixfmt-tree;
           devShells = {
             default = pkgs.mkShell {
-              packages = with pkgs; [
-                zig_0_16
-                zls_0_16
-                ziglint
-                zigdoc
-                zizmor
-                pinact
-                just
-                oxfmt
-              ];
+              packages =
+                with pkgs;
+                [
+                  zig_0_16
+                  zls_0_16
+                  ziglint
+                  zigdoc
+                  zizmor
+                  pinact
+                  just
+                  oxfmt
+                ]
+                # perf for the benchmark passes: hardware counters on the
+                # hot paths. Linux only; darwin has nothing equivalent.
+                ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ perf ];
             };
 
             # Just what building and deploying the site needs. The justfile's
