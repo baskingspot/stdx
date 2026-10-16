@@ -11,7 +11,7 @@ jobs:
   ci:
     permissions:
       contents: read
-    uses: baskingspot/gh-actions/.github/workflows/ci.yml@9e44f3e0a78690c111f4418afdfc3965ce54fca0 # main
+    uses: baskingspot/gh-actions/.github/workflows/ci.yml@9e44f3e0a78690c111f4418afdfc3965ce54fca0 # v0.3.0
     with:
       recipes: '["test", "test-release-safe", "test-release-fast", "lint", "doc"]'
     secrets:
@@ -25,7 +25,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && vars.CLOUDFLARE_ACCOUNT_ID != ''
     permissions:
       contents: read
-    uses: baskingspot/gh-actions/.github/workflows/deploy-docs.yml@9e44f3e0a78690c111f4418afdfc3965ce54fca0 # main
+    uses: baskingspot/gh-actions/.github/workflows/deploy-docs.yml@9e44f3e0a78690c111f4418afdfc3965ce54fca0 # v0.3.0
     with:
       account-id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     secrets:

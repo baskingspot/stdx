@@ -1,6 +1,7 @@
-/* The baskingspot palette (baskingspot/.github, brand/README.md). Link text
-   needs 4.5:1, which heat itself does not reach on paper (4.1) or ink (3.9).
-   --link is heat, darkened on paper and lightened on ink, until it does. */
+/* The baskingspot palette (baskingspot/.github, brand/README.md). Heat is an
+   accent, not a text color: it is 4.1:1 on paper and 3.9:1 on ink, under the
+   4.5:1 that text needs, and a page of orange links is loud. Links take the
+   text color and carry heat in the underline and on hover. */
 :root {
   color-scheme: light dark;
   --ink: #16191d;
@@ -9,7 +10,8 @@
   --slate: #58616c;
   --bg: light-dark(var(--paper), var(--ink));
   --fg: light-dark(var(--ink), var(--paper));
-  --link: light-dark(#b8321d, #e8604a);
+  --muted: light-dark(var(--slate), #a3abb5);
+  --link-hover: light-dark(#b8321d, #e8604a);
   --rule: color-mix(in srgb, var(--fg) 18%, transparent);
   --surface: color-mix(in srgb, var(--fg) 7%, var(--bg));
 }
@@ -80,10 +82,13 @@ nav.toc ul ul {
   }
 }
 nav.toc a {
+  color: var(--muted);
   text-decoration: none;
 }
 nav.toc a:hover {
+  color: var(--link-hover);
   text-decoration: underline;
+  text-decoration-color: var(--heat);
 }
 
 header {
@@ -122,8 +127,13 @@ footer .badge {
 }
 
 a {
-  color: var(--link);
-  text-underline-offset: 0.15em;
+  color: inherit;
+  text-decoration-color: var(--heat);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+a:hover {
+  color: var(--link-hover);
 }
 h1,
 h2,
