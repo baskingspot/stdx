@@ -23,8 +23,9 @@ on an armed waiter bit (zero syscalls disarmed, ~19ns RMW). Twelve-13ns
 round trip, asm-diffed stable across every change; perf stat counters;
 44 tests + Smith fuzzers + seeded chaos hammers; two clean 5M soaks.
 Integration into handoff (.eventfd, main's poll loop) and exosphere
-(.futex, dedicated consumer thread) pending — the two original call
-sites map directly onto the two wake flavors.
+(.futex, dedicated consumer thread) landed clean on 2026-10-15 —
+both consumers integrated without stdx changes, which was the port's
+acceptance test.
 
 `AtomicRingBuffer` in exosphere (`src/AtomicRingBuffer.zig`, 633
 lines, std-only in that copy), pasted in psbouncer and the red-team
