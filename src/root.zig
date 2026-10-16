@@ -13,6 +13,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+pub const base32 = @import("base32.zig");
 pub const bloom = @import("bloom.zig");
 pub const bounded_array_hash_map = @import("bounded_array_hash_map.zig");
 pub const BoundedWriter = @import("BoundedWriter.zig");
