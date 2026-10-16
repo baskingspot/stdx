@@ -1,73 +1,80 @@
 # stdx: shared std-lib extensions. README.md describes the modules;
 # AGENTS.md holds the working conventions.
 
-default: test
+[private]
+default:
+    @just --list
 
 # The doc recipes run their tools from the docs shell (flake.nix). Inside it
 # already, STDX_DOCS_SHELL is set and the prefix is empty.
 docs := if env("STDX_DOCS_SHELL", "") == "1" { "" } else { "nix develop .#docs --command" }
 
-# Build the site into zig-out/site/: the guide (Zola, from docs/) at the
-# root and the API reference (the wasm viewer `zig std` uses) under /api/.
-# `zig build docs` installs the reference into docs/static/api, which Zola
-# copies as is. The viewer fetches its wasm, so serve the output over HTTP;
-# opening the files directly does not work.
+[doc("Build the site into zig-out/site/stdx/: the guide (Zola, from docs/) and the API reference (the wasm viewer `zig std` uses) under api/. The router in baskingspot/site serves /stdx/... from it")]
+[group("docs")]
 doc:
     {{ docs }} zig build docs
-    {{ docs }} zola --root docs build --output-dir zig-out/site --force
+    {{ docs }} zola --root docs build --base-url https://baskingspot.dev/stdx --output-dir zig-out/site/stdx --force
 
-# Edit the guide with live reload (http://127.0.0.1:1111), API reference
-# included.
+[doc("Edit the guide with live reload (http://127.0.0.1:1111), API reference included")]
+[group("docs")]
 guide:
     {{ docs }} zig build docs
     {{ docs }} zola --root docs serve
 
-# Squeeze the site's SVGs in place. Rerunning changes nothing.
+[doc("Squeeze the site's SVGs in place. Rerunning changes nothing")]
+[group("docs")]
 svgo:
     {{ docs }} svgo --multipass docs/static/*.svg
 
-# Deploy the rendered docs to Cloudflare as an assets-only Worker (config in
-# wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus
-# CLOUDFLARE_ACCOUNT_ID if the token can see more than one account —
+[doc("Deploy the rendered docs to Cloudflare as an assets-only Worker (config in wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus CLOUDFLARE_ACCOUNT_ID if the token can see more than one account")]
+[group("docs")]
 doc-deploy: doc
     {{ docs }} wrangler deploy
 
-# Unit tests (Debug)
+[doc("Unit tests (Debug)")]
+[group("test")]
 test:
     zig build test --summary all
 
-# Unit tests (ReleaseSafe) — the option matrix: lazy analysis hides code that
-# only instantiates in release modes
+[doc("Unit tests (ReleaseSafe): the option matrix, because lazy analysis hides code that only instantiates in release modes")]
+[group("test")]
 test-release-safe:
     zig build test -Doptimize=ReleaseSafe --summary all
 
-# Unit tests (ReleaseFast)
+[doc("Unit tests (ReleaseFast)")]
+[group("test")]
 test-release-fast:
     zig build test -Doptimize=ReleaseFast --summary all
 
-# Lint: ziglint, Zig, markdown and CSS, and justfile formatting
+[doc("Run the fuzzer with an iteration budget, for example `just fuzz 50M`. ReleaseSafe forces the LLVM backend, dodging the 0.16.0 self-hosted-backend bug in Debug fuzz mode (ziglang/zig#30655)")]
+[group("test")]
+fuzz LIMIT="10M":
+    zig build test -Doptimize=ReleaseSafe --fuzz={{ LIMIT }}
+
+[doc("Lint: ziglint, Zig, Nix, Markdown and CSS, the workflows, and justfile formatting")]
+[group("lint")]
 lint:
     ziglint
     zig fmt --check src docs/examples build.zig
-    oxfmt --check README.md docs/VOICE.md docs/content docs/static
+    nix fmt -- --ci
+    oxfmt --check README.md AGENTS.md docs/VOICE.md docs/content docs/static
+    actionlint
+    zizmor .
     just --fmt --check
 
-# Format everything lint checks
+[doc("Format everything lint checks")]
+[group("lint")]
 fmt:
     zig fmt src docs/examples build.zig
-    oxfmt README.md docs/VOICE.md docs/content docs/static
+    nix fmt
+    oxfmt README.md AGENTS.md docs/VOICE.md docs/content docs/static
     just --fmt
 
-# Everything the test lanes run. The site build is its own CI job: `just doc`.
+[doc("Everything the test lanes run")]
+[group("ci")]
 ci: test test-release-safe test-release-fast lint
 
-# Run benchmarks (e.g. `just bench -Doptimize=ReleaseFast -- --benchtime=250ms --filter=Swiss`)
+[doc("Run benchmarks (e.g. `just bench -Doptimize=ReleaseFast -- --benchtime=250ms --filter=Swiss`)")]
+[group("bench")]
 bench *ARGS:
     zig build bench {{ ARGS }}
-
-# Zig 0.16: --fuzz takes an iteration budget with a K/M/G suffix, not a
-# duration. ReleaseSafe forces the LLVM backend, dodging the 0.16.0
-# self-hosted-backend bug in Debug fuzz mode (ziglang/zig#30655).
-# Run the fuzzer with an iteration budget (e.g. just fuzz 50M)
-fuzz LIMIT="10M":
-    zig build test -Doptimize=ReleaseSafe --fuzz={{ LIMIT }}
