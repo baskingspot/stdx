@@ -46,7 +46,7 @@ stdx builds with Zig 0.16 only.
 just ci
 ```
 
-`nix develop` provides the toolchain. `just` lists the recipes, and `just ci` runs what CI runs. The site tools live in a second shell, `nix develop .#docs`, which the doc recipes enter themselves: `just guide` serves the guide with live reload, and `just doc` builds the whole site into `zig-out/site/stdx/`.
+`nix develop` provides the toolchain and the site tools. `just` lists the recipes, and `just ci` runs what CI runs. `just guide` serves the guide with live reload, and `just doc` builds the whole site into `zig-out/site/stdx/`.
 
 ## License
 

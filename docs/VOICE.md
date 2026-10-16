@@ -87,7 +87,6 @@ strict parsing became three chapters.
   reference under `api/`. The router in baskingspot/site serves it at `https://baskingspot.dev/stdx/`.
 - `just fmt` formats the Zig, the guide, the README, and the CSS. The Tera templates in
   `docs/templates` are not HTML, so the formatter skips them.
-- `just svgo` squeezes the SVGs. A rerun changes nothing.
 - The `docs-librarian` agent (`.pi/agents/docs-librarian.md`) is the second reader. It audits by
   reading only. It never compiles or runs code. A claim that reading cannot settle goes under
   "unverified" with the exact check, and the parent runs it. Verify every finding before you apply

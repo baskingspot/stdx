@@ -5,31 +5,22 @@
 default:
     @just --list
 
-# The doc recipes run their tools from the docs shell (flake.nix). Inside it
-# already, STDX_DOCS_SHELL is set and the prefix is empty.
-docs := if env("STDX_DOCS_SHELL", "") == "1" { "" } else { "nix develop .#docs --command" }
-
 [doc("Build the site into zig-out/site/stdx/: the guide (Zola, from docs/) and the API reference (the wasm viewer `zig std` uses) under api/. The router in baskingspot/site serves /stdx/... from it")]
 [group("docs")]
 doc:
-    {{ docs }} zig build docs
-    {{ docs }} zola --root docs build --base-url https://baskingspot.dev/stdx --output-dir zig-out/site/stdx --force
+    zig build docs
+    baskingspot-docs build stdx
 
 [doc("Edit the guide with live reload (http://127.0.0.1:1111), API reference included")]
 [group("docs")]
 guide:
-    {{ docs }} zig build docs
-    {{ docs }} zola --root docs serve
-
-[doc("Squeeze the site's SVGs in place. Rerunning changes nothing")]
-[group("docs")]
-svgo:
-    {{ docs }} svgo --multipass docs/static/*.svg
+    zig build docs
+    baskingspot-docs serve stdx
 
 [doc("Deploy the rendered docs to Cloudflare as an assets-only Worker (config in wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus CLOUDFLARE_ACCOUNT_ID if the token can see more than one account")]
 [group("docs")]
 doc-deploy: doc
-    {{ docs }} wrangler deploy
+    wrangler deploy
 
 [doc("Unit tests (Debug)")]
 [group("test")]

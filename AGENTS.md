@@ -6,9 +6,8 @@ Working notes for AI coding agents in stdx.
 
 Zig 0.16 only. `nix develop` provides zig, zls, ziglint, zigdoc, oxfmt,
 just, and the base tools (actionlint, zizmor, pinact, fd, gh, ripgrep,
-treefmt). The site tools (zola, wrangler) live in a second, lighter shell,
-`nix develop .#docs`, which the doc recipes enter themselves. The flake is
-the tool contract: nothing on PATH outside the devshell.
+treefmt), plus the site tools (zola, wrangler, and `baskingspot-docs`, from
+the `docs` module). The flake is the tool contract: nothing on PATH outside the devshell.
 
 The justfile is the command interface. Run recipes, not raw zig
 commands:
