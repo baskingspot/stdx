@@ -29,14 +29,9 @@
               zig
             ];
 
-            packages =
-              with pkgs;
-              [
-                oxfmt
-              ]
-              # perf for the benchmark passes: hardware counters on the
-              # hot paths. Linux only; darwin has nothing equivalent.
-              ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ perf ];
+            # perf for the benchmark passes: hardware counters on the hot paths.
+            # Linux only; darwin has nothing equivalent.
+            packages = with pkgs; pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ perf ];
           };
 
         };
