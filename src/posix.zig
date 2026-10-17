@@ -141,11 +141,13 @@ test setsockopt {
     // The listener's options go through the same wrapper handoff's
     // listener hand-rolls errno for.
     try setsockopt(fd, posix.SOL.SOCKET, posix.SO.KEEPALIVE, 1);
-    try testing.expectEqual(@as(c_int, 1), try getsockopt(
+    // A boolean option reads back non-zero: 1 on Linux, but the option's own
+    // flag value on macOS (8).
+    try testing.expect(try getsockopt(
         fd,
         posix.SOL.SOCKET,
         posix.SO.KEEPALIVE,
-    ));
+    ) != 0);
 
     // TCP_NODELAY through the same wrapper.
     try setsockopt(fd, posix.IPPROTO.TCP, posix.TCP.NODELAY, 1);
