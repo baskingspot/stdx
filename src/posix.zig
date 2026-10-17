@@ -141,8 +141,8 @@ test setsockopt {
     // The listener's options go through the same wrapper handoff's
     // listener hand-rolls errno for.
     try setsockopt(fd, posix.SOL.SOCKET, posix.SO.KEEPALIVE, 1);
-    // A boolean option reads back non-zero: 1 on Linux, but the option's own
-    // flag value on macOS (8).
+    // A boolean option reads back non-zero: 1 on Linux, but a different flag
+    // value on macOS (8 for KEEPALIVE, 4 for NODELAY).
     try testing.expect(try getsockopt(
         fd,
         posix.SOL.SOCKET,
@@ -151,11 +151,11 @@ test setsockopt {
 
     // TCP_NODELAY through the same wrapper.
     try setsockopt(fd, posix.IPPROTO.TCP, posix.TCP.NODELAY, 1);
-    try testing.expectEqual(@as(c_int, 1), try getsockopt(
+    try testing.expect(try getsockopt(
         fd,
         posix.IPPROTO.TCP,
         posix.TCP.NODELAY,
-    ));
+    ) != 0);
 
     // A bad level/name pair is the EINVAL runtime condition the wrapper
     // exists to surface (std maps it to `unreachable`).
