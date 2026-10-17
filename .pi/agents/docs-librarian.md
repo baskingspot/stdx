@@ -153,4 +153,3 @@ Accumulated memory. Update it when you find a rule or a recurring drift class th
 - API link names: every `api/#stdx.<name>` in the guide must appear as `pub const <name>` in `src/root.zig`.
 - Orphan examples: compare `ls docs/examples/*.zig` with the `load_data` paths in the guide and the names in `docs/examples/root.zig`.
 - Behavior claim reading cannot settle: put it under **unverified** with the call, the input, and the expected result. The parent runs it.
-

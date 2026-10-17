@@ -46,9 +46,9 @@ fuzz LIMIT="10M":
 [group("lint")]
 lint:
     ziglint
-    zig fmt --check src docs/examples build.zig
+    zig fmt --check src docs/examples build.zig build.zig.zon
     nix fmt -- --ci
-    oxfmt --check README.md AGENTS.md docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml
+    oxfmt --check README.md AGENTS.md IDEAS.md THIRD_PARTY.md .pi/agents docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml
     actionlint
     zizmor .
     just --fmt --check
@@ -56,9 +56,9 @@ lint:
 [doc("Format everything lint checks")]
 [group("lint")]
 fmt:
-    zig fmt src docs/examples build.zig
+    zig fmt src docs/examples build.zig build.zig.zon
     nix fmt
-    oxfmt README.md AGENTS.md docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml
+    oxfmt README.md AGENTS.md IDEAS.md THIRD_PARTY.md .pi/agents docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml
     just --fmt
 
 [doc("Everything CI runs: the unit tests, lint, and the site build")]

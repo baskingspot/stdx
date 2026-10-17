@@ -9,10 +9,10 @@ Upstream: Zig 0.16.0 `std`.
 License: MIT, "Copyright (c) Zig contributors". The full license text is
 reproduced in `LICENSE-ZIG`, per its terms.
 
-| File | Upstream | Adaptation |
-|---|---|---|
-| `src/multi_array.zig` | `std.MultiArrayList` | The `Element` tagged-union representation, the `SortContext` adapter, and the struct-of-arrays design. Storage here is embedded and comptime-shaped rather than heap-allocated. |
-| `src/posix.zig` | `std.Io.Threaded` (private `address4FromPosix` / `address4ToPosix`) | The `sockaddr_in` ↔ `Ip4Address` conversion: network-endian port, `@bitCast` octets. |
+| File                  | Upstream                                                            | Adaptation                                                                                                                                                                      |
+| --------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/multi_array.zig` | `std.MultiArrayList`                                                | The `Element` tagged-union representation, the `SortContext` adapter, and the struct-of-arrays design. Storage here is embedded and comptime-shaped rather than heap-allocated. |
+| `src/posix.zig`       | `std.Io.Threaded` (private `address4FromPosix` / `address4ToPosix`) | The `sockaddr_in` ↔ `Ip4Address` conversion: network-endian port, `@bitCast` octets.                                                                                            |
 
 ## rapidhash
 
@@ -56,4 +56,3 @@ The SWAR digit-processing constants and steps in `src/fmt/atoi.zig` are
 transcribed from `ascii_number.h` (credit @aqrit; the technique is Daniel
 Lemire's SWAR digit parsing, an extension of Wojciech Muła's). The credit
 and technique links are kept in the file header.
-
