@@ -4,3 +4,8 @@ jobs:
   - recipe: test-release-fast
   - recipe: lint
   - recipe: doc
+  # macOS on aarch64 works for some projects and not others. It runs, shows,
+  # and never fails CI.
+  - recipe: test
+    runners: [macos-26]
+    blocking: false
