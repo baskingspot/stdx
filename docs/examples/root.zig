@@ -3,6 +3,7 @@
 //! show code that does not build.
 
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const base32_token = @import("base32_token.zig");
 pub const containers_bloom = @import("containers_bloom.zig");
@@ -23,7 +24,13 @@ pub const net_range = @import("net_range.zig");
 pub const net_std_types = @import("net_std_types.zig");
 pub const parsing_atoi = @import("parsing_atoi.zig");
 pub const parsing_leading_zeros = @import("parsing_leading_zeros.zig");
-pub const slot_ring_logging = @import("slot_ring_logging.zig");
+// slot_ring is Linux only, so its example is too: elsewhere the module is
+// `void`. The import is lazy, so the file is not analyzed off Linux.
+const slot_ring_logging_example = @import("slot_ring_logging.zig");
+pub const slot_ring_logging = if (builtin.os.tag == .linux)
+    slot_ring_logging_example
+else
+    struct {};
 pub const time_cached_clock = @import("time_cached_clock.zig");
 pub const time_deadline = @import("time_deadline.zig");
 pub const time_rate_limit = @import("time_rate_limit.zig");
