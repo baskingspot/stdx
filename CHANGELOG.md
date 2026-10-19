@@ -16,3 +16,5 @@ All notable changes to stdx are recorded here. The format follows
   config text with a default port.
 - `bitset.Scratch(capacity)`: a fixed-capacity bitset for reused workspaces;
   reset clears only the validity map.
+- `heap.SizeClassPool`: a fallible byte pool over caller-owned storage, with
+  per-class live accounting.
