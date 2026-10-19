@@ -113,6 +113,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`time`](api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, and a log rate limiter.                                                                                        |
 | [`timers`](api/#stdx.timers)                                 | A caller-driven set of timers over `Io.Timestamp`: arm and stop entries by handle, fire callbacks, and repeat on a period.                                        |
 | [`Uuid`](api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                      |
+| [`wire`](api/#stdx.wire)                                     | A forward-only writer over caller-owned bytes, with the byte order fixed at comptime. Integers, enums, slices, and backpatch slots.                               |
 
 # Choosing a container
 
@@ -297,6 +298,20 @@ An empty or malformed string returns `error.InvalidCharacter`. A number too larg
 ```
 
 `.overflow = .unchecked` skips the overflow check. The caller promises that the value fits. A value that does not fit is a safety-checked panic in Debug and ReleaseSafe, and undefined behavior in ReleaseFast. `fmt.atoiUnchecked` is the shorthand.
+
+# Binary encoding
+
+## Write a message
+
+`wire.Writer(.big)` writes big-endian integers, enums, and byte slices into storage the caller owns. `reserve` returns a slot that the caller fills later, for a length or checksum that is not known until the body is written.
+
+```zig
+{{ load_data(path="examples/wire_backpatch.zig", format="plain") | trim_end }}
+```
+
+Each fallible method has an `AssumeCapacity` form. Use it after the code has checked the size. In Debug and ReleaseSafe builds, a wrong assumption panics. In ReleaseFast the check is omitted.
+
+The byte order is a comptime parameter. `wire.Writer(.big)` and `wire.Writer(.little)` are different types, so each fixed-width store compiles to its own order. Byte slices and reserved slots are order-agnostic. Integers of any byte width work, including `u24`, `u48`, and `u128`. Signed values are two's complement. An enum is written as its backing integer.
 
 # Base32
 
