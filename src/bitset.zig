@@ -18,6 +18,7 @@ pub fn Scratch(comptime capacity: usize) type {
         const Self = @This();
         const Bits = std.bit_set.ArrayBitSet(u64, capacity);
         const Valid = std.bit_set.ArrayBitSet(u64, words);
+        const Word = std.bit_set.IntegerBitSet(64);
 
         bits: Bits,
         valid: Valid,
@@ -67,11 +68,11 @@ pub fn Scratch(comptime capacity: usize) type {
 
         /// One bit from a backing array.
         ///
-        /// `ArrayBitSet.isSet` takes the whole array by value, which is the
-        /// copy this type exists to avoid. A single-word `IntegerBitSet` reads
-        /// the one mask instead.
+        /// `ArrayBitSet.isSet` takes `Self` by value, so a call copies the
+        /// whole mask array. For a 64 KiB set that is an 8 KiB copy per
+        /// lookup. A single-word `IntegerBitSet` reads the one mask instead.
         fn wordIsSet(masks: []const u64, index: usize) bool {
-            const word: std.bit_set.IntegerBitSet(64) = .{ .mask = masks[index / 64] };
+            const word: Word = .{ .mask = masks[index / 64] };
             return word.isSet(index % 64);
         }
     };
