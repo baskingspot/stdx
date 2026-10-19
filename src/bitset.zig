@@ -36,32 +36,43 @@ pub fn Scratch(comptime capacity: usize) type {
 
         pub fn isSet(self: *const Self, index: usize) bool {
             assert(index < capacity);
-            if (!bit(&self.valid.masks, index / 64)) return false;
-            return bit(&self.bits.masks, index);
+            if (!wordIsSet(&self.valid.masks, index / 64)) return false;
+            return wordIsSet(&self.bits.masks, index);
         }
 
         pub fn set(self: *Self, index: usize) void {
             assert(index < capacity);
             const word = index / 64;
-            if (!bit(&self.valid.masks, word)) {
+            if (!wordIsSet(&self.valid.masks, word)) {
                 // First touch: the word can hold anything left by an earlier
-                // use, so zero it before the validity map exposes it.
-                self.bits.masks[word] = 0;
+                // use, so clear its valid bits before the validity map
+                // exposes it.
+                const start = word * 64;
+                self.bits.setRangeValue(.{
+                    .start = start,
+                    .end = @min(start + 64, capacity),
+                }, false);
                 self.valid.set(word);
             }
-            self.bits.masks[word] |= @as(u64, 1) << @intCast(index % 64);
+            self.bits.set(index);
         }
 
         /// Clear `index`. A word that was never touched reads as unset, so
         /// this is a no-op there.
         pub fn unset(self: *Self, index: usize) void {
             assert(index < capacity);
-            if (!bit(&self.valid.masks, index / 64)) return;
-            self.bits.masks[index / 64] &= ~(@as(u64, 1) << @intCast(index % 64));
+            if (!wordIsSet(&self.valid.masks, index / 64)) return;
+            self.bits.unset(index);
         }
 
-        fn bit(masks: []const u64, index: usize) bool {
-            return (masks[index / 64] >> @intCast(index % 64)) & 1 != 0;
+        /// One bit from a backing array.
+        ///
+        /// `ArrayBitSet.isSet` takes the whole array by value, which is the
+        /// copy this type exists to avoid. A single-word `IntegerBitSet` reads
+        /// the one mask instead.
+        fn wordIsSet(masks: []const u64, index: usize) bool {
+            const word: std.bit_set.IntegerBitSet(64) = .{ .mask = masks[index / 64] };
+            return word.isSet(index % 64);
         }
     };
 }
