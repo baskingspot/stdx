@@ -1,6 +1,7 @@
 //! Io-less secure randomness: a per-thread CSPRNG, lazily seeded once
 //! from the platform's secure source — the behavior of `Io.random`
-//! without the `Io`.
+//! without the `Io`. A failed seed is fatal: there is no fallback that
+//! preserves the guarantee.
 //!
 //! Thread-safety comes from isolation, std's own mechanism: every
 //! thread owns its generator, seeded on its first `fill`, so there are
@@ -11,7 +12,6 @@
 const std = @import("std");
 const linux = std.os.linux;
 const math = std.math;
-const assert = std.debug.assert;
 const testing = std.testing;
 const DefaultCsprng = std.Random.DefaultCsprng;
 const builtin = @import("builtin");
@@ -57,10 +57,25 @@ pub fn fill(buffer: []u8) void {
 /// One draw from the platform's secure source, for the seed.
 fn secureFill(buffer: []u8) void {
     switch (builtin.os.tag) {
-        // getrandom with no flags blocks until the pool is ready rather
-        // than failing, and Linux 5.6+ seeds the pool at boot — so with
-        // a caller-owned pointer the call cannot fail.
-        .linux => assert(linux.errno(linux.getrandom(buffer.ptr, buffer.len, 0)) == .SUCCESS),
+        // getrandom with no flags blocks until the pool is ready. Before
+        // Linux 5.6 a signal can interrupt that wait, and the call returns
+        // EINTR; it can also return a short count. Retry both, the way
+        // std's randomSecure does. Any other error means the process has no
+        // entropy source, which no fallback can repair.
+        .linux => {
+            var rest: []u8 = buffer;
+            while (rest.len != 0) {
+                const rc = linux.getrandom(rest.ptr, rest.len, 0);
+                switch (linux.errno(rc)) {
+                    .SUCCESS => rest = rest[@intCast(rc)..],
+                    .INTR => continue,
+                    else => |e| std.debug.panic(
+                        "stdx: getrandom failed with {t}; no secure entropy source",
+                        .{e},
+                    ),
+                }
+            }
+        },
         .macos => std.c.arc4random_buf(buffer.ptr, buffer.len),
         else => unreachable,
     }
