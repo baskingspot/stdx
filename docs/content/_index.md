@@ -301,17 +301,31 @@ An empty or malformed string returns `error.InvalidCharacter`. A number too larg
 
 # Binary encoding
 
+A binary format fixes the width and byte order of each field. `wire.Writer` writes both into storage that the caller owns. The writer moves forward only, and it never allocates.
+
 ## Write a message
 
-`wire.Writer(.big)` writes big-endian integers, enums, and byte slices into storage the caller owns. `reserve` returns a slot that the caller fills later, for a length or checksum that is not known until the body is written.
+`wire.Writer(.big)` writes big-endian integers, enums, and byte slices. It writes integers of any byte width, including `u24`, `u48`, and `u128`. Signed values are two's complement, and an enum is written as its backing integer. `buffered` returns the bytes written so far. To write a range out of band, take `unusedCapacitySlice`, write into it, and call `advance` with the count.
+
+`reserve` returns a slot that the caller fills later. Use it for a length or checksum that is not known until the body is written. The example reserves a 24-bit body length, writes the body, and fills the slot with `std.mem.writeInt`.
 
 ```zig
 {{ load_data(path="examples/wire_backpatch.zig", format="plain") | trim_end }}
 ```
 
-Each fallible method has an `AssumeCapacity` form. Use it after the code has checked the size. In Debug and ReleaseSafe builds, a wrong assumption panics. In ReleaseFast the check is omitted.
+## Choose the byte order
 
-The byte order is a comptime parameter. `wire.Writer(.big)` and `wire.Writer(.little)` are different types, so each fixed-width store compiles to its own order. Byte slices and reserved slots are order-agnostic. Integers of any byte width work, including `u24`, `u48`, and `u128`. Signed values are two's complement. An enum is written as its backing integer.
+The byte order is a comptime parameter, so `wire.Writer(.big)` and `wire.Writer(.little)` are different types. Each fixed-width store compiles to its own order, and the choice costs nothing at runtime. The example's second test writes a little-endian field.
+
+Byte slices and reserved slots are order-agnostic. A protocol with a mixed byte order writes the exceptional field with `std.mem.writeInt` directly.
+
+## Handle a full buffer
+
+Every fallible method has two forms. The checked form returns `error.NoSpaceLeft`. The `AssumeCapacity` form asserts the bound: it panics in Debug and ReleaseSafe, and ReleaseFast removes the check. Use the checked form when the size depends on input. Use the unchecked form when a prior check or a fixed maximum proves the fit.
+
+## Know the limits
+
+The writer writes fixed-width integers and enums, byte slices, and slots. It does not write varints, bit-packed fields, or a different byte order per field. A protocol that needs those writes the field with `std.mem` or its own codec.
 
 # Base32
 

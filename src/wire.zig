@@ -14,6 +14,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const testing = std.testing;
+const writeInt = std.mem.writeInt;
 
 /// A forward-only writer of big- or little-endian values into caller-owned
 /// bytes.
@@ -33,6 +34,7 @@ pub fn Writer(comptime endian: std.builtin.Endian) type {
         /// One past the last written byte.
         end: usize,
 
+        /// A writer over no storage. Only zero-length writes fit.
         pub const empty: Self = .{ .buffer = &.{}, .end = 0 };
 
         /// Use `buffer` as the whole capacity. The writer starts empty.
@@ -40,6 +42,7 @@ pub fn Writer(comptime endian: std.builtin.Endian) type {
             return .{ .buffer = buffer, .end = 0 };
         }
 
+        /// The whole storage length.
         pub fn capacity(self: *const Self) usize {
             return self.buffer.len;
         }
@@ -55,11 +58,13 @@ pub fn Writer(comptime endian: std.builtin.Endian) type {
             return self.buffer[0..self.end];
         }
 
-        /// The free tail. Write into this slice, then call `advance`.
+        /// The free tail. Write into this slice, then call `advance`. The slice
+        /// is only valid until the next append or advance.
         pub fn unusedCapacitySlice(self: *Self) []u8 {
             return self.buffer[self.end..];
         }
 
+        /// The number of free bytes.
         pub fn unusedCapacityLen(self: *const Self) usize {
             return self.buffer.len - self.end;
         }
@@ -76,7 +81,8 @@ pub fn Writer(comptime endian: std.builtin.Endian) type {
             self.advanceAssumeCapacity(n);
         }
 
-        /// `advance` without the error return. Asserts the bound.
+        /// `advance` without the error return. Asserts
+        /// `n <= unusedCapacityLen()`.
         pub fn advanceAssumeCapacity(self: *Self, n: usize) void {
             assert(n <= self.buffer.len - self.end);
             self.end += n;
@@ -100,7 +106,7 @@ pub fn Writer(comptime endian: std.builtin.Endian) type {
                 .int => {
                     const n = comptime wireSize(T);
                     assert(n <= self.buffer.len - self.end);
-                    std.mem.writeInt(T, self.destination(n), value, endian);
+                    writeInt(T, self.destination(n), value, endian);
                     self.end += n;
                 },
                 .@"enum" => |info| self.appendAssumeCapacity(info.tag_type, @intFromEnum(value)),
@@ -248,7 +254,7 @@ test Writer {
     var framed: Big = .init(&framed_storage);
     const len_slot = try framed.reserve(2);
     try framed.appendSlice("body");
-    std.mem.writeInt(u16, len_slot, @intCast(framed.buffered().len - 2), .big);
+    writeInt(u16, len_slot, @intCast(framed.buffered().len - 2), .big);
     try testing.expectEqualSlices(u8, "\x00\x04body", framed.buffered());
 
     // The unchecked forms take the same path once the bound holds.
