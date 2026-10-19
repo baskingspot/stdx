@@ -7,3 +7,4 @@ zig-pkg/
 docs/public/
 docs/static/api/
 docs/themes/
+docs/content/changelog.md
