@@ -6,6 +6,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const base32_token = @import("base32_token.zig");
+pub const containers_bitset_scratch = @import("containers_bitset_scratch.zig");
 pub const containers_bloom = @import("containers_bloom.zig");
 pub const containers_bounded_map = @import("containers_bounded_map.zig");
 pub const containers_buffer_array = @import("containers_buffer_array.zig");
@@ -18,6 +19,7 @@ pub const containers_set = @import("containers_set.zig");
 pub const containers_static_map = @import("containers_static_map.zig");
 pub const containers_swiss_map = @import("containers_swiss_map.zig");
 pub const net_classify = @import("net_classify.zig");
+pub const net_host_port = @import("net_host_port.zig");
 pub const net_key = @import("net_key.zig");
 pub const net_parse = @import("net_parse.zig");
 pub const net_prefix = @import("net_prefix.zig");

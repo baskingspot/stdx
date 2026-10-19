@@ -425,7 +425,8 @@ pub const Ip4Endpoint = struct {
     }
 
     /// Parse the address part from dotted-quad notation; the port rides
-    /// along, not from the string — a `host:port` split is caller policy.
+    /// along, not from the string. `HostPort.parse` splits config text that
+    /// carries both.
     pub fn parse(buf: []const u8, port: u16) Ip4.ParseError!Ip4Endpoint {
         return .{ .bytes = (try Ip4.parse(buf)).bytes, .port = port };
     }
@@ -461,6 +462,69 @@ pub const Ip4Endpoint = struct {
     }
 };
 
+/// A host and port split from config text.
+///
+/// The bracket and colon rules follow Go's `net.SplitHostPort`. The config
+/// policy is added here: a default port, a numeric `u16`, and no empty host,
+/// empty port, or port 0. The host is not validated as a name or an address;
+/// that stays the caller's policy.
+pub const HostPort = struct {
+    host: []const u8,
+    port: u16,
+
+    pub const Error = error{
+        /// The text before the port is empty.
+        EmptyHost,
+        /// A colon is present and the port text is empty.
+        EmptyPort,
+        /// The port is not a decimal value in 1..65535.
+        InvalidPort,
+        /// An unbracketed host contains more than one colon.
+        UnbracketedIpv6,
+        /// A bracketed host has no closing `]`, or text after `]` that is not
+        /// a colon.
+        InvalidBrackets,
+    };
+
+    /// Split `text` into a host and a port. The text may be `host`,
+    /// `host:port`, `[host]`, or `[host]:port`. A missing port takes
+    /// `default_port`.
+    ///
+    /// Brackets are removed from the returned host.
+    pub fn parse(text: []const u8, default_port: u16) Error!HostPort {
+        if (text.len == 0) return error.EmptyHost;
+
+        if (text[0] == '[') {
+            const close = mem.indexOfScalar(u8, text, ']') orelse
+                return error.InvalidBrackets;
+            const host = text[1..close];
+            if (host.len == 0) return error.EmptyHost;
+            if (close + 1 == text.len) return .{ .host = host, .port = default_port };
+            if (text[close + 1] != ':') return error.InvalidBrackets;
+            return .{ .host = host, .port = try parsePort(text[close + 2 ..]) };
+        }
+
+        const colon = mem.lastIndexOfScalar(u8, text, ':') orelse
+            return .{ .host = text, .port = default_port };
+        const host = text[0..colon];
+        if (host.len == 0) return error.EmptyHost;
+        // A second colon in the host means an IPv6 address without brackets,
+        // where the port separator is ambiguous.
+        if (mem.indexOfScalar(u8, host, ':') != null) return error.UnbracketedIpv6;
+        return .{ .host = host, .port = try parsePort(text[colon + 1 ..]) };
+    }
+
+    fn parsePort(text: []const u8) Error!u16 {
+        if (text.len == 0) return error.EmptyPort;
+        for (text) |byte| {
+            if (!std.ascii.isDigit(byte)) return error.InvalidPort;
+        }
+        const port = std.fmt.parseInt(u16, text, 10) catch return error.InvalidPort;
+        if (port == 0) return error.InvalidPort;
+        return port;
+    }
+};
+
 test Ip4Endpoint {
     const loopback = Ip4Endpoint.init(.{ 127, 0, 0, 1 }, 5432);
     try testing.expectEqual(@as(u16, 5432), loopback.port);
@@ -490,4 +554,42 @@ test Ip4Endpoint {
     var buf: [32]u8 = undefined;
     const formatted = try std.fmt.bufPrint(&buf, "{f}", .{loopback});
     try testing.expectEqualStrings("127.0.0.1:5432", formatted);
+}
+
+test HostPort {
+    // A default port when the text has none.
+    const defaulted = try HostPort.parse("example.com", 53);
+    try testing.expectEqualStrings("example.com", defaulted.host);
+    try testing.expectEqual(@as(u16, 53), defaulted.port);
+
+    // An explicit port.
+    const explicit = try HostPort.parse("10.0.0.1:853", 53);
+    try testing.expectEqualStrings("10.0.0.1", explicit.host);
+    try testing.expectEqual(@as(u16, 853), explicit.port);
+
+    // Bracketed IPv6, with and without a port.
+    const bracket_default = try HostPort.parse("[::1]", 53);
+    try testing.expectEqualStrings("::1", bracket_default.host);
+    try testing.expectEqual(@as(u16, 53), bracket_default.port);
+    const bracket_port = try HostPort.parse("[2001:db8::1]:853", 53);
+    try testing.expectEqualStrings("2001:db8::1", bracket_port.host);
+    try testing.expectEqual(@as(u16, 853), bracket_port.port);
+
+    // Unbracketed IPv6 is ambiguous.
+    try testing.expectError(error.UnbracketedIpv6, HostPort.parse("::1", 53));
+    try testing.expectError(error.UnbracketedIpv6, HostPort.parse("1:2:3", 53));
+
+    // Empty and invalid ports.
+    try testing.expectError(error.EmptyPort, HostPort.parse("[::1]:", 53));
+    try testing.expectError(error.EmptyPort, HostPort.parse("example.com:", 53));
+    try testing.expectError(error.InvalidPort, HostPort.parse("1.2.3.4:0", 53));
+    try testing.expectError(error.InvalidPort, HostPort.parse("1.2.3.4:65536", 53));
+    try testing.expectError(error.InvalidPort, HostPort.parse("1.2.3.4:-1", 53));
+
+    // Empty hosts and malformed brackets.
+    try testing.expectError(error.EmptyHost, HostPort.parse("", 53));
+    try testing.expectError(error.EmptyHost, HostPort.parse(":53", 53));
+    try testing.expectError(error.EmptyHost, HostPort.parse("[]:53", 53));
+    try testing.expectError(error.InvalidBrackets, HostPort.parse("[::1", 53));
+    try testing.expectError(error.InvalidBrackets, HostPort.parse("[::1]x", 53));
 }

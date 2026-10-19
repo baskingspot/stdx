@@ -11,11 +11,11 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 
 ## What is in it
 
-- [Fixed-capacity containers](https://baskingspot.dev/stdx/#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. No allocator and no `deinit`; `Array` owns its storage, and `Slice` and `Queue` borrow it.
+- [Fixed-capacity containers](https://baskingspot.dev/stdx/#fixed-capacity-containers): lists, queues, bitsets, maps, sets, Bloom filters, and comptime lookup tables. No allocator and no `deinit`; `Array` owns its storage, and `Slice` and `Queue` borrow it.
 - [Strict parsing](https://baskingspot.dev/stdx/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
 - [Binary encoding](https://baskingspot.dev/stdx/#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, in big or little endian selected at comptime, with a reserved slot for a length or checksum written later.
 - [Base32](https://baskingspot.dev/stdx/#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
-- [IP addresses](https://baskingspot.dev/stdx/#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
+- [IP addresses](https://baskingspot.dev/stdx/#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks. `HostPort` splits `host:port` config text.
 - [UUIDs](https://baskingspot.dev/stdx/#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
 - [Timekeeping](https://baskingspot.dev/stdx/#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, RFC 3339 formatting, and a log rate limiter.
 - [Timers](https://baskingspot.dev/stdx/#timers): a caller-driven set of deadlines over `Io.Timestamp`, with callbacks, removal by handle, and period re-arm without drift.
