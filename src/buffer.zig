@@ -106,10 +106,18 @@ pub fn ArrayAligned(
         /// `@intCast` traps — and in ReleaseFast not even there — and
         /// it caught only values above `Index`'s max, not above
         /// capacity. The panic is the contract: it traps in every
-        /// mode, where an `assert` compiles out of ReleaseFast and a
-        /// length past capacity becomes a silent out-of-bounds slice.
+        /// mode. Use `resizeUnchecked` when the caller has proved the
+        /// bound.
         pub fn resize(self: *Self, new_len: usize) void {
             if (new_len > self.buffer.len) @panic("buffer.Array.resize past capacity");
+            self.resizeUnchecked(new_len);
+        }
+
+        /// `resize` without the panic check. Asserts
+        /// `new_len <= capacity`, so an overstep is undefined behavior in
+        /// ReleaseFast.
+        pub fn resizeUnchecked(self: *Self, new_len: usize) void {
+            assert(new_len <= self.buffer.len);
             self.len = @intCast(new_len);
         }
 
@@ -265,6 +273,13 @@ pub fn Slice(comptime T: type) type {
 
         pub fn retainFrom(self: *Self, items: []const T) error{NoSpaceLeft}!void {
             if (items.len > self.buffer.len) return error.NoSpaceLeft;
+            self.retainFromAssumeCapacity(items);
+        }
+
+        /// `retainFrom` without the error return. Asserts
+        /// `items.len <= capacity`.
+        pub fn retainFromAssumeCapacity(self: *Self, items: []const T) void {
+            assert(items.len <= self.buffer.len);
             @memmove(self.buffer[0..items.len], items);
             self.len = items.len;
         }
@@ -277,10 +292,18 @@ pub fn Slice(comptime T: type) type {
 
         /// Set the length, e.g. after writing into the raw buffer out
         /// of band. The panic is the contract: it traps in every mode.
-        /// See `Array`'s `resize` for why the check cannot be an
-        /// `assert`.
+        /// See `Array`'s `resize`. Use `resizeUnchecked` when the caller
+        /// has proved the bound.
         pub fn resize(self: *Self, new_len: usize) void {
             if (new_len > self.buffer.len) @panic("buffer.Slice.resize past capacity");
+            self.resizeUnchecked(new_len);
+        }
+
+        /// `resize` without the panic check. Asserts
+        /// `new_len <= capacity`, so an overstep is undefined behavior in
+        /// ReleaseFast.
+        pub fn resizeUnchecked(self: *Self, new_len: usize) void {
+            assert(new_len <= self.buffer.len);
             self.len = @intCast(new_len);
         }
 
@@ -338,6 +361,14 @@ test Slice {
     var five: [5]Header = undefined;
     for (&five) |*h| h.* = .{ .a = 0, .b = "" };
     try testing.expectError(error.NoSpaceLeft, hbuf.appendSlice(&five));
+
+    // The unchecked pair skips the error path after the caller checks.
+    var un: Slice(u8) = .init(&storage);
+    try un.appendSlice("abc");
+    un.retainFromAssumeCapacity(un.constSlice()[1..]);
+    try testing.expectEqualStrings("bc", un.constSlice());
+    un.resizeUnchecked(1);
+    try testing.expectEqualStrings("b", un.constSlice());
 }
 
 /// A first-in first-out queue over caller-owned storage.

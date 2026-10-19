@@ -343,6 +343,12 @@ pub fn Buffer(comptime T: type, comptime buffer_capacity: comptime_int) type {
         /// `error.NoSpaceLeft` if they do not all fit.
         pub fn appendSlice(self: *Self, values: []const T) error{NoSpaceLeft}!void {
             if (values.len > self.remainingCapacity()) return error.NoSpaceLeft;
+            self.appendSliceAssumeCapacity(values);
+        }
+
+        /// `appendSlice` without the error return. Asserts the capacity for
+        /// every value.
+        pub fn appendSliceAssumeCapacity(self: *Self, values: []const T) void {
             for (values) |value| self.appendAssumeCapacity(value);
         }
 
@@ -780,4 +786,9 @@ test "Buffer: edge operations" {
     list.orderedRemove(2);
     try testing.expectEqualSlices(u32, &.{ 1, 2 }, list.items(.a));
     try testing.expectEqual(@as(usize, 2), list.remainingCapacity());
+
+    // appendSliceAssumeCapacity extends by every value.
+    list.appendSliceAssumeCapacity(&.{ .{ .a = 3, .c = 'c' }, .{ .a = 4, .c = 'd' } });
+    try testing.expectEqualSlices(u32, &.{ 1, 2, 3, 4 }, list.items(.a));
+    try testing.expectEqual(@as(usize, 0), list.remainingCapacity());
 }

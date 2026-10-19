@@ -49,6 +49,13 @@ pub fn Custom(comptime K: type, comptime Context: type, capacity: comptime_int) 
             return !result.found_existing;
         }
 
+        /// `add` without the error return. Asserts the set has room for a
+        /// new key.
+        pub fn addAssumeCapacity(self: *Self, key: K) bool {
+            const result = self.map.getOrPutAssumeCapacity(key);
+            return !result.found_existing;
+        }
+
         /// Remove `key`. Returns false when absent.
         pub fn remove(self: *Self, key: K) bool {
             return self.map.orderedRemove(key);
@@ -85,6 +92,11 @@ pub fn Custom(comptime K: type, comptime Context: type, capacity: comptime_int) 
         /// reached capacity — the adds that fit are kept.
         pub fn unite(self: *Self, other: *Self) error{NoSpaceLeft}!void {
             for (other.map.keys()) |key| _ = try self.add(key);
+        }
+
+        /// `unite` without the error return. Asserts room for every new key.
+        pub fn uniteAssumeCapacity(self: *Self, other: *Self) void {
+            for (other.map.keys()) |key| _ = self.addAssumeCapacity(key);
         }
 
         /// Remove every key of `other`. Returns nothing: absent keys are
@@ -131,10 +143,10 @@ pub fn String(comptime capacity: comptime_int) type {
 
 test "add, contains, remove, count" {
     var set: Auto(u32, 8) = .empty;
-    try testing.expect(try set.add(1));
-    try testing.expect(try set.add(2));
+    try testing.expect(set.addAssumeCapacity(1));
+    try testing.expect(set.addAssumeCapacity(2));
     // duplicate: no count change
-    try testing.expect(!try set.add(1));
+    try testing.expect(!set.addAssumeCapacity(1));
     try testing.expect(set.count() == 2);
     try testing.expect(set.contains(1));
     try testing.expect(!set.contains(3));
@@ -216,6 +228,14 @@ test "unite at capacity" {
     // The adds that fit are kept.
     try testing.expect(a.contains(3));
     try testing.expect(a.contains(4));
+
+    // uniteAssumeCapacity has room for the whole union.
+    var full: Auto(u32, 8) = .empty;
+    var other: Auto(u32, 8) = .empty;
+    for ([_]u32{ 1, 2 }) |k| _ = full.addAssumeCapacity(k);
+    for ([_]u32{ 3, 4 }) |k| _ = other.addAssumeCapacity(k);
+    full.uniteAssumeCapacity(&other);
+    try testing.expectEqual(@as(usize, 4), full.count());
 }
 
 test "String construction" {

@@ -322,6 +322,13 @@ pub fn Custom(
             result.value_ptr.* = value;
         }
 
+        /// Insert or overwrite `key`, asserting the map has room for a new
+        /// key. An overwrite at capacity takes the checked `put`.
+        pub fn putAssumeCapacity(self: *Self, key: K, value: V) void {
+            const result = self.getOrPutAssumeCapacity(key);
+            result.value_ptr.* = value;
+        }
+
         /// Find or insert `key`. On a full map an existing key is still found;
         /// a new key returns `error.NoSpaceLeft`. A new entry's value is
         /// undefined until the caller initializes `value_ptr`.
@@ -627,16 +634,18 @@ test "empty" {
 test "put" {
     var map: Auto(u32, u32, 4) = .init;
 
-    try map.put(3, 30);
+    map.putAssumeCapacity(3, 30);
+    map.putAssumeCapacity(3, 31);
+    try testing.expectEqual(@as(?u32, 31), map.get(3));
     try map.put(1, 10);
     try map.put(2, 20);
     try testing.expectEqualSlices(u32, &.{ 3, 1, 2 }, map.keys());
-    try testing.expectEqualSlices(u32, &.{ 30, 10, 20 }, map.values());
+    try testing.expectEqualSlices(u32, &.{ 31, 10, 20 }, map.values());
 
     // An overwrite replaces the value in place: the position is untouched.
     try map.put(1, 11);
     try testing.expectEqualSlices(u32, &.{ 3, 1, 2 }, map.keys());
-    try testing.expectEqualSlices(u32, &.{ 30, 11, 20 }, map.values());
+    try testing.expectEqualSlices(u32, &.{ 31, 11, 20 }, map.values());
     try testing.expectEqual(@as(?u32, 11), map.get(1));
     try testing.expectEqual(@as(usize, 3), @as(usize, map.count()));
 

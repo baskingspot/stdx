@@ -76,6 +76,12 @@ pub fn Custom(
         pub fn pushSlice(self: *Self, items: []const T) error{NoSpaceLeft}!void {
             const remaining: usize = capacity - self.len;
             if (items.len > remaining) return error.NoSpaceLeft;
+            self.pushSliceAssumeCapacity(items);
+        }
+
+        /// `pushSlice` without the error return. Asserts the queue has room
+        /// for every element.
+        pub fn pushSliceAssumeCapacity(self: *Self, items: []const T) void {
             for (items) |elem| self.pushAssumeCapacity(elem);
         }
 
@@ -278,6 +284,15 @@ test Custom {
     }
     try testing.expectEqual(@as(usize, 4), popped);
     try testing.expectEqual(@as(?u32, null), equal.peek());
+
+    // pushSliceAssumeCapacity fills exactly up to the boundary.
+    var slice_assumed: Small = .empty;
+    slice_assumed.pushSliceAssumeCapacity(&.{ 4, 3 });
+    slice_assumed.pushSliceAssumeCapacity(&.{ 2, 1 });
+    try testing.expectEqual(@as(Small.Index, 4), slice_assumed.count());
+    for ([_]u32{ 1, 2, 3, 4 }) |elem| {
+        try testing.expectEqual(@as(?u32, elem), slice_assumed.pop());
+    }
 
     // pushAssumeCapacity fills exactly up to the boundary.
     var assumed: Small = .empty;
