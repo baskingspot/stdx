@@ -7,8 +7,8 @@
         // The test runner and the bench engine. Lazy: only the root build
         // uses it, and build.zig returns early for a consumer.
         .testingx = .{
-            .url = "git+https://github.com/baskingspot/testingx#06447f7c3db34227ef53cdcd12592cd704c633dc",
-            .hash = "testingx-0.0.0-ib95-92sAgAkUFr8FJ30O3H07rhemfWpAGBmG9lwFGIY",
+            .url = "git+https://github.com/baskingspot/testingx#6fb61e21bf7edbe5518e3709b3e9437f05f73eeb",
+            .hash = "testingx-0.0.0-ib95-4yvAgBPHm1qtBF-TRPkkPby7ogCZo42IvdQtErN",
             .lazy = true,
         },
     },
