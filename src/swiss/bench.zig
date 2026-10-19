@@ -4,7 +4,7 @@
 //! decides, robin wins. Large (7M in 8M, metadata past cache): probe traffic
 //! decides, swiss wins. The pairing is the IDEAS ledger's story.
 
-const bench = @import("benchmark");
+const testingx = @import("testingx");
 
 const std = @import("std");
 
@@ -62,7 +62,7 @@ fn fillLarge(
     }
 }
 
-pub fn benchmarkSwissSmall(b: *bench.B) !void {
+pub fn benchmarkSwissSmall(b: *testingx.B) !void {
     var map: swiss.Auto(u64, u64) = .empty;
     defer map.deinit(b.allocator);
     for (small_keys) |k| try map.put(b.allocator, k, k);
@@ -75,7 +75,7 @@ pub fn benchmarkSwissSmall(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkSwissSmallMiss(b: *bench.B) !void {
+pub fn benchmarkSwissSmallMiss(b: *testingx.B) !void {
     var map: swiss.Auto(u64, u64) = .empty;
     defer map.deinit(b.allocator);
     for (small_keys) |k| try map.put(b.allocator, k, k);
@@ -88,7 +88,7 @@ pub fn benchmarkSwissSmallMiss(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkSwissLarge(b: *bench.B) !void {
+pub fn benchmarkSwissLarge(b: *testingx.B) !void {
     var map: swiss.Auto(u32, u32) = .empty;
     defer map.deinit(b.allocator);
     try fillLarge(b.allocator, &map, &large_hit_keys, &large_miss_keys);
@@ -101,7 +101,7 @@ pub fn benchmarkSwissLarge(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkSwissLargeMiss(b: *bench.B) !void {
+pub fn benchmarkSwissLargeMiss(b: *testingx.B) !void {
     var map: swiss.Auto(u32, u32) = .empty;
     defer map.deinit(b.allocator);
     try fillLarge(b.allocator, &map, &large_hit_keys, &large_miss_keys);
@@ -118,7 +118,7 @@ pub fn benchmarkSwissLargeMiss(b: *bench.B) !void {
 /// the doubling chain, so allocs/op is the true count (~3 per doubling,
 /// not amortized to a printed zero), and B/op is the sum of every
 /// intermediate table size.
-pub fn benchmarkSwissGrow(b: *bench.B) !void {
+pub fn benchmarkSwissGrow(b: *testingx.B) !void {
     var map: swiss.Auto(u64, u64) = .empty;
     defer map.deinit(b.allocator);
     while (try b.loop()) {

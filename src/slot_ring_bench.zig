@@ -4,7 +4,7 @@
 //! is a CAS loop (Vyukov's shape), so the contended number is the real
 //! cost: one successful RMW plus a retry share.
 
-const bench = @import("benchmark");
+const testingx = @import("testingx");
 
 const std = @import("std");
 const Thread = std.Thread;
@@ -44,7 +44,7 @@ fn claimCommitReadRelease(ring: anytype, read_pos: *u64) !void {
 
 /// One producer, an empty ring: the floor cost of a full message round
 /// trip — claim, payload copy, commit, read, release.
-pub fn benchmarkSlotRingRoundTrip(b: *bench.B) !void {
+pub fn benchmarkSlotRingRoundTrip(b: *testingx.B) !void {
     var ring: Ring = undefined;
     try ring.init(b.allocator, undefined, num_slots);
     defer ring.deinit(b.allocator);
@@ -60,7 +60,7 @@ pub fn benchmarkSlotRingRoundTrip(b: *bench.B) !void {
 /// the burst carries the refusal cost too. The thread spawn is a measured
 /// share of this op; `benchmarkSlotRingThreadSpawn` is the baseline that
 /// subtracts it.
-pub fn benchmarkSlotRingContendedBurst(b: *bench.B) !void {
+pub fn benchmarkSlotRingContendedBurst(b: *testingx.B) !void {
     var ring: Ring = undefined;
     try ring.init(b.allocator, undefined, num_slots);
     defer ring.deinit(b.allocator);
@@ -98,7 +98,7 @@ pub fn benchmarkSlotRingContendedBurst(b: *bench.B) !void {
 /// Four thread spawns and joins with no ring work: the setup share of
 /// `benchmarkSlotRingContendedBurst`, so the claim-commit cost is
 /// recoverable from the suite itself.
-pub fn benchmarkSlotRingThreadSpawn(b: *bench.B) !void {
+pub fn benchmarkSlotRingThreadSpawn(b: *testingx.B) !void {
     const Idle = struct {
         fn run() void {}
     };
@@ -114,7 +114,7 @@ pub fn benchmarkSlotRingThreadSpawn(b: *bench.B) !void {
 /// iteration over a ring the producer keeps one slot ahead. The
 /// claim-commit that refills the drained slot is amortized into the same
 /// op, so the number reads as the consumer pair plus one producer pair.
-pub fn benchmarkSlotRingDrainSteady(b: *bench.B) !void {
+pub fn benchmarkSlotRingDrainSteady(b: *testingx.B) !void {
     var ring: Ring = undefined;
     try ring.init(b.allocator, undefined, num_slots);
     defer ring.deinit(b.allocator);
@@ -130,7 +130,7 @@ pub fn benchmarkSlotRingDrainSteady(b: *bench.B) !void {
 /// runs the gated RMW on the wake word and no commit writes the fd, so
 /// no syscall is in the loop. The number sits in the futex-commit
 /// range, because the same RMW is all either flavor pays.
-pub fn benchmarkSlotRingEventfdDisarmed(b: *bench.B) !void {
+pub fn benchmarkSlotRingEventfdDisarmed(b: *testingx.B) !void {
     var ring: EventfdRing = undefined;
     try ring.init(b.allocator, undefined, num_slots);
     defer ring.deinit(b.allocator);
@@ -145,7 +145,7 @@ pub fn benchmarkSlotRingEventfdDisarmed(b: *bench.B) !void {
 /// syscall is the flavor's cost, and it dominates the pair. A real
 /// consumer disarms on every wake, so this measures the armed-window
 /// burst cost, not the steady state.
-pub fn benchmarkSlotRingEventfdArmed(b: *bench.B) !void {
+pub fn benchmarkSlotRingEventfdArmed(b: *testingx.B) !void {
     var ring: EventfdRing = undefined;
     try ring.init(b.allocator, undefined, num_slots);
     defer ring.deinit(b.allocator);
@@ -159,9 +159,9 @@ pub fn benchmarkSlotRingEventfdArmed(b: *bench.B) !void {
 /// The `.futex` flavor's round trip with no consumer waiter armed — the
 /// common case: the commit's notify is one RMW on the wake word and no
 /// syscall.
-pub fn benchmarkSlotRingFutexCommit(b: *bench.B) !void {
+pub fn benchmarkSlotRingFutexCommit(b: *testingx.B) !void {
     var ring: FutexRing = undefined;
-    try ring.init(b.allocator, b.timer.io, num_slots);
+    try ring.init(b.allocator, b.io, num_slots);
     defer ring.deinit(b.allocator);
 
     claimCommit(&ring);

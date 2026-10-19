@@ -2,7 +2,7 @@
 //! crossover suite against `swiss.Auto` — the incumbent baseline. Same
 //! keys, same capacities, both sizes (see swiss/bench.zig for the story).
 
-const bench = @import("benchmark");
+const testingx = @import("testingx");
 
 const stdx = @import("stdx");
 const robin = stdx.bounded_array_hash_map;
@@ -53,7 +53,7 @@ fn ensureLargeFilled() !void {
     }
 }
 
-pub fn benchmarkRobinSmall(b: *bench.B) !void {
+pub fn benchmarkRobinSmall(b: *testingx.B) !void {
     var map: robin.Auto(u64, u64, small_capacity) = .empty;
     for (small_keys) |k| try map.put(k, k);
     var sink: u64 = 0;
@@ -65,7 +65,7 @@ pub fn benchmarkRobinSmall(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkRobinSmallMiss(b: *bench.B) !void {
+pub fn benchmarkRobinSmallMiss(b: *testingx.B) !void {
     var map: robin.Auto(u64, u64, small_capacity) = .empty;
     for (small_keys) |k| try map.put(k, k);
     var sink: u64 = 0;
@@ -77,7 +77,7 @@ pub fn benchmarkRobinSmallMiss(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkRobinLarge(b: *bench.B) !void {
+pub fn benchmarkRobinLarge(b: *testingx.B) !void {
     try ensureLargeFilled();
     var sink: u64 = 0;
     while (try b.loop()) {
@@ -88,7 +88,7 @@ pub fn benchmarkRobinLarge(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkRobinLargeMiss(b: *bench.B) !void {
+pub fn benchmarkRobinLargeMiss(b: *testingx.B) !void {
     try ensureLargeFilled();
     var sink: u64 = 0;
     while (try b.loop()) {

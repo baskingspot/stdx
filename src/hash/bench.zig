@@ -2,7 +2,7 @@
 //! on small keys (4/8/16 bytes, the author's own workload shape) and a
 //! 16 KiB buffer.
 
-const bench = @import("benchmark");
+const testingx = @import("testingx");
 
 const std = @import("std");
 
@@ -41,7 +41,7 @@ const hash_large = blk: {
     break :blk data;
 };
 
-pub fn benchmarkRapidhashSmall(b: *bench.B) !void {
+pub fn benchmarkRapidhashSmall(b: *testingx.B) !void {
     var sink: u64 = 0;
     var i: usize = 0;
     while (try b.loop()) {
@@ -52,7 +52,7 @@ pub fn benchmarkRapidhashSmall(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkWyhashSmall(b: *bench.B) !void {
+pub fn benchmarkWyhashSmall(b: *testingx.B) !void {
     var sink: u64 = 0;
     var i: usize = 0;
     while (try b.loop()) {
@@ -63,7 +63,7 @@ pub fn benchmarkWyhashSmall(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkRapidhashLarge(b: *bench.B) !void {
+pub fn benchmarkRapidhashLarge(b: *testingx.B) !void {
     var sink: u64 = 0;
     while (try b.loop()) {
         sink +%= RapidHash.hash(0, b.blackBox(&hash_large));
@@ -71,7 +71,7 @@ pub fn benchmarkRapidhashLarge(b: *bench.B) !void {
     b.keepAlive(sink);
 }
 
-pub fn benchmarkWyhashLarge(b: *bench.B) !void {
+pub fn benchmarkWyhashLarge(b: *testingx.B) !void {
     var sink: u64 = 0;
     while (try b.loop()) {
         sink +%= std.hash.Wyhash.hash(0, b.blackBox(&hash_large));

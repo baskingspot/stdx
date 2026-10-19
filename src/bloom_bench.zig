@@ -1,7 +1,7 @@
 //! The bloom module's benchmarks: steady-state `add` and `contains`
 //! cost at a 1M-key filter.
 
-const bench = @import("benchmark");
+const testingx = @import("testingx");
 
 const stdx = @import("stdx");
 const bloom = stdx.bloom;
@@ -18,7 +18,7 @@ const bloom_keys = blk: {
     break :blk ks;
 };
 
-pub fn benchmarkBloomAdd(b: *bench.B) !void {
+pub fn benchmarkBloomAdd(b: *testingx.B) !void {
     var filter: bloom.Auto(u64, bloom_capacity, 0.01) = .empty;
     var i: usize = 0;
     while (try b.loop()) {
@@ -32,7 +32,7 @@ pub fn benchmarkBloomAdd(b: *bench.B) !void {
     b.keepAlive(&filter);
 }
 
-pub fn benchmarkBloomContains(b: *bench.B) !void {
+pub fn benchmarkBloomContains(b: *testingx.B) !void {
     var filter: bloom.Auto(u64, bloom_capacity, 0.01) = .empty;
     for (bloom_keys) |key| filter.add(key);
 

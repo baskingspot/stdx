@@ -4,10 +4,11 @@
     .fingerprint = 0x5479474f829ec509, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
-        .benchmark = .{
-            .url = "git+https://github.com/mattrobenolt/zig-benchmark#5572317d18d1e5b4630950658b1628b4398a84a8",
-            .hash = "benchmark-0.1.0-JS72VhUcAQAM6gGwbJeMtNhbX7n8LQk4LIdSrRz9ljNg",
-            // Only the `bench` step imports it; test/lint builds never fetch it.
+        // The test runner and the bench engine. Lazy: only the root build
+        // uses it, and build.zig returns early for a consumer.
+        .testingx = .{
+            .url = "git+https://github.com/baskingspot/testingx#06447f7c3db34227ef53cdcd12592cd704c633dc",
+            .hash = "testingx-0.0.0-ib95-92sAgAkUFr8FJ30O3H07rhemfWpAGBmG9lwFGIY",
             .lazy = true,
         },
     },

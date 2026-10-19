@@ -37,10 +37,10 @@ test-release-safe:
 test-release-fast:
     zig build test -Doptimize=ReleaseFast --summary all
 
-[doc("Run the fuzzer with an iteration budget, for example `just fuzz 50M`. ReleaseSafe forces the LLVM backend, dodging the 0.16.0 self-hosted-backend bug in Debug fuzz mode (ziglang/zig#30655)")]
+[doc("Run the fuzzer with an iteration budget, for example `just fuzz 50M`. Uses the built-in test runner, which testingx does not replace in fuzz mode. ReleaseSafe forces the LLVM backend, dodging the 0.16.0 self-hosted-backend bug in Debug fuzz mode (ziglang/zig#30655)")]
 [group("test")]
 fuzz LIMIT="10M":
-    zig build test -Doptimize=ReleaseSafe --fuzz={{ LIMIT }}
+    zig build fuzz -Doptimize=ReleaseSafe --fuzz={{ LIMIT }}
 
 [doc("Lint: ziglint, Zig, Nix, Markdown and CSS, the workflows, and justfile formatting")]
 [group("lint")]
@@ -65,7 +65,12 @@ fmt:
 [group("ci")]
 ci: test test-release-safe test-release-fast lint doc
 
-[doc("Run benchmarks (e.g. `just bench -Doptimize=ReleaseFast -- --benchtime=250ms --filter=Swiss`)")]
+[doc("Run benchmarks (ReleaseFast by default); args pass to the binary: just bench --benchtime=250ms --filter=Swiss")]
 [group("bench")]
 bench *ARGS:
-    zig build bench {{ ARGS }}
+    zig build bench -- {{ ARGS }}
+
+[doc("Run every benchmark once: proves the suite builds and runs, without measuring")]
+[group("bench")]
+bench-smoke:
+    zig build bench -- --benchtime=8x --count=1 --no-env
