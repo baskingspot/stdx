@@ -85,6 +85,16 @@ Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
   partial literal does not compile. This is std's direction
   (`std.array_hash_map`'s `init`/`empty`, `std.PriorityQueue.empty`):
   the type system enforces the constructor, not convention.
+- Every operation that fails a bound in every build mode has an
+  unchecked form. The checked form returns `error.NoSpaceLeft` or
+  panics. The unchecked form asserts the same bound: it panics in
+  Debug and ReleaseSafe and compiles out in ReleaseFast, where an
+  overstep is undefined behavior. Name the capacity case `Assume*`
+  (`appendAssumeCapacity`, `pushSliceAssumeCapacity`) and the other
+  cases `*Unchecked` (`peekUnchecked`, `resizeUnchecked`). A method
+  whose only check is an `assert` or a slice index is already the
+  unchecked form. Checked is the default; the unchecked form takes
+  the caller's proof and skips the branch in ReleaseFast.
 - Comptime options over runtime flags when they change code shape
   (`fmt.AtoiOptions`); each configuration compiles to its own loop.
 
