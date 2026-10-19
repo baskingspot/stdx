@@ -14,7 +14,7 @@ All notable changes to stdx are recorded here. The format follows
   comptime, from `.seconds` through `.nanoseconds`.
 - `net.HostPort.parse`: split `host`, `host:port`, `[host]`, and `[host]:port`
   config text with a default port.
-- `bitset.Scratch(capacity)`: a fixed-capacity bitset for reused workspaces;
+- `bit_set.Scratch(capacity)`: a fixed-capacity bitset for reused workspaces;
   reset clears only the validity map.
 - `heap.SizeClassPool`: a fallible byte pool over caller-owned storage, with
   per-class live accounting.

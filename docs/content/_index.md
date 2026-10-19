@@ -91,7 +91,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | Module                                                       | Use it for                                                                                                                                                                        |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`base32`](api/#stdx.base32)                                 | Crockford base32 codec for fixed-shape machine tokens: lowercase-only `encode` and `decode`, where the decode is the validation.                                                  |
-| [`bitset`](api/#stdx.bitset)                                 | Fixed-capacity bitsets. `Scratch` resets without clearing the dirty backing words.                                                                                                |
+| [`bit_set`](api/#stdx.bit_set)                               | Fixed-capacity bitsets. `Scratch` resets without clearing the dirty backing words.                                                                                                |
 | [`bloom`](api/#stdx.bloom)                                   | Bloom filters with a fixed capacity.                                                                                                                                              |
 | [`bounded_array_hash_map`](api/#stdx.bounded_array_hash_map) | An insertion-ordered hash map with a fixed capacity and no allocator.                                                                                                             |
 | [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                                         |
@@ -131,7 +131,7 @@ Find the need in the table. Then read the section for that type in [Fixed-capaci
 | The smallest item first                               | `priority_queue.Custom`                    | A binary heap. You supply the comparison.                                               |
 | A map that keeps insertion order                      | `bounded_array_hash_map.Auto` or `.String` | Fixed capacity.                                                                         |
 | A set                                                 | `set.Auto` or `.String`                    | A map with no values, plus set algebra.                                                 |
-| A set of indices in a reused workspace                | `bitset.Scratch`                           | Reset clears only a validity map.                                                       |
+| A set of indices in a reused workspace                | `bit_set.Scratch`                          | Reset clears only a validity map.                                                       |
 | A constant lookup table                               | `static_map.Auto` or `.String`             | Built at compile time from a literal. Not the same as `std.StaticStringMap`: see below. |
 | A cheap "have I seen this" test                       | `bloom.Auto`                               | Can report a key that was never added.                                                  |
 | A map that grows                                      | `swiss.Auto` or `.String`                  | Uses an allocator. Order is not insertion order.                                        |
@@ -235,13 +235,13 @@ When the map is full, `put` fails for a new key. It still updates an existing ke
 
 ## Reuse a bitset
 
-`bitset.Scratch(capacity)` is a fixed-capacity set of indices for a workspace that runs many requests. `init` clears only a small validity map. A data word is zeroed the first time `set` touches it, so a reset costs the words a request touched, not the whole capacity.
+`bit_set.Scratch(capacity)` is a fixed-capacity set of indices for a workspace that runs many requests. It has no by-value constructor: declare it `undefined` and call `clear` once, because returning or copying the value would copy the whole backing. The same call starts each later generation. A data word is zeroed the first time `set` touches it, so a reset costs the words a request touched, not the whole capacity.
 
 ```zig
-{{ load_data(path="examples/containers_bitset_scratch.zig", format="plain") | trim_end }}
+{{ load_data(path="examples/containers_bit_set_scratch.zig", format="plain") | trim_end }}
 ```
 
-`unset` clears a bit. A word that was never touched reads as unset, so `unset` on it is a no-op. `clear` is the named reset for a reused workspace.
+`unset` clears a bit. A word that was never touched reads as unset, so `unset` on it is a no-op.
 
 ## Build a table at compile time
 
