@@ -94,7 +94,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`bloom`](api/#stdx.bloom)                                   | Bloom filters with a fixed capacity.                                                                                                                              |
 | [`bounded_array_hash_map`](api/#stdx.bounded_array_hash_map) | An insertion-ordered hash map with a fixed capacity and no allocator.                                                                                             |
 | [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                         |
-| [`buffer`](api/#stdx.buffer)                                 | Append buffers with a fixed capacity. `Array` owns its storage. `Slice` borrows it.                                                                               |
+| [`buffer`](api/#stdx.buffer)                                 | Fixed-capacity buffers. `Array` owns its storage. `Slice` and `Queue` borrow it, and `Queue` consumes from the front.                                             |
 | [`fmt`](api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                                                                         |
 | [`hash`](api/#stdx.hash)                                     | `RapidHash`.                                                                                                                                                      |
 | [`heap`](api/#stdx.heap)                                     | `SlabAllocator`.                                                                                                                                                  |
@@ -120,17 +120,18 @@ Most stdx containers have a fixed capacity. The capacity is part of the type, th
 
 Find the need in the table. Then read the section for that type in [Fixed-capacity containers](#fixed-capacity-containers).
 
-| You need                                  | Use                                        | Notes                                                                                   |
-| ----------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| A list with a known maximum length        | `buffer.Array`                             | Storage inside the value.                                                               |
-| The same list over memory you already own | `buffer.Slice`                             | Same methods. The capacity is the slice length.                                         |
-| One array per struct field                | `multi_array.Buffer`                       | Runtime length. `multi_array.Array` has a fixed length.                                 |
-| The smallest item first                   | `priority_queue.Custom`                    | A binary heap. You supply the comparison.                                               |
-| A map that keeps insertion order          | `bounded_array_hash_map.Auto` or `.String` | Fixed capacity.                                                                         |
-| A set                                     | `set.Auto` or `.String`                    | A map with no values, plus set algebra.                                                 |
-| A constant lookup table                   | `static_map.Auto` or `.String`             | Built at compile time from a literal. Not the same as `std.StaticStringMap`: see below. |
-| A cheap "have I seen this" test           | `bloom.Auto`                               | Can report a key that was never added.                                                  |
-| A map that grows                          | `swiss.Auto` or `.String`                  | Uses an allocator. Order is not insertion order.                                        |
+| You need                                              | Use                                        | Notes                                                                                   |
+| ----------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
+| A list with a known maximum length                    | `buffer.Array`                             | Storage inside the value.                                                               |
+| The same list over memory you already own             | `buffer.Slice`                             | Same methods. The capacity is the slice length.                                         |
+| A buffer that a transport refills and a parser drains | `buffer.Queue`                             | Borrows storage. `rebase` compacts the consumed front.                                  |
+| One array per struct field                            | `multi_array.Buffer`                       | Runtime length. `multi_array.Array` has a fixed length.                                 |
+| The smallest item first                               | `priority_queue.Custom`                    | A binary heap. You supply the comparison.                                               |
+| A map that keeps insertion order                      | `bounded_array_hash_map.Auto` or `.String` | Fixed capacity.                                                                         |
+| A set                                                 | `set.Auto` or `.String`                    | A map with no values, plus set algebra.                                                 |
+| A constant lookup table                               | `static_map.Auto` or `.String`             | Built at compile time from a literal. Not the same as `std.StaticStringMap`: see below. |
+| A cheap "have I seen this" test                       | `bloom.Auto`                               | Can report a key that was never added.                                                  |
+| A map that grows                                      | `swiss.Auto` or `.String`                  | Uses an allocator. Order is not insertion order.                                        |
 
 ## Pick a fixed capacity when
 
@@ -152,13 +153,12 @@ Find the need in the table. Then read the section for that type in [Fixed-capaci
 
 # Fixed-capacity containers
 
-A fixed-capacity container stores its elements in an array inside the value. The capacity is a comptime parameter, so it is part of the type. `buffer.Array(u8, 16)` and `buffer.Array(u8, 32)` are different types.
+A fixed-capacity container never allocates and never grows. `buffer.Array` stores its elements inside the value, so the capacity is a comptime parameter: `buffer.Array(u8, 16)` and `buffer.Array(u8, 32)` are different types. `buffer.Slice` and `buffer.Queue` borrow storage that the caller owns, so a copy of either copies the reference, not the storage.
 
-Three rules hold for every type on this page except `swiss`, which the last section covers:
+Two rules hold for every type on this page except `swiss`, which the last section covers:
 
 - No method takes an allocator, and no value needs a `deinit`.
-- An operation that does not fit returns `error.NoSpaceLeft`. It never grows.
-- A copy of the value is a full copy of the storage.
+- Nothing grows. An operation that does not fit returns `error.NoSpaceLeft`, and a cursor operation that oversteps the storage panics.
 
 ## Build a list
 
@@ -191,6 +191,16 @@ Use one constant for the limit. The command-line check and the type then agree a
 ```
 
 The slice stores a pointer. Keep the storage alive for as long as the `Slice` is in use.
+
+## Refill and drain
+
+`buffer.Queue` borrows storage like `Slice`, but it also reads from the front. Use it when a transport delivers arbitrary chunks and a parser needs complete messages.
+
+```zig
+{{ load_data(path="examples/containers_buffer_queue.zig", format="plain") | trim_end }}
+```
+
+`buffered` returns the unconsumed elements. `take` returns a prefix and drops it, and `toss` drops a prefix without returning it. `unusedCapacitySlice` returns the free tail, and `advance` commits the count written there. `rebase` moves the unconsumed elements to the front and invalidates every slice into the backing that an earlier call returned. Call it when the tail is too small for the next read, not after every read. The method names follow `std.Io.Reader` and `std.Io.Writer`.
 
 ## Order by priority
 
