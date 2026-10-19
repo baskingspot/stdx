@@ -353,6 +353,11 @@ test Slice {
 /// `unusedCapacityLen`, `advance`). A queue has no source to refill from, so
 /// `peek` and `take` panic on a short buffer instead of returning an error,
 /// and `rebase` takes no capacity hint: the whole backing is the target.
+///
+/// Every bounds-checked cursor operation has an `Unchecked` form. It asserts
+/// the same bound instead of panicking, so the check remains in Debug and
+/// ReleaseSafe and compiles out in ReleaseFast, where an overstep is
+/// undefined behavior.
 pub fn Queue(comptime T: type) type {
     return struct {
         const Self = @This();
@@ -407,22 +412,36 @@ pub fn Queue(comptime T: type) type {
         ///
         /// Panics when `n` exceeds the free tail. The check panics in every
         /// build mode: a cursor past the storage is a slice panic later, or
-        /// an out-of-bounds write in ReleaseFast.
+        /// an out-of-bounds write in ReleaseFast. Use `advanceUnchecked`
+        /// when the caller has already proved the bound.
         pub fn advance(self: *Self, n: usize) void {
             if (n > self.buffer.len - self.end) {
                 @panic("buffer.Queue.advance past unused capacity");
             }
+            self.advanceUnchecked(n);
+        }
+
+        /// `advance` without the panic check. Asserts
+        /// `n <= unusedCapacityLen()`.
+        pub fn advanceUnchecked(self: *Self, n: usize) void {
+            assert(n <= self.buffer.len - self.end);
             self.end += n;
         }
 
         /// Drop `n` elements from the front.
         ///
-        /// Panics when `n` exceeds `bufferedLen`. See `advance` on why the
-        /// check panics in every build mode.
+        /// Panics when `n` exceeds `bufferedLen`. Use `tossUnchecked` when
+        /// the caller has already proved the bound.
         pub fn toss(self: *Self, n: usize) void {
             if (n > self.end - self.seek) {
                 @panic("buffer.Queue.toss past buffered end");
             }
+            self.tossUnchecked(n);
+        }
+
+        /// `toss` without the panic check. Asserts `n <= bufferedLen()`.
+        pub fn tossUnchecked(self: *Self, n: usize) void {
+            assert(n <= self.end - self.seek);
             self.seek += n;
         }
 
@@ -435,20 +454,36 @@ pub fn Queue(comptime T: type) type {
         /// The next `n` unconsumed elements, without dropping them.
         ///
         /// Panics when fewer than `n` are buffered. Check `bufferedLen` first
-        /// when the length comes from the input.
+        /// when the length comes from the input. Use `peekUnchecked` when the
+        /// caller has already proved the bound.
         pub fn peek(self: *Self, n: usize) []T {
             if (n > self.end - self.seek) {
                 @panic("buffer.Queue.peek past buffered end");
             }
+            return self.peekUnchecked(n);
+        }
+
+        /// `peek` without the panic check. Asserts `n <= bufferedLen()`.
+        pub fn peekUnchecked(self: *Self, n: usize) []T {
+            assert(n <= self.end - self.seek);
             return self.buffer[self.seek..][0..n];
         }
 
         /// The next `n` unconsumed elements, and drop them.
         ///
         /// Panics when fewer than `n` are buffered. The returned slice is
-        /// invalidated by the next `rebase`.
+        /// invalidated by the next `rebase`. Use `takeUnchecked` when the
+        /// caller has already proved the bound.
         pub fn take(self: *Self, n: usize) []T {
-            const result = self.peek(n);
+            if (n > self.end - self.seek) {
+                @panic("buffer.Queue.take past buffered end");
+            }
+            return self.takeUnchecked(n);
+        }
+
+        /// `take` without the panic check. Asserts `n <= bufferedLen()`.
+        pub fn takeUnchecked(self: *Self, n: usize) []T {
+            const result = self.peekUnchecked(n);
             self.seek += n;
             return result;
         }
@@ -595,6 +630,16 @@ test Queue {
     try testing.expectEqual(@as(u8, 4), pairs.take(2)[1].value);
     pairs.rebase();
     try testing.expect(pairs.isEmpty());
+
+    // The unchecked forms assert the same bound and skip the panic path.
+    var unchecked_storage: [4]u8 = undefined;
+    var unchecked: Queue(u8) = .init(&unchecked_storage);
+    @memcpy(unchecked.unusedCapacitySlice()[0..2], "ab");
+    unchecked.advanceUnchecked(2);
+    try testing.expectEqualStrings("a", unchecked.peekUnchecked(1));
+    try testing.expectEqualStrings("a", unchecked.takeUnchecked(1));
+    unchecked.tossUnchecked(1);
+    try testing.expect(unchecked.isEmpty());
 
     // The empty value has no storage and every length is zero.
     const empty: Queue(u8) = .empty;
