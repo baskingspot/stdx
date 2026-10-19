@@ -12,6 +12,9 @@
 //! and the refresh cadence — an event loop stores one and ticks it once
 //! per iteration, making every timestamp during the tick one atomic
 //! load instead of a clock call.
+//!
+//! `writeRfc3339` turns a `Timestamp` into UTC RFC 3339 text with a
+//! comptime fractional width, for log lines and protocol headers.
 
 const std = @import("std");
 const Io = std.Io;
@@ -25,6 +28,9 @@ const builtin = @import("builtin");
 
 pub const CachedClock = @import("time/cached_clock.zig").CachedClock;
 pub const RateLimit = @import("time/RateLimit.zig");
+pub const Rfc3339Error = @import("time/rfc3339.zig").Error;
+pub const Rfc3339Precision = @import("time/rfc3339.zig").Precision;
+pub const writeRfc3339 = @import("time/rfc3339.zig").write;
 
 comptime {
     switch (builtin.os.tag) {

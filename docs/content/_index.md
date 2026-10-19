@@ -110,7 +110,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`static_map`](api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                                                                            |
 | [`stdio`](api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                                                                    |
 | [`swiss`](api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                                                                                  |
-| [`time`](api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, and a log rate limiter.                                                                                        |
+| [`time`](api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, RFC 3339 formatting, and a log rate limiter.                                                                   |
 | [`timers`](api/#stdx.timers)                                 | A caller-driven set of timers over `Io.Timestamp`: arm and stop entries by handle, fire callbacks, and repeat on a period.                                        |
 | [`Uuid`](api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                      |
 | [`wire`](api/#stdx.wire)                                     | A forward-only writer over caller-owned bytes, with the byte order fixed at comptime. Integers, enums, slices, and backpatch slots.                               |
@@ -477,6 +477,16 @@ A log line needs wall time, but the loop already holds an `.awake` sample. `Wall
 ```
 
 The converted time never goes backwards. A clock step from NTP cannot reorder log lines. The cost is that the converted time drifts from true wall time if the system clock steps after startup. For log lines, this is the right trade. Use `.real` when you need true wall time.
+
+## Write an RFC 3339 timestamp
+
+`time.writeRfc3339` writes an `Io.Timestamp` as UTC RFC 3339 text. The fractional width is a comptime parameter: `.seconds`, `.milliseconds`, `.microseconds`, or `.nanoseconds`. The value is truncated to that width, so the output has a fixed shape that sorts and parses without a variable fraction.
+
+```zig
+{{ load_data(path="examples/time_rfc3339.zig", format="plain") | trim_end }}
+```
+
+The full 0000-9999 year range is supported, including dates before 1970. A year outside the range returns `error.TimestampOutOfRange`.
 
 ## Limit a repeated log line
 
