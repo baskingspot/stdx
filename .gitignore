@@ -5,6 +5,6 @@ zig-out/
 .envrc.local
 zig-pkg/
 docs/public/
-docs/data/
+docs/static/api/
 docs/themes/
 docs/content/changelog.md
