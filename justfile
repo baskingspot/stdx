@@ -5,7 +5,7 @@
 default:
     @just --list
 
-[doc("Build the site into zig-out/site/stdx/: the guide (Zola, from docs/) and the API reference (the wasm viewer `zig std` uses) under api/. The router in baskingspot/site serves /stdx/... from it")]
+[doc("Build the site into zig-out/site/stdx/: the guide (Zola, from docs/) and the API reference (docgen JSON, rendered by the theme's api.html) under api/. The router in baskingspot/site serves /stdx/... from it")]
 [group("docs")]
 doc:
     zig build docs

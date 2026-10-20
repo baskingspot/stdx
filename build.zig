@@ -62,19 +62,33 @@ pub fn build(b: *std.Build) void {
     const fuzz_step = b.step("fuzz", "Fuzz the module (built-in test runner)");
     fuzz_step.dependOn(&run_fuzz_tests.step);
 
-    const mod_docs = b.addObject(.{
-        .name = "stdx",
-        .root_module = mod,
+    // docgen writes the API reference as JSON that the theme's api.html reads.
+    // It is lazy, so this pass returns early until the build runner fetches
+    // it and reruns the script.
+    const docgen_dep = b.lazyDependency("docgen", .{
+        .target = target,
+        .optimize = optimize,
+        .exe = true,
+    }) orelse return;
+    const docgen = docgen_dep.artifact("docgen");
+    const docs_run = b.addRunArtifact(docgen);
+    docs_run.addArgs(&.{
+        "--root",     "src/root.zig",
+        "--title",    "stdx",
+        "--repo-url", "https://github.com/baskingspot/stdx",
+        "--rev",      "main",
+        "--format",   "json",
+        "--out",
     });
-    // The site serves the API reference under /api/, and Zola copies
-    // docs/static as is, so the reference installs there. `zig-out` is not the
-    // destination because Zola owns the site output directory.
+    const api = docs_run.addOutputDirectoryArg("api");
+    // Zola reads `data/` as site data, so the JSON installs into docs/data.
+    // `zig-out` is not the destination because Zola owns the site output.
     const docs_install = b.addInstallDirectory(.{
-        .source_dir = mod_docs.getEmittedDocs(),
-        .install_dir = .{ .custom = "../docs/static/api" },
+        .source_dir = api,
+        .install_dir = .{ .custom = "../docs/data" },
         .install_subdir = "",
     });
-    const docs_step = b.step("docs", "Generate API docs into docs/static/api");
+    const docs_step = b.step("docs", "Generate the API JSON into docs/data");
     docs_step.dependOn(&docs_install.step);
 
     if (b.lazyImport(@This(), "testingx")) |testingx| {

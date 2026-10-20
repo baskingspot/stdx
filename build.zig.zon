@@ -11,6 +11,14 @@
             .hash = "testingx-0.1.1-ib95-6ivAgB3rCWLHww0C7edG1NLC71y1p1wogPV0Djf",
             .lazy = true,
         },
+        // The API reference generator. Lazy for the same reason: only the
+        // root build's docs step runs it, and the site's api.html reads the
+        // JSON it writes.
+        .docgen = .{
+            .url = "git+https://github.com/baskingspot/docgen#de811853ea2e937a2397c1d45a2350ae39a1c0aa",
+            .hash = "docgen-0.0.0-vnM6Vf3zAQAAdrMwRp_P0teDytVZPRId-MpdxgCEwJPN",
+            .lazy = true,
+        },
     },
     .paths = .{
         "build.zig",
