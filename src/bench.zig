@@ -5,6 +5,7 @@
 
 const testingx = @import("testingx");
 
+const bit_set = @import("bit_set_bench.zig");
 const swiss = @import("swiss/bench.zig");
 const bounded_array_hash_map = @import("bounded_array_hash_map_bench.zig");
 const bloom = @import("bloom_bench.zig");
@@ -12,6 +13,7 @@ const hash = @import("hash/bench.zig");
 const slot_ring = @import("slot_ring_bench.zig");
 
 pub fn benchmarkMain(b: *testingx.B) !void {
+    try b.addMod(bit_set);
     try b.addMod(swiss);
     try b.addMod(bounded_array_hash_map);
     try b.addMod(bloom);

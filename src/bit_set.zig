@@ -75,7 +75,7 @@ pub fn Scratch(comptime capacity: usize) type {
 /// `ArrayBitSet.isSet` takes `Self` by value, so a call copies the
 /// whole mask array. For a 64 KiB set that is an 8 KiB copy per
 /// lookup. A single-word `IntegerBitSet` reads the one mask instead.
-fn wordIsSet(masks: []const usize, index: usize) bool {
+inline fn wordIsSet(masks: []const usize, index: usize) bool {
     const word: Word = .{ .mask = masks[index / word_bits] };
     return word.isSet(index % word_bits);
 }
