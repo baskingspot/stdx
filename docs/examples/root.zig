@@ -6,6 +6,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const base32_token = @import("base32_token.zig");
+pub const bounded_writer_response = @import("bounded_writer_response.zig");
 pub const containers_bit_set_scratch = @import("containers_bit_set_scratch.zig");
 pub const containers_bloom = @import("containers_bloom.zig");
 pub const containers_bounded_map = @import("containers_bounded_map.zig");
@@ -18,6 +19,9 @@ pub const containers_priority_queue = @import("containers_priority_queue.zig");
 pub const containers_set = @import("containers_set.zig");
 pub const containers_static_map = @import("containers_static_map.zig");
 pub const containers_swiss_map = @import("containers_swiss_map.zig");
+pub const hash_keyed_map = @import("hash_keyed_map.zig");
+pub const heap_slab_records = @import("heap_slab_records.zig");
+pub const mem_secret = @import("mem_secret.zig");
 pub const net_classify = @import("net_classify.zig");
 pub const net_host_port = @import("net_host_port.zig");
 pub const net_key = @import("net_key.zig");
@@ -27,6 +31,7 @@ pub const net_range = @import("net_range.zig");
 pub const net_std_types = @import("net_std_types.zig");
 pub const parsing_atoi = @import("parsing_atoi.zig");
 pub const parsing_leading_zeros = @import("parsing_leading_zeros.zig");
+pub const random_token = @import("random_token.zig");
 // slot_ring is Linux only, so its example is too: elsewhere the module is
 // `void`. The import is lazy, so the file is not analyzed off Linux.
 const slot_ring_logging_example = @import("slot_ring_logging.zig");
@@ -34,6 +39,7 @@ pub const slot_ring_logging = if (builtin.os.tag == .linux)
     slot_ring_logging_example
 else
     struct {};
+pub const stdio_stream = @import("stdio_stream.zig");
 pub const time_cached_clock = @import("time_cached_clock.zig");
 pub const time_deadline = @import("time_deadline.zig");
 pub const time_rate_limit = @import("time_rate_limit.zig");

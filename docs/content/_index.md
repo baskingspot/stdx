@@ -14,7 +14,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Timekeeping](#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.
 - [Timers](#timers): a caller-driven set of deadlines over `Io.Timestamp`, with callbacks, removal by handle, and period re-arm without drift.
 - [Logging transport](#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
-- The [module list](#modules) covers the rest: Swiss-table maps, a slab allocator, rapidhash, secure random, and buffered stdio.
+- [Small modules](#small-modules): a bounded writer, rapidhash, the heap pools, fixed-size byte values, secure random, and buffered stdio.
 
 This guide explains how to choose modules and combine them. The [API reference](api/) documents every symbol.
 
@@ -97,13 +97,13 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                                         |
 | [`buffer`](api/#stdx.buffer)                                 | Fixed-capacity buffers. `Array` owns its storage. `Slice` and `Queue` borrow it, and `Queue` consumes from the front.                                                             |
 | [`fmt`](api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                                                                                         |
-| [`hash`](api/#stdx.hash)                                     | `RapidHash`.                                                                                                                                                                      |
+| [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
 | [`heap`](api/#stdx.heap)                                     | `SlabAllocator` and `SizeClassPool`.                                                                                                                                              |
 | [`mem`](api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                                          |
 | [`multi_array`](api/#stdx.multi_array)                       | Struct-of-arrays types with the storage inside the value.                                                                                                                         |
 | [`net`](api/#stdx.net)                                       | IPv4 addresses and CIDR prefixes, after Go's `net/netip`: parse, classify, order, step, and test containment. `Ip4Endpoint` holds octets and port; `HostPort` splits config text. |
-| [`pages`](api/#stdx.pages)                                   | Release whole kernel pages back to the OS. Linux only.                                                                                                                            |
-| [`posix`](api/#stdx.posix)                                   | `getsockname`, `getpeername`, `setsockopt`, and `getsockopt` on raw socket handles.                                                                                               |
+| [`pages`](api/#stdx.pages)                                   | Release whole kernel pages back to the OS. API reference only. Linux only.                                                                                                        |
+| [`posix`](api/#stdx.posix)                                   | `getsockname`, `getpeername`, `setsockopt`, and `getsockopt` on raw socket handles. See [Work with a raw socket fd](#work-with-a-raw-socket-fd).                                  |
 | [`priority_queue`](api/#stdx.priority_queue)                 | A priority queue with a fixed capacity.                                                                                                                                           |
 | [`random`](api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                                                                                        |
 | [`set`](api/#stdx.set)                                       | A bounded set with set algebra.                                                                                                                                                   |
@@ -591,3 +591,77 @@ The policy decides the read shape. Under `.drop_oldest`, the consumer reads thro
 One message costs one CAS on the head, the payload copy into the slot, and one release store of the stamp. The wake flavor adds its own cost. `.none` adds nothing, `.eventfd` writes eight bytes to the fd, and `.futex` bumps the wake word with one RMW. The `.futex` syscall runs only when a waiter is armed. A displacement adds a cursor CAS, a stamp CAS, and one atomic increment of the displaced count. It also wakes the consumer under the two waking flavors.
 
 Linux only. The `.eventfd` and `.futex` flavors wrap Linux syscalls, and the module is `void` on other targets. `slot_size` is comptime and a cache-line multiple. Changing it instantiates a new ring type.
+
+# Small modules
+
+These modules are small enough that the contract fits in a paragraph. The [module list](#modules) has the one-line summary, and the [API reference](api/) has every symbol.
+
+## Bound a response
+
+`BoundedWriter` is an accumulating `Io.Writer` over a buffer that it allocates from your allocator. It has the semantics of `Io.Writer.Allocating` with a ceiling: a write that would push the buffered bytes past `limit` returns `error.WriteFailed`. The bytes written before it stay, and the buffer never holds more than the limit.
+
+Use it when input that you do not control feeds a fixed-size response, such as a JSON body. `written` returns the buffered bytes, and `deinit` frees the buffer.
+
+```zig
+{{ load_data(path="examples/bounded_writer_response.zig", format="plain") | trim_end }}
+```
+
+## Hash a key
+
+`hash.RapidHash` is rapidhash V3: 64-bit, non-cryptographic, and seeded. Its output reproduces upstream's reference values on every host, so a hash is stable across builds.
+
+`hash(seed, input)` is the 7-lane variant and a drop-in for `std.hash.Wyhash.hash`. `hashMicro` and `hashNano` are the smaller variants for short inputs. They return the same value as `hash` up to 80 and 48 bytes, and diverge after that.
+
+`RapidHash.StringContext` and `RapidHash.AutoContext(T)` are std-style contexts. Pass one as the context of `swiss`, `bounded_array_hash_map`, or any std map. `StringContext` hashes string contents. `AutoContext` walks a key the way `std.hash.autoHash` does, and it rejects slices.
+
+```zig
+{{ load_data(path="examples/hash_keyed_map.zig", format="plain") | trim_end }}
+```
+
+## Pool fixed-size records
+
+`heap` has two pools for records that come in known sizes.
+
+`SlabAllocator(.{ .size_classes = ... })` has the allocator shape. `alloc` takes the gpa and a size, rounds the size up to the first class that fits, and returns a pointer. `free` takes the same size back. A size above every class is a normal allocation from the same gpa, and `free` returns it the same way. `deinit` takes the gpa, and in Debug and ReleaseSafe it asserts that every allocation was freed first. `queryCapacity` reports the pooled capacity.
+
+`alloc` panics when the gpa cannot serve it. It has no error return, so a caller that must handle allocation failure uses `SizeClassPool` or a plain allocator.
+
+`SizeClassPool(&.{ 16, 64, 256 })` carves its classes, free lists, and metadata from one caller-owned backing. `create` returns a byte slice of the requested length, and a request above the largest class returns `error.OutOfMemory`. `destroy` takes the slice back unchanged.
+
+```zig
+{{ load_data(path="examples/heap_slab_records.zig", format="plain") | trim_end }}
+```
+
+## Fixed-size byte values
+
+`mem.Array(N)` wraps `[N]u8`, with the length in the type. `init` takes the bytes, `zero` is an initialized all-zero value, and `secureZero` clears the bytes in a way that the optimizer cannot remove. Use it for keys and other secrets.
+
+The module also adds vectorized scans. `findScalarLast` walks backwards and `findAny` walks forwards; both match the std function of the same name and return the same index. `lastIndexOfNonZero` has no std equivalent.
+
+```zig
+{{ load_data(path="examples/mem_secret.zig", format="plain") | trim_end }}
+```
+
+## Random bytes
+
+`random.fill` writes secure random bytes with no `Io` value and no error. Each thread owns a ChaCha generator, seeded on its first call from the platform's secure source: `getrandom` on Linux, `arc4random_buf` on macOS. Later calls take no syscall and no lock. A failed seed panics, because no fallback keeps the guarantee.
+
+The module compiles on Linux and macOS only.
+
+```zig
+{{ load_data(path="examples/random_token.zig", format="plain") | trim_end }}
+```
+
+## Write to stdio
+
+`stdio.err` and `stdio.out` are ready on import. There is no init and no allocator. `print` formats like `Io.Writer.print` and appends no newline. No method returns an error: the first failed write latches, and later writes on that stream drop.
+
+Output is buffered, so call `stdio.flush()` before exit. A panic never reaches the buffer, so panic reporting stays with `std.debug.print`. The streams ride `std.Options.debug_io`, which supports one thread only.
+
+```zig
+{{ load_data(path="examples/stdio_stream.zig", format="plain") | trim_end }}
+```
+
+## API reference only
+
+Two modules in the table have no example here. `posix` is described under [Work with a raw socket fd](#work-with-a-raw-socket-fd). `pages` is API reference only: it releases whole kernel pages with `MADV_DONTNEED`, and it depends on the Linux zero-fill guarantee for the next touch. That guarantee has no Darwin equivalent, so the module is Linux only by design.
