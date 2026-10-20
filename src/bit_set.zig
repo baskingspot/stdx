@@ -37,17 +37,17 @@ pub fn Scratch(comptime capacity: usize) type {
         /// Start a generation: forget every word and claim none. The data
         /// words stay as they are. This is also the initializer for a value
         /// declared `undefined`.
-        pub fn clear(self: *Self) void {
+        pub inline fn clear(self: *Self) void {
             self.initialized = .empty;
         }
 
-        pub fn isSet(self: *const Self, index: usize) bool {
+        pub inline fn isSet(self: *const Self, index: usize) bool {
             assert(index < capacity);
             if (!wordIsSet(&self.initialized.masks, index / word_bits)) return false;
             return wordIsSet(&self.bits.masks, index);
         }
 
-        pub fn set(self: *Self, index: usize) void {
+        pub inline fn set(self: *Self, index: usize) void {
             assert(index < capacity);
             const word = index / word_bits;
             if (!wordIsSet(&self.initialized.masks, word)) {
