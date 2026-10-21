@@ -11,6 +11,8 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 
 ## What is in it
 
+- [Modules](https://baskingspot.dev/stdx/#modules): every export of `src/root.zig`, one row each, with the reason to reach for it.
+- [Choosing a container](https://baskingspot.dev/stdx/#choosing-a-container): which fixed-capacity type fits a need, and when to use std or `swiss` instead.
 - [Fixed-capacity containers](https://baskingspot.dev/stdx/#fixed-capacity-containers): lists, queues, bitsets, maps, sets, Bloom filters, and comptime lookup tables. No allocator and no `deinit`; `Array` owns its storage, and `Slice` and `Queue` borrow it.
 - [Strict parsing](https://baskingspot.dev/stdx/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
 - [Binary encoding](https://baskingspot.dev/stdx/#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, in big or little endian selected at comptime, with a reserved slot for a length or checksum written later.
@@ -20,7 +22,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Timekeeping](https://baskingspot.dev/stdx/#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, RFC 3339 formatting, and a log rate limiter.
 - [Timers](https://baskingspot.dev/stdx/#timers): a caller-driven set of deadlines over `Io.Timestamp`, with callbacks, removal by handle, and period re-arm without drift.
 - [Logging transport](https://baskingspot.dev/stdx/#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
-- The [module list](https://baskingspot.dev/stdx/#modules) covers the rest: Swiss-table maps, a slab allocator, a size-class pool, rapidhash, secure random, and buffered stdio.
+- [Small modules](https://baskingspot.dev/stdx/#small-modules): a bounded writer, rapidhash, the heap pools, fixed-size byte values, secure random, and buffered stdio.
 
 ## Install
 

@@ -2,7 +2,8 @@
 
 This file holds what is specific to stdx. The org voice guide is the authority for everything else:
 <https://github.com/baskingspot/.github/blob/main/docs/VOICE.md>. Read both before you write or
-review a doc.
+review a doc. The layout of the README and the guide, and the heading rules, are in
+<https://github.com/baskingspot/.github/blob/main/docs/STRUCTURE.md>.
 
 It covers the README, the guide (`docs/content/_index.md`), its examples, and the `//!` and `///`
 comments in `src/`. The mechanics (layout, build, example rules) are in the "Documentation" section
