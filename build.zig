@@ -62,21 +62,6 @@ pub fn build(b: *std.Build) void {
     const fuzz_step = b.step("fuzz", "Fuzz the module (built-in test runner)");
     fuzz_step.dependOn(&run_fuzz_tests.step);
 
-    const mod_docs = b.addObject(.{
-        .name = "stdx",
-        .root_module = mod,
-    });
-    // The site serves the API reference under /api/, and Zola copies
-    // docs/static as is, so the reference installs there. `zig-out` is not the
-    // destination because Zola owns the site output directory.
-    const docs_install = b.addInstallDirectory(.{
-        .source_dir = mod_docs.getEmittedDocs(),
-        .install_dir = .{ .custom = "../docs/static/api" },
-        .install_subdir = "",
-    });
-    const docs_step = b.step("docs", "Generate API docs into docs/static/api");
-    docs_step.dependOn(&docs_install.step);
-
     if (b.lazyImport(@This(), "testingx")) |testingx| {
         const testingx_dependency = testingx_dep orelse unreachable;
         const run_bench = testingx.addBench(b, .{
