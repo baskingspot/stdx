@@ -5,17 +5,21 @@
 default:
     @just --list
 
-[doc("Build the site into zig-out/site/stdx/: the guide (Zola, from docs/) and the API reference (the wasm viewer `zig std` uses) under api/. The router in baskingspot/site serves /stdx/... from it")]
+[doc("Build the site into zig-out/site/stdx/: the guide (Zola, from docs/) and the API reference (docgen JSON, rendered by the theme's api.html) under api/. The router in baskingspot/site serves /stdx/... from it")]
 [group("docs")]
-doc:
-    zig build docs
+doc: api
     baskingspot-docs build stdx
 
 [doc("Edit the guide with live reload (http://127.0.0.1:1111), API reference included")]
 [group("docs")]
-guide:
-    zig build docs
+guide: api
     baskingspot-docs serve stdx
+
+# The API reference data. docgen comes from the baskingspot flake's docs shell,
+# so this is not a Zig build dependency.
+[private]
+api:
+    docgen --root src/root.zig --title stdx --repo-url https://github.com/baskingspot/stdx --rev main --format json --out docs/data
 
 [doc("Deploy the rendered docs to Cloudflare as an assets-only Worker (config in wrangler.jsonc). Needs CLOUDFLARE_API_TOKEN in the environment, plus CLOUDFLARE_ACCOUNT_ID if the token can see more than one account")]
 [group("docs")]
