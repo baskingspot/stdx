@@ -27,7 +27,7 @@ const probe_count = 4096;
 const string_count = 200_000;
 
 const item_format = "srv/2026/10/25/requests/item-{d:0>9}";
-const miss_format = "srv/2026/10/25/requests/miss-{d:0>9}";
+const string_number_space = 1_000_000_000;
 
 /// Sequential hits: `probe_count` keys that exist.
 var hit_keys: [probe_count]u64 = undefined;
@@ -48,42 +48,50 @@ fn keyAt(index: u64) u64 {
     return state;
 }
 
-/// Save every `entry_count / probe_count`-th inserted key as a probe.
-fn recordHit(i: usize, key: u64) void {
-    const stride = entry_count / probe_count;
-    if (i % stride == 0 and i / stride < probe_count) hit_keys[i / stride] = key;
-}
-
-fn recordStringHit(i: usize, key: []const u8) void {
-    const stride = string_count / probe_count;
-    if (i % stride == 0 and i / stride < probe_count) {
-        string_hit_keys[i / stride] = key;
+/// Fill the u64 probe keys. A miss flips a middle bit, so it lands in a
+/// different region from its hit key instead of the far end of the order the
+/// way the top bit would land it. A miss set concentrated on one path would
+/// measure that path, not a lookup.
+fn fillU64Probes() void {
+    for (0..probe_count) |i| {
+        const key = keyAt(i * (entry_count / probe_count));
+        hit_keys[i] = key;
+        miss_keys[i] = key ^ (@as(u64, 1) << 40);
     }
 }
 
 fn fillU64(gpa: Allocator, map: anytype) !void {
+    fillU64Probes();
     for (0..entry_count) |i| {
         const key = keyAt(i);
         try map.put(gpa, key, key);
-        recordHit(i, key);
     }
-    for (&miss_keys, hit_keys) |*miss, hit| miss.* = hit ^ (1 << 63);
+}
+
+/// Fill the key pool and the string probe keys. Numbers spread over a
+/// nine-digit space, the way real paths do, so a near miss lands beside its
+/// key rather than at the end of a sequential range.
+fn fillStringProbes() !void {
+    const stride = string_count / probe_count;
+    var offset: usize = 0;
+    for (0..string_count) |i| {
+        const number = keyAt(i) % string_number_space;
+        const key = try std.fmt.bufPrint(string_storage[offset..], item_format, .{number});
+        offset += 48;
+        string_keys[i] = key;
+        if (i % stride == 0 and i / stride < probe_count) {
+            const slot = i / stride;
+            string_hit_keys[slot] = key;
+            const near = (number + 1) % string_number_space;
+            const miss = try std.fmt.bufPrint(&string_miss_storage[slot], item_format, .{near});
+            string_miss_keys[slot] = miss;
+        }
+    }
 }
 
 fn fillStrings(gpa: Allocator, map: anytype) !void {
-    var offset: usize = 0;
-    for (0..string_count) |i| {
-        const buffer = string_storage[offset..];
-        const key = try std.fmt.bufPrint(buffer, item_format, .{i});
-        offset += 48;
-        string_keys[i] = key;
-        try map.put(gpa, key, i);
-        recordStringHit(i, key);
-    }
-    for (&string_miss_keys, 0..) |*miss, i| {
-        const key = try std.fmt.bufPrint(&string_miss_storage[i], miss_format, .{i});
-        miss.* = key;
-    }
+    try fillStringProbes();
+    for (string_keys, 0..) |key, i| try map.put(gpa, key, i);
 }
 
 // --- btree ---
@@ -189,12 +197,11 @@ pub fn benchmarkBtreeStringGetMiss(b: *testingx.B) !void {
 pub fn benchmarkHashMapU64GetHit(b: *testingx.B) !void {
     var map: HashMap = .init(b.allocator);
     defer map.deinit();
+    fillU64Probes();
     for (0..entry_count) |i| {
         const key = keyAt(i);
         try map.put(key, key);
-        recordHit(i, key);
     }
-    for (&miss_keys, hit_keys) |*miss, hit| miss.* = hit ^ (1 << 63);
     var sink: u64 = 0;
     while (try b.loop()) {
         for (b.blackBox(&hit_keys)) |key| {
@@ -207,12 +214,11 @@ pub fn benchmarkHashMapU64GetHit(b: *testingx.B) !void {
 pub fn benchmarkHashMapU64GetMiss(b: *testingx.B) !void {
     var map: HashMap = .init(b.allocator);
     defer map.deinit();
+    fillU64Probes();
     for (0..entry_count) |i| {
         const key = keyAt(i);
         try map.put(key, key);
-        recordHit(i, key);
     }
-    for (&miss_keys, hit_keys) |*miss, hit| miss.* = hit ^ (1 << 63);
     var sink: u64 = 0;
     while (try b.loop()) {
         for (b.blackBox(&miss_keys)) |key| {
@@ -312,12 +318,8 @@ fn stringSearch(keys: []const []const u8, key: []const u8) ?usize {
 pub fn benchmarkSortedStringGetHit(b: *testingx.B) !void {
     const keys = try b.allocator.alloc([]const u8, string_count);
     defer b.allocator.free(keys);
-    var offset: usize = 0;
-    for (0..string_count) |i| {
-        const key = try std.fmt.bufPrint(string_storage[offset..], item_format, .{i});
-        offset += 48;
-        keys[i] = key;
-    }
+    try fillStringProbes();
+    @memcpy(keys, &string_keys);
     mem.sort([]const u8, keys, {}, struct {
         fn lessThan(_: void, a: []const u8, other: []const u8) bool {
             return btree.compareBytes(a, other) == .lt;
@@ -335,12 +337,8 @@ pub fn benchmarkSortedStringGetHit(b: *testingx.B) !void {
 pub fn benchmarkSortedStringGetMiss(b: *testingx.B) !void {
     const keys = try b.allocator.alloc([]const u8, string_count);
     defer b.allocator.free(keys);
-    var offset: usize = 0;
-    for (0..string_count) |i| {
-        const key = try std.fmt.bufPrint(string_storage[offset..], item_format, .{i});
-        offset += 48;
-        keys[i] = key;
-    }
+    try fillStringProbes();
+    @memcpy(keys, &string_keys);
     mem.sort([]const u8, keys, {}, struct {
         fn lessThan(_: void, a: []const u8, other: []const u8) bool {
             return btree.compareBytes(a, other) == .lt;

@@ -132,12 +132,19 @@ search. Ties compare real keys from the byte after the window
 instead of calling `memcmp`.
 
 Measured on launchpad (aarch64, ReleaseFast), 1M u64 entries, 4096
-probes: get 51 ns, miss 40 ns. Sorted array + binary search: 38 ns.
-`std.AutoHashMap`: 6 ns. Build (20k inserts): 77 ns/insert versus 34 for
-the hash map. Scan of 1M: 3.9 ns/entry, level with the hash map. 200K
-40-byte string keys: 77 ns per hit, against 312 ns for sorting the keys
-and binary searching them. Memory: 30.7 bytes/entry for u64 keys against
-53.5 for `std.AutoHashMap`.
+probes: get 50 ns, miss 39 ns. Sorted array + binary search: 35 and 38.
+`std.AutoHashMap`: 6 and 2.3. Build (20k inserts): 80 ns/insert versus
+34 for the hash map. Scan of 1M: 3.8 ns/entry, level with the hash map.
+200K 40-byte string keys: 102 ns per hit and 71 per miss, against 309
+and 318 for sorting the keys and binary searching them. Memory: 30.7
+bytes/entry for u64 keys against 53.5 for `std.AutoHashMap`.
+
+The first string miss numbers were a benchmark bug, not a result: every
+miss key sorted past the stored range, so all 4096 probes walked one
+path and the number measured that hot path (88 ns, against 309 for the
+hit). With near misses the array is symmetric, and the tree is still
+faster on a miss than a hit because a miss usually ends without the
+leaf's full key compare or the value read.
 
 Growing and owning entries means a returned pointer can dangle. The map
 carries the std `pointer_stability` guard: `lockPointers` takes a shared
@@ -148,12 +155,12 @@ shared form from master (see THIRD_PARTY.md); `swiss` and
 too, and are the next two candidates for it.
 
 Against `swiss.Auto`, the fastest unordered map in the package, on the
-same 1M u64 workload: 6.6 ns per hit and 1.9 ns per miss, so 7.6x and
-21x faster than `btree` at 50 ns and 40 ns. On 200K 40-byte strings,
-11 ns per hit against 76. Build is closer than lookups suggest (57 ns
-per insert against 78), and `btree` scans faster (3.7 vs 4.2 ns per
-entry) because a leaf is contiguous while a Swiss table skips. That gap
-is the price of order: a hash map compares one key per lookup, a B+tree
+same 1M u64 workload: 6.2 ns per hit and 1.9 ns per miss, so 8x and 20x
+faster than `btree` at 50 ns and 39 ns. On 200K 40-byte strings, 11.7 ns
+per hit against 102. Build is closer than lookups suggest (39 ns per
+insert against 80), and `btree` scans faster (3.8 vs 4.15 ns per entry)
+because a leaf is contiguous while a Swiss table skips. That gap is the
+price of order: a hash map compares one key per lookup, a B+tree
 compares one per level.
 
 Why the static array stays ahead on integers at 1M: binary search's
