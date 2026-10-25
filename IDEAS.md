@@ -116,14 +116,43 @@ bucketed, comptime-generated, zero runtime init; `StaticStringMap(void)`
   algorithm, built during compilation — the StaticBitSet pattern bloom
   already composes with.
 
-## BTree — ordered map, pending a real use case
+## BTree — SHIPPED as `btree` (2026-10-25)
 
-Rust ships `BTreeMap` for sorted iteration and range queries
-(floor/ceiling/range) over a comparator — what neither the robin
-(insertion-ordered) nor swiss (slot-ordered) maps give. Biggest item
-in this conversation's class; only worth building if a use case
-actually wants sorted iteration or range queries. Rust envy is not
-a gap.
+Zig 0.16 has no ordered map that owns its nodes: `std.Treap` takes a
+caller-allocated node per element and chases pointers, and neither map
+family orders. `btree` is the sorted-iteration and range container.
+
+Ported from the design in "bbtree: fastest ordered map" (Xiangpeng Hao, 2026) to a Zig layout: 15-key nodes, a dense array of window words in
+front of the keys so one vector compare and a popcount answer "how many
+keys are smaller", and per-node prefix stripping from the fences. The
+map keeps its smallest and largest keys as the outer fences, so the
+spines strip too; a key outside that range widens the fences before the
+search. Ties compare real keys from the byte after the window
+(`compareFrom`), and `[]const u8` keys compare eight bytes at a time
+instead of calling `memcmp`.
+
+Measured on launchpad (aarch64, ReleaseFast), 1M u64 entries, 4096
+probes: get 51 ns, miss 40 ns. Sorted array + binary search: 38 ns.
+`std.AutoHashMap`: 6 ns. Build (20k inserts): 77 ns/insert versus 34 for
+the hash map. Scan of 1M: 3.9 ns/entry, level with the hash map. 200K
+40-byte string keys: 77 ns per hit, against 312 ns for sorting the keys
+and binary searching them. Memory: 30.7 bytes/entry for u64 keys against
+53.5 for `std.AutoHashMap`.
+
+Growing and owning entries means a returned pointer can dangle. The map
+carries the std `pointer_stability` guard: `lockPointers` takes a shared
+borrow, and every mutator asserts nobody holds one. Zig 0.16's
+`std.debug.SafetyLock` is exclusive, so `src/stability.zig` vendors the
+shared form from master (see THIRD_PARTY.md); `swiss` and
+`bounded_array_hash_map` hand out pointers from storage that relocates
+too, and are the next two candidates for it.
+
+The lesson: against a static sorted array the tree wins only where a
+comparison reads the heap (strings), and elsewhere it is within 1.4x
+while supporting inserts, removals, and ordered iteration. Node width 2
+is right for integers and 4 for byte strings; 8 costs a cache line per
+node and loses. A concurrent version (version locks, a node free list)
+is not built.
 
 ## Timer set — SHIPPED as `timers` (2026-10-16)
 

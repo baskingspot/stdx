@@ -6,6 +6,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const base32_token = @import("base32_token.zig");
+pub const btree_ordered_map = @import("btree_ordered_map.zig");
 pub const bounded_writer_response = @import("bounded_writer_response.zig");
 pub const containers_bit_set_scratch = @import("containers_bit_set_scratch.zig");
 pub const containers_bloom = @import("containers_bloom.zig");

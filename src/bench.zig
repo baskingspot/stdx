@@ -8,6 +8,7 @@ const testingx = @import("testingx");
 const base32 = @import("base32_bench.zig");
 const bit_set = @import("bit_set_bench.zig");
 const bloom = @import("bloom_bench.zig");
+const btree = @import("btree_bench.zig");
 const bounded_array_hash_map = @import("bounded_array_hash_map_bench.zig");
 const buffer = @import("buffer_bench.zig");
 const fmt = @import("fmt_bench.zig");
@@ -29,6 +30,7 @@ pub fn benchmarkMain(b: *testingx.B) !void {
     try b.addMod(base32);
     try b.addMod(bit_set);
     try b.addMod(bloom);
+    try b.addMod(btree);
     try b.addMod(bounded_array_hash_map);
     try b.addMod(buffer);
     try b.addMod(fmt);
