@@ -156,6 +156,16 @@ entry) because a leaf is contiguous while a Swiss table skips. That gap
 is the price of order: a hash map compares one key per lookup, a B+tree
 compares one per level.
 
+Why the static array stays ahead on integers at 1M: binary search's
+first dozen probes are the same lines for every query, so they stay
+resident, while every tree level costs two lines (windows, then the
+child or entry) and a query descends into a different subtree each
+time. Measured, perf: 9.3 cache misses per probe for the tree against
+5.7 for the array at 1M (53 against 36 ns), and 13.4 against 7.9 at
+10M (70 against 64 ns), where the gap narrows to 1.09x as the array
+stops being able to keep its top levels resident. Node counts at 1M:
+depth 5, 95k leaves at 10.5 average fill, 9.7k internal nodes.
+
 The lesson: against a static sorted array the tree wins only where a
 comparison reads the heap (strings), and elsewhere it is within 1.4x
 while supporting inserts, removals, and ordered iteration. Node width 2
