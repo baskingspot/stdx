@@ -1,11 +1,11 @@
 //! The btree module's benchmarks: lookups, build, churn and scan against the
-//! two alternatives Zig 0.16 leaves for ordered reads.
+//! alternatives Zig 0.16 and stdx leave.
 //!
 //! Zig has no ordered map in `std` — `std.Treap` takes a caller-allocated
-//! node per element and chases pointers down the tree. So the baselines here
-//! are the ones people actually reach for: `std.AutoHashMap` when order is
-//! not needed (the speed floor), and a sorted array with a binary search when
-//! the data is built once (the static ordered baseline).
+//! node per element and chases pointers down the tree. The baselines are the
+//! ones people actually reach for: `swiss` (the package's fastest unordered
+//! map) and `std.AutoHashMap` when order is not needed, and a sorted array
+//! with a binary search when the data is built once.
 //!
 //! The maps are filled as untimed setup; each loop body does one unit of the
 //! measured work. Keys are a seeded LCG, so every run sees the same map.
@@ -350,6 +350,89 @@ pub fn benchmarkSortedStringGetMiss(b: *testingx.B) !void {
     while (try b.loop()) {
         for (b.blackBox(&string_miss_keys)) |key| {
             if (stringSearch(keys, key)) |index| sink +%= index;
+        }
+    }
+    b.keepAlive(sink);
+}
+
+// --- swiss, for the unordered comparison ---
+
+const swiss = stdx.swiss;
+
+pub fn benchmarkSwissU64GetHit(b: *testingx.B) !void {
+    var map: swiss.Auto(u64, u64) = .empty;
+    defer map.deinit(b.allocator);
+    try fillU64(b.allocator, &map);
+    var sink: u64 = 0;
+    while (try b.loop()) {
+        for (b.blackBox(&hit_keys)) |key| {
+            if (map.get(key)) |value| sink +%= value;
+        }
+    }
+    b.keepAlive(sink);
+}
+
+pub fn benchmarkSwissU64GetMiss(b: *testingx.B) !void {
+    var map: swiss.Auto(u64, u64) = .empty;
+    defer map.deinit(b.allocator);
+    try fillU64(b.allocator, &map);
+    var sink: u64 = 0;
+    while (try b.loop()) {
+        for (b.blackBox(&miss_keys)) |key| {
+            if (map.get(key)) |value| sink +%= value;
+        }
+    }
+    b.keepAlive(sink);
+}
+
+pub fn benchmarkSwissU64Build(b: *testingx.B) !void {
+    var sink: u64 = 0;
+    var state: u64 = 1;
+    while (try b.loop()) {
+        var map: swiss.Auto(u64, u64) = .empty;
+        defer map.deinit(b.allocator);
+        for (0..20_000) |_| {
+            state = state *% 6364136223846793005 +% 1442695040888963407;
+            try map.put(b.allocator, state, state);
+        }
+        sink +%= map.count();
+    }
+    b.keepAlive(sink);
+}
+
+pub fn benchmarkSwissU64Scan(b: *testingx.B) !void {
+    var map: swiss.Auto(u64, u64) = .empty;
+    defer map.deinit(b.allocator);
+    try fillU64(b.allocator, &map);
+    var sink: u64 = 0;
+    while (try b.loop()) {
+        var it = map.valueIterator();
+        while (it.next()) |value| sink +%= value.*;
+    }
+    b.keepAlive(sink);
+}
+
+pub fn benchmarkSwissStringGetHit(b: *testingx.B) !void {
+    var map: swiss.String(usize) = .empty;
+    defer map.deinit(b.allocator);
+    try fillStrings(b.allocator, &map);
+    var sink: usize = 0;
+    while (try b.loop()) {
+        for (b.blackBox(&string_hit_keys)) |key| {
+            if (map.get(key)) |value| sink +%= value;
+        }
+    }
+    b.keepAlive(sink);
+}
+
+pub fn benchmarkSwissStringGetMiss(b: *testingx.B) !void {
+    var map: swiss.String(usize) = .empty;
+    defer map.deinit(b.allocator);
+    try fillStrings(b.allocator, &map);
+    var sink: usize = 0;
+    while (try b.loop()) {
+        for (b.blackBox(&string_miss_keys)) |key| {
+            if (map.get(key)) |value| sink +%= value;
         }
     }
     b.keepAlive(sink);

@@ -147,6 +147,15 @@ shared form from master (see THIRD_PARTY.md); `swiss` and
 `bounded_array_hash_map` hand out pointers from storage that relocates
 too, and are the next two candidates for it.
 
+Against `swiss.Auto`, the fastest unordered map in the package, on the
+same 1M u64 workload: 6.6 ns per hit and 1.9 ns per miss, so 7.6x and
+21x faster than `btree` at 50 ns and 40 ns. On 200K 40-byte strings,
+11 ns per hit against 76. Build is closer than lookups suggest (57 ns
+per insert against 78), and `btree` scans faster (3.7 vs 4.2 ns per
+entry) because a leaf is contiguous while a Swiss table skips. That gap
+is the price of order: a hash map compares one key per lookup, a B+tree
+compares one per level.
+
 The lesson: against a static sorted array the tree wins only where a
 comparison reads the heap (strings), and elsewhere it is within 1.4x
 while supporting inserts, removals, and ordered iteration. Node width 2
