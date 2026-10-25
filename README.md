@@ -13,6 +13,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 
 - [Modules](https://baskingspot.dev/stdx/#modules): every export of `src/root.zig`, one row each, with the reason to reach for it.
 - [Choosing a container](https://baskingspot.dev/stdx/#choosing-a-container): which fixed-capacity type fits a need, and when to use std or `swiss` instead.
+- [Ordered maps](https://baskingspot.dev/stdx/#ordered-maps): `btree.Auto` and `btree.String` keep the keys sorted for iteration and lookups by key.
 - [Fixed-capacity containers](https://baskingspot.dev/stdx/#fixed-capacity-containers): lists, queues, bitsets, maps, sets, Bloom filters, and comptime lookup tables. No allocator and no `deinit`; `Array` owns its storage, and `Slice` and `Queue` borrow it.
 - [Strict parsing](https://baskingspot.dev/stdx/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
 - [Binary encoding](https://baskingspot.dev/stdx/#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, in big or little endian selected at comptime, with a reserved slot for a length or checksum written later.

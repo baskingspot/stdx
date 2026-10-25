@@ -7,6 +7,11 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `btree`: an ordered map. `btree.Auto` takes integer keys, `btree.String`
+  takes `[]const u8` keys, and `btree.Custom` takes any key type with a
+  comparison context. Iteration is in key order. `lockPointers` makes an
+  insertion or removal that invalidates a held pointer assert in Debug and
+  ReleaseSafe.
 - `wire.Reader(.big)` and `wire.Reader(.little)`: forward-only decoding of
   caller-owned bytes, the inverse of `wire.Writer`, with checked and `assume`
   forms.

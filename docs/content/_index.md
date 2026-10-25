@@ -97,6 +97,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`bit_set`](api/#stdx.bit_set)                               | Fixed-capacity bitsets. `Scratch` resets without clearing the dirty backing words.                                                                                                |
 | [`bloom`](api/#stdx.bloom)                                   | Bloom filters with a fixed capacity.                                                                                                                                              |
 | [`bounded_array_hash_map`](api/#stdx.bounded_array_hash_map) | An insertion-ordered hash map with a fixed capacity and no allocator.                                                                                                             |
+| [`btree`](api/#stdx.btree)                                   | An ordered map that grows: sorted iteration, and lookups by key.                                                                                                                  |
 | [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                                         |
 | [`buffer`](api/#stdx.buffer)                                 | Fixed-capacity buffers. `Array` owns its storage. `Slice` and `Queue` borrow it, and `Queue` consumes from the front.                                                             |
 | [`fmt`](api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                                                                                         |
@@ -138,6 +139,7 @@ Find the need in the table. Then read the section for that type in [Fixed-capaci
 | A constant lookup table                               | `static_map.Auto` or `.String`             | Built at compile time from a literal. Not the same as `std.StaticStringMap`: see below. |
 | A cheap "have I seen this" test                       | `bloom.Auto`                               | Can report a key that was never added.                                                  |
 | A map that grows                                      | `swiss.Auto` or `.String`                  | Uses an allocator. Order is not insertion order.                                        |
+| Keys kept in sorted order                             | `btree.Auto` or `.String`                  | Uses an allocator. Iteration is in key order, not insertion order.                      |
 
 ## Pick a fixed capacity when
 
@@ -287,6 +289,73 @@ For string keys, use std unless you want one of those properties from `static_ma
 ```zig
 {{ load_data(path="examples/containers_swiss_map.zig", format="plain") | trim_end }}
 ```
+
+# Ordered maps
+
+Zig has no ordered map that owns its nodes. `std.Treap` orders keys, but it
+takes a node from the caller for each element and chases pointers down the
+tree. `btree` is the ordered map: it grows, it takes the allocator per call,
+and it iterates in key order.
+
+A lookup reads a few cache lines, not one per key compared. A node holds 15
+keys, and the search compares the first two or four bytes of every key with
+one vector compare. The keys of a node share a prefix, which the node skips,
+so long common prefixes cost nothing. Keys that are slices stay on the heap,
+and a comparison reads their bytes only when two windows tie.
+
+## Keep keys in order
+
+Iteration is in key order. A repeated key replaces its value and keeps its
+place in the order. `iteratorFrom` starts the walk at any key, so a range is
+one iterator with a stop condition.
+
+```zig
+{{ load_data(path="examples/btree_ordered_map.zig", format="plain") | trim_end }}
+```
+
+## Hold a pointer safely
+
+The map grows and owns its entries, so a value pointer or an iterator does
+not survive every call: an insertion or removal in the same leaf shifts
+entries, and a split or a merge frees the node. `lockPointers` brackets the
+use of such a pointer. While a borrow is outstanding, every call that could
+move or free an entry fails an assertion in Debug and ReleaseSafe, and does
+nothing in ReleaseFast.
+
+```zig
+map.lockPointers();
+defer map.unlockPointers();
+const value = map.getPtr(key).?;
+// An insertion or removal here is a bug, and says so.
+```
+
+## Use it from one thread
+
+The map is not thread safe. Use it from one thread at a time, and do not read
+it from two threads at once either. The pointer guard that catches invalidated
+pointers is a plain counter, and an insertion or removal moves or frees nodes.
+
+The original also ships a concurrent map. It puts a version lock on every node,
+reads inner nodes optimistically, and recycles freed nodes through a free list.
+This one does not; that is a separate design.
+
+## Pick a key type
+
+`btree.Auto` takes integer keys, ordered numerically. `btree.String` takes
+`[]const u8` keys, ordered by bytes. `btree.Custom` takes any key type with a
+context that declares `compare`, and it uses inline keys when that context
+also declares `inlineKey`.
+
+An ordered map is the wrong choice when the order is not needed. `swiss` and
+the fixed-capacity maps find a key without comparing keys at all, and they are
+much faster for that. Reach for `btree` when the program reads keys in order,
+looks for the nearest key on either side, or must iterate a table in a stable
+sorted order.
+
+The design is Xiangpeng Hao's, from
+[bbtree: fastest ordered map](https://bbtree.xiangpeng.systems/post/). The Rust
+implementation is at [XiangpengHao/bbtree](https://github.com/XiangpengHao/bbtree).
+This module reimplements the ideas in Zig; none of that code is here.
 
 # Strict parsing
 
