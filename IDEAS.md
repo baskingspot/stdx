@@ -195,10 +195,16 @@ shuffles into `addv`, about 22 instructions on a serial chain, where
 NEON has a native 8-lane u16 compare.
 
 Porting bbtree's count (its D56) fixed it, and it is in THIRD_PARTY.md
-under MIT: compare a register at a time, then `std.simd.countTrues` over
-each chunk, which is the same select-and-reduce with std's name on it.
-The chunk is `std.simd.suggestVectorLength`, 16 u16 lanes on an SVE
-core and 8 on plain NEON. At max 15 it cut a lookup from 268 to 234
+under MIT: compare a register at a time, subtract all-ones lanes into a
+counter of the lanes' own width, and add the lanes up once at the end.
+The chunk is `std.simd.suggestVectorLength`, 16 u16 lanes on an SVE core
+and 8 on plain NEON.
+
+`std.simd.countTrues` is the same idea and not the same code: it
+accumulates in `VectorCount`, which is `u4` for sixteen lanes, and LLVM
+pays for a `@Vector(16, u4)` — measured 330 instructions a lookup
+against 258, 63.7 ns against 42.0. The counters stay in the lanes' own
+width, which is why this is hand-rolled. At max 15 it cut a lookup from 268 to 234
 instructions and 53.4 to 49.1 ns; with the level cheaper, max 31 finally
 paid: 41.0/39.5 on u64 and 70.4/59.2 on 200K strings, against their
 39.3/39.0 and 64.7/60.2. Misses are at parity, string misses ahead, and
