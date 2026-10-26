@@ -130,8 +130,20 @@ pub fn Custom(
         const vec_len = math.ceilPowerOfTwoAssert(usize, max);
         /// Window slots per node; none without a codec.
         const window_count = if (has_windows) vec_len else 0;
-        /// The lanes one compare covers: a single vector register.
-        const chunk_len = 8;
+        /// The lanes one compare covers: one vector register, as the target
+        /// suggests, and never more lanes than the node has.
+        const chunk_len = blk: {
+            const suggested = std.simd.suggestVectorLength(Word) orelse vec_len;
+            break :blk @min(suggested, vec_len);
+        };
+        comptime {
+            assert(vec_len % chunk_len == 0);
+        }
+        /// One register of window lanes, and the constants the count works in:
+        /// an all-ones lane subtracts one from a counter.
+        const Vec = @Vector(chunk_len, Word);
+        const lane_ones: Vec = @splat(math.maxInt(Word));
+        const lane_zeros: Vec = @splat(0);
         /// A node's window array: one lane per slot, real keys first and
         /// `pad` for the rest. The `len` field says where the real ones end.
         const Windows = [window_count]Word;
@@ -617,18 +629,15 @@ pub fn Custom(
         /// compiler widen the lanes and shuffle the result back down, which
         /// costs more than the compares themselves.
         fn countWindows(windows: *const Windows, target: Word) Counts {
-            const Vec = @Vector(chunk_len, Word);
-            const ones: Vec = @splat(math.maxInt(Word));
-            const zeros: Vec = @splat(0);
             const splat_target: Vec = @splat(target);
-            var below: Vec = zeros;
-            var equal: Vec = zeros;
+            var below: Vec = lane_zeros;
+            var equal: Vec = lane_zeros;
             inline for (0..vec_len / chunk_len) |c| {
                 const lanes: Vec = windows[c * chunk_len ..][0..chunk_len].*;
                 // All-ones lanes subtracted from the counters add one, and
                 // that first subtraction wraps.
-                below -%= @select(Word, lanes < splat_target, ones, zeros);
-                equal -%= @select(Word, lanes == splat_target, ones, zeros);
+                below -%= @select(Word, lanes < splat_target, lane_ones, lane_zeros);
+                equal -%= @select(Word, lanes == splat_target, lane_ones, lane_zeros);
             }
             return .{ .below = @reduce(.Add, below), .equal = @reduce(.Add, equal) };
         }
