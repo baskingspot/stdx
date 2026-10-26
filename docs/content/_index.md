@@ -29,7 +29,7 @@ This guide explains how to choose modules and combine them. The [API reference](
 Add stdx to your project:
 
 ```sh
-zig fetch --save git+https://github.com/baskingspot/stdx
+zig fetch --save https://baskingspot.dev/stdx/v0.1.0.tar.gz
 ```
 
 Add the module to your build in `build.zig`:

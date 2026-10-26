@@ -5,8 +5,18 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-26
+
+The first release. Everything the guide documents ships here.
+
 ### Added
 
+- `stdx`: extensions to the Zig 0.16 standard library, as one module with a
+  namespace per idea: fixed-capacity containers, a resizable Swiss hash map,
+  the ordered `btree`, strict parsing, a forward-only `wire` format, base32,
+  IPv4 and CIDR prefixes, UUIDs, timekeeping, a caller-driven timer set, an
+  MPSC log ring, and the small pieces (`BoundedWriter`, `hash.RapidHash`, the
+  heap pools, `mem` byte values, secure random, and buffered stdio).
 - `btree`: an ordered map. `btree.Auto` takes integer keys, `btree.String`
   takes `[]const u8` keys, and `btree.Custom` takes any key type with a
   comparison context. Iteration is in key order. `lockPointers` makes an
