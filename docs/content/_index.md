@@ -9,6 +9,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Modules](#modules): every export of `src/root.zig`, one row each, with the reason to reach for it.
 - [Choosing a container](#choosing-a-container): which fixed-capacity type fits a need, and when to use std or `swiss` instead.
 - [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
+- [Ordered maps](#ordered-maps): `btree` keeps the keys sorted for iteration and range scans, with cache-sized nodes and a stripped prefix at every node.
 - [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
 - [Binary encoding](#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, with the byte order fixed at comptime and a slot for a length or checksum written later.
 - [Base32](#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
