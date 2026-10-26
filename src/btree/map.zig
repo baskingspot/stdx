@@ -3,16 +3,15 @@
 //!
 //! # Shape
 //!
-//! Leaves hold the entries; internal nodes hold separator keys and child
-//! pointers, one more child than keys. `key[i-1] <= k < key[i]` routes to
-//! child `i`, and the separator `key[i]` is a copy of the smallest key in
-//! child `i+1` at the time it was written. Removal leaves separators stale
-//! (smaller than the real bound), which keeps routing correct and only costs
-//! prefix quality.
+//! Leaves hold the entries; internal nodes hold child pointers, one more
+//! child than separators. Separator `i` is the smallest key in child `i+1`,
+//! which is that child's own `low` field: a node carries one key, not one per
+//! slot, so internal nodes are windows and edges. `low[i-1] <= k < low[i]`
+//! routes to child `i`.
 //!
 //! ```text
-//! leaf     | len prefix | windows | (k v) (k v) ... |
-//! internal | len prefix | windows | k k ... | child child ... |
+//! leaf     | header | low | windows | (k v) (k v) ... |
+//! internal | header | low | windows | child child ... |
 //! ```
 //!
 //! `windows` is the dense array a search reads first: each key's big-endian
@@ -58,13 +57,15 @@ const Allocator = mem.Allocator;
 const testing = std.testing;
 const math = std.math;
 const Order = math.Order;
+
 const stability = @import("../stability.zig");
 
 /// Compile-time knobs for a map's nodes.
 pub const Config = struct {
     /// Maximum keys per node, odd and at least 3. A split leaves
-    /// `(max - 1) / 2` keys on each side with the middle one promoted.
-    max: u16 = 15,
+    /// `(max - 1) / 2` keys on each side with the middle one promoted. Null
+    /// takes the context's `node_max`.
+    max: ?u16 = null,
     /// Bytes of each window kept in the node: 2, 4, or 8. Null takes the
     /// context's `inline_width`, which is the width its measurements chose.
     width: ?u16 = null,
@@ -101,8 +102,10 @@ pub fn Custom(
         const Self = @This();
 
         comptime {
-            if (config.max < 3 or config.max % 2 == 0)
-                @compileError("btree.Config.max must be odd and at least 3");
+            switch (config.max orelse 15) {
+                3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 63 => {},
+                else => @compileError("btree.Config.max must be an odd number"),
+            }
             switch (config.width orelse 2) {
                 2, 4, 8 => {},
                 else => @compileError("btree.Config.width must be 2, 4 or 8"),
@@ -113,7 +116,8 @@ pub fn Custom(
         }
 
         /// Maximum keys per node.
-        const max: usize = config.max;
+        const max: usize = config.max orelse
+            (if (@hasDecl(Context, "node_max")) Context.node_max else 15);
         /// Minimum keys per node, the root excepted.
         const min: usize = (max - 1) / 2;
         /// Bytes of each window kept.
@@ -121,6 +125,7 @@ pub fn Custom(
             (if (@hasDecl(Context, "inline_width")) Context.inline_width else 4);
         /// Whether the context supplies inline keys.
         const has_windows = @hasDecl(Context, "inlineKey");
+
         /// The window word: `width` bytes, compared unsigned.
         const Word = @Int(.unsigned, width * 8);
         /// The lanes a search compares: the node's capacity, rounded up to
@@ -163,25 +168,61 @@ pub fn Custom(
             found_existing: bool,
         };
 
-        const Leaf = struct {
+        const Kind = enum(u8) { leaf, internal };
+
+        /// The alignment every node pointer carries, so a `*Header` can be
+        /// cast to the concrete node type it belongs to.
+        const node_align = @max(@alignOf(K), @alignOf(V), @alignOf(*anyopaque));
+
+        /// Every node starts with this: the kind, the key count, and the
+        /// length of the prefix its windows skip. A child is a `*Header`, so
+        /// an internal node's edge array is eight bytes per edge.
+        const Header = struct {
             len: u32,
             prefix_len: u16,
+            kind: Kind,
+        };
+
+        const Leaf = struct {
+            header: Header align(node_align),
+            /// Smallest key in this leaf: the separator to its left. A node's
+            /// key lives here, once per node, instead of once per slot in its
+            /// parent.
+            low: K,
             windows: Windows,
             elements: [max]Element,
         };
 
-        const Node = union(enum) {
-            leaf: *Leaf,
-            internal: *Internal,
-        };
-
         const Internal = struct {
-            len: u32,
-            prefix_len: u16,
+            header: Header align(node_align),
+            /// Smallest key in this subtree, the separator to its left.
+            low: K,
+            /// Window of each separator: separator `i` is
+            /// `children[i + 1].low`, one more child than windows.
             windows: Windows,
-            keys: [max]K,
             children: [max + 1]Node,
         };
+
+        const Node = *align(node_align) Header;
+
+        fn asLeaf(node: Node) *Leaf {
+            assert(node.kind == .leaf);
+            return @fieldParentPtr("header", node);
+        }
+
+        fn asInternal(node: Node) *Internal {
+            assert(node.kind == .internal);
+            return @fieldParentPtr("header", node);
+        }
+
+        /// The smallest key in a node's subtree, which is also its
+        /// separator in the parent.
+        fn lowOf(node: Node) K {
+            return switch (node.kind) {
+                .leaf => asLeaf(node).low,
+                .internal => asInternal(node).low,
+            };
+        }
 
         /// Number of entries in the map.
         used: usize,
@@ -190,6 +231,9 @@ pub fn Custom(
         /// Debug and ReleaseSafe only: while a borrow is outstanding, every
         /// call that can move or free an entry asserts instead.
         pointer_stability: stability.SafetyLock = .{},
+        /// Length of the prefix every key in the map shares, kept in step
+        /// with the extremes.
+        shared_prefix: u16 = 0,
         /// Smallest key in the map, the outer fence of the left spine.
         lowest: ?K,
         /// Largest key in the map, the outer fence of the right spine.
@@ -263,14 +307,14 @@ pub fn Custom(
         /// that into an assertion in Debug and ReleaseSafe instead.
         pub fn getPtr(self: *const Self, key: K) ?*V {
             var node = self.root orelse return null;
-            while (true) switch (node) {
-                .leaf => |leaf| {
-                    const found = self.searchLeaf(leaf, key);
-                    if (!found.found) return null;
-                    return &leaf.elements[found.pos].value;
-                },
-                .internal => |in| node = in.children[self.searchInternal(in, key)],
-            };
+            while (node.kind == .internal) {
+                const in = asInternal(node);
+                node = in.children[self.searchInternal(in, key)];
+            }
+            const leaf = asLeaf(node);
+            const found = self.searchLeaf(leaf, key);
+            if (!found.found) return null;
+            return &leaf.elements[found.pos].value;
         }
 
         /// Pointer to the value stored for `key`; when absent, inserts `key`
@@ -279,13 +323,15 @@ pub fn Custom(
         pub fn getOrPut(self: *Self, gpa: Allocator, key: K) !GetOrPutResult {
             self.pointer_stability.assertUnlocked();
             if (self.root == null) {
-                const leaf = try createLeaf(gpa);
+                const node = try createLeaf(gpa);
+                const leaf = asLeaf(node);
                 leaf.elements[0].key = key;
-                leaf.len = 1;
+                leaf.header.len = 1;
                 self.lowest = key;
                 self.highest = key;
-                self.refit(.{ .leaf = leaf }, .{ .low = key, .high = key });
-                self.root = .{ .leaf = leaf };
+                self.updateSharedPrefix();
+                self.refit(node, .{ .low = key, .high = key });
+                self.root = node;
                 self.used = 1;
                 return .{
                     .key_ptr = &leaf.elements[0].key,
@@ -303,16 +349,17 @@ pub fn Custom(
             var root = self.root.?;
             if (isFull(root)) root = try self.splitRoot(gpa, root);
             var node = root;
-            var outer: Fences = .{ .low = self.lowest, .high = self.highest };
-            while (true) switch (node) {
-                .leaf => |leaf| {
+            var outer = Fences{ .low = self.lowest, .high = self.highest };
+            while (true) {
+                if (node.kind == .leaf) {
+                    const leaf = asLeaf(node);
                     const found = self.searchLeaf(leaf, key);
                     if (found.found) return .{
                         .key_ptr = &leaf.elements[found.pos].key,
                         .value_ptr = &leaf.elements[found.pos].value,
                         .found_existing = true,
                     };
-                    assert(leaf.len < max); // the descent splits full children
+                    assert(leaf.header.len < max); // the descent splits full children
                     const pos = found.pos;
                     self.insertElement(leaf, pos, key, undefined);
                     self.used += 1;
@@ -321,19 +368,18 @@ pub fn Custom(
                         .value_ptr = &leaf.elements[pos].value,
                         .found_existing = false,
                     };
-                },
-                .internal => |in| {
-                    var idx = self.searchInternal(in, key);
-                    var child = in.children[idx];
-                    if (isFull(child)) {
-                        try self.splitChild(gpa, in, idx, childFences(in, idx, outer));
-                        if (self.compare(key, in.keys[idx]) != .lt) idx += 1;
-                        child = in.children[idx];
-                    }
-                    node = child;
-                    outer = childFences(in, idx, outer);
-                },
-            };
+                }
+                const in = asInternal(node);
+                var idx = self.searchInternal(in, key);
+                var child = in.children[idx];
+                if (isFull(child)) {
+                    try self.splitChild(gpa, in, idx, childFences(in, idx, outer));
+                    if (self.compare(key, lowOf(in.children[idx + 1])) != .lt) idx += 1;
+                    child = in.children[idx];
+                }
+                node = child;
+                outer = childFences(in, idx, outer);
+            }
         }
 
         /// Insert `key` with `value`, replacing any existing value.
@@ -365,28 +411,33 @@ pub fn Custom(
             var path: [max_depth]Frame = undefined;
             var node = self.root orelse return null;
             var depth: usize = 0;
-            var outer: Fences = .{ .low = self.lowest, .high = self.highest };
-            while (true) switch (node) {
-                .leaf => |leaf| {
+            var outer = Fences{ .low = self.lowest, .high = self.highest };
+            while (true) {
+                if (node.kind == .leaf) {
+                    const leaf = asLeaf(node);
                     const found = self.searchLeaf(leaf, key);
                     if (!found.found) return null;
                     const value = leaf.elements[found.pos].value;
                     self.removeElement(leaf, found.pos);
                     self.used -= 1;
+                    var min_moved = false;
+                    if (found.pos == 0 and leaf.header.len > 0) {
+                        min_moved = self.refreshLow(path[0..depth], leaf);
+                    }
+                    self.refreshPath(path[0..depth]);
                     self.rebalanceUp(gpa, path[0..depth]);
                     self.fixRoot(gpa);
-                    self.noteRemoved(key);
+                    self.noteRemoved(key, min_moved);
                     return value;
-                },
-                .internal => |in| {
-                    const idx = self.searchInternal(in, key);
-                    assert(depth < max_depth);
-                    path[depth] = .{ .node = node, .index = idx, .fences = outer };
-                    depth += 1;
-                    node = in.children[idx];
-                    outer = childFences(in, idx, outer);
-                },
-            };
+                }
+                const in = asInternal(node);
+                const idx = self.searchInternal(in, key);
+                assert(depth < max_depth);
+                path[depth] = .{ .node = node, .index = idx, .fences = outer };
+                depth += 1;
+                node = in.children[idx];
+                outer = childFences(in, idx, outer);
+            }
         }
 
         /// Remove every entry and free every node.
@@ -397,6 +448,7 @@ pub fn Custom(
             self.used = 0;
             self.lowest = null;
             self.highest = null;
+            self.shared_prefix = 0;
         }
 
         /// Iterate entries in ascending key order.
@@ -424,21 +476,19 @@ pub fn Custom(
                 const order = self.compare(key, high);
                 if (order == .gt or (order == .eq and !inclusive)) return it;
             }
-            while (true) switch (node) {
-                .leaf => |leaf| {
-                    const found = self.searchLeaf(leaf, key);
+            while (true) {
+                if (node.kind == .leaf) {
+                    const found = self.searchLeaf(asLeaf(node), key);
                     const start = found.pos + @intFromBool(found.found and !inclusive);
                     it.frames[it.depth] = .{ .node = node, .index = start };
                     it.depth += 1;
                     return it;
-                },
-                .internal => |in| {
-                    const idx = self.searchInternal(in, key);
-                    it.frames[it.depth] = .{ .node = node, .index = idx };
-                    it.depth += 1;
-                    node = in.children[idx];
-                },
-            };
+                }
+                const idx = self.searchInternal(asInternal(node), key);
+                it.frames[it.depth] = .{ .node = node, .index = idx };
+                it.depth += 1;
+                node = asInternal(node).children[idx];
+            }
         }
 
         /// The smallest entry, or null.
@@ -450,14 +500,18 @@ pub fn Custom(
         /// The largest entry, or null.
         pub fn last(self: *const Self) ?Entry {
             var node = self.root orelse return null;
-            while (true) switch (node) {
-                .leaf => |leaf| return .{
-                    .key_ptr = &leaf.elements[leaf.len - 1].key,
-                    .value_ptr = &leaf.elements[leaf.len - 1].value,
-                },
-                .internal => |in| node = in.children[in.len],
+            while (node.kind == .internal) {
+                const in = asInternal(node);
+                node = in.children[in.header.len];
+            }
+            const leaf = asLeaf(node);
+            return .{
+                .key_ptr = &leaf.elements[leaf.header.len - 1].key,
+                .value_ptr = &leaf.elements[leaf.header.len - 1].value,
             };
         }
+
+        // --- windows ---
 
         /// `key`'s window at `prefix`, truncated to the node layout's width.
         fn windowOf(self: *const Self, key: K, prefix: usize) Word {
@@ -466,20 +520,22 @@ pub fn Custom(
             return @truncate(window >> shift);
         }
 
+        // --- search ---
+
         const Found = struct { pos: usize, found: bool };
 
         fn searchLeaf(self: *const Self, leaf: *const Leaf, key: K) Found {
-            const n: usize = leaf.len;
+            const n: usize = leaf.header.len;
             if (comptime !has_windows) {
                 return binarySearchLeaf(self, leaf, 0, n, key);
             } else {
-                const target = self.windowOf(key, leaf.prefix_len);
+                const target = self.windowOf(key, leaf.header.prefix_len);
                 const less = countLess(&leaf.windows, target);
                 if (less == n or leaf.windows[less] != target) {
                     return .{ .pos = less, .found = false };
                 }
                 const leq = countLeq(&leaf.windows, target, n);
-                const tie_offset = @as(usize, leaf.prefix_len) + width;
+                const tie_offset = @as(usize, leaf.header.prefix_len) + width;
                 if (leq - less == 1) {
                     const order = self.compareFrom(leaf.elements[less].key, key, tie_offset);
                     return switch (order) {
@@ -501,7 +557,7 @@ pub fn Custom(
         ) Found {
             var lo = from;
             var hi = to;
-            const tie_offset = @as(usize, leaf.prefix_len) + width;
+            const tie_offset = @as(usize, leaf.header.prefix_len) + width;
             while (lo < hi) {
                 const mid = lo + (hi - lo) / 2;
                 switch (self.compareFrom(leaf.elements[mid].key, key, tie_offset)) {
@@ -514,22 +570,24 @@ pub fn Custom(
         }
 
         /// Index of the child to follow: the number of separators at or
-        /// below `key`.
+        /// below `key`. A separator is the `low` key of the child to its
+        /// right, so the nodes here carry no key array.
         fn searchInternal(self: *const Self, in: *const Internal, key: K) usize {
-            const n: usize = in.len;
+            const n: usize = in.header.len;
             if (comptime !has_windows) {
-                return upperBound(self, in, 0, n, key);
+                return self.upperBound(in, 0, n, key);
             } else {
-                const target = self.windowOf(key, in.prefix_len);
+                const target = self.windowOf(key, in.header.prefix_len);
                 const less = countLess(&in.windows, target);
                 if (less == n or in.windows[less] != target) return less;
                 const leq = countLeq(&in.windows, target, n);
-                const tie_offset = @as(usize, in.prefix_len) + width;
+                const tie_offset = @as(usize, in.header.prefix_len) + width;
                 if (leq - less == 1) {
-                    const order = self.compareFrom(in.keys[less], key, tie_offset);
+                    const separator = lowOf(in.children[less + 1]);
+                    const order = self.compareFrom(separator, key, tie_offset);
                     return if (order == .gt) less else less + 1;
                 }
-                return upperBound(self, in, less, leq, key);
+                return self.upperBound(in, less, leq, key);
             }
         }
 
@@ -542,10 +600,10 @@ pub fn Custom(
         ) usize {
             var lo = from;
             var hi = to;
-            const tie_offset = @as(usize, in.prefix_len) + width;
+            const tie_offset = @as(usize, in.header.prefix_len) + width;
             while (lo < hi) {
                 const mid = lo + (hi - lo) / 2;
-                switch (self.compareFrom(in.keys[mid], key, tie_offset)) {
+                switch (self.compareFrom(lowOf(in.children[mid + 1]), key, tie_offset)) {
                     .gt => hi = mid,
                     else => lo = mid + 1,
                 }
@@ -596,99 +654,96 @@ pub fn Custom(
             return self.context.compare(a, b);
         }
 
+        // --- node mutation ---
+
         fn isFull(node: Node) bool {
-            return switch (node) {
-                .leaf => |leaf| leaf.len == max,
-                .internal => |in| in.len == max,
-            };
+            return node.len == max;
         }
 
         fn fill(node: Node) usize {
-            return switch (node) {
-                .leaf => |leaf| leaf.len,
-                .internal => |in| in.len,
-            };
+            return node.len;
         }
 
         fn insertElement(self: *Self, leaf: *Leaf, pos: usize, key: K, value: V) void {
-            const n: usize = leaf.len;
+            const n: usize = leaf.header.len;
             var i = n;
             while (i > pos) : (i -= 1) {
                 leaf.elements[i] = leaf.elements[i - 1];
                 if (comptime has_windows) leaf.windows[i] = leaf.windows[i - 1];
             }
             leaf.elements[pos] = .{ .key = key, .value = value };
-            if (comptime has_windows) leaf.windows[pos] = self.windowOf(key, leaf.prefix_len);
-            leaf.len = @intCast(n + 1);
+            if (comptime has_windows) {
+                leaf.windows[pos] = self.windowOf(key, leaf.header.prefix_len);
+            }
+            leaf.header.len = @intCast(n + 1);
         }
 
         fn removeElement(self: *Self, leaf: *Leaf, pos: usize) void {
             _ = self;
-            const n: usize = leaf.len;
+            const n: usize = leaf.header.len;
             var i = pos;
             while (i + 1 < n) : (i += 1) {
                 leaf.elements[i] = leaf.elements[i + 1];
                 if (comptime has_windows) leaf.windows[i] = leaf.windows[i + 1];
             }
             if (comptime has_windows) leaf.windows[n - 1] = pad;
-            leaf.len = @intCast(n - 1);
+            leaf.header.len = @intCast(n - 1);
         }
 
-        /// Insert `sep` and `child` at `idx` into an internal node that has
-        /// room, shifting the rest right.
-        fn insertSeparator(self: *Self, in: *Internal, idx: usize, sep: K, child: Node) void {
-            const n: usize = in.len;
+        /// Write the window of separator `idx`, which is the lower fence of
+        /// `children[idx + 1]`.
+        fn setWindow(self: *Self, in: *Internal, idx: usize) void {
+            if (comptime has_windows) {
+                in.windows[idx] = self.windowOf(lowOf(in.children[idx + 1]), in.header.prefix_len);
+            }
+        }
+
+        /// Insert `child` at `idx + 1` of an internal node that has room. The
+        /// separator it adds is the child's own low key, so no key array
+        /// moves.
+        fn insertChild(self: *Self, in: *Internal, idx: usize, child: Node) void {
+            const n: usize = in.header.len;
             var i = n;
             while (i > idx) : (i -= 1) {
-                in.keys[i] = in.keys[i - 1];
                 in.children[i + 1] = in.children[i];
                 if (comptime has_windows) in.windows[i] = in.windows[i - 1];
             }
-            in.keys[idx] = sep;
             in.children[idx + 1] = child;
-            if (comptime has_windows) in.windows[idx] = self.windowOf(sep, in.prefix_len);
-            in.len = @intCast(n + 1);
+            in.header.len = @intCast(n + 1);
+            self.setWindow(in, idx);
         }
 
-        /// Replace separator `idx`, keeping its window in step with the node.
-        fn setSeparator(self: *Self, in: *Internal, idx: usize, sep: K) void {
-            in.keys[idx] = sep;
-            if (comptime has_windows) {
-                in.windows[idx] = self.windowOf(sep, in.prefix_len);
-            }
-        }
-
-        /// Remove separator `idx` and child `idx + 1` from an internal node.
-        fn removeSeparator(self: *Self, in: *Internal, idx: usize) void {
+        /// Remove separator `idx` and child `idx + 1`.
+        fn removeChild(self: *Self, in: *Internal, idx: usize) void {
             _ = self;
-            const n: usize = in.len;
+            const n: usize = in.header.len;
             var i = idx;
             while (i + 1 < n) : (i += 1) {
-                in.keys[i] = in.keys[i + 1];
                 in.children[i + 1] = in.children[i + 2];
                 if (comptime has_windows) in.windows[i] = in.windows[i + 1];
             }
             if (comptime has_windows) in.windows[n - 1] = pad;
-            in.len = @intCast(n - 1);
+            in.header.len = @intCast(n - 1);
         }
 
-        fn createLeaf(gpa: Allocator) !*Leaf {
+        // --- construction ---
+
+        fn createLeaf(gpa: Allocator) !Node {
             const leaf = try gpa.create(Leaf);
-            leaf.len = 0;
-            leaf.prefix_len = 0;
-            if (comptime has_windows) @memset(leaf.windows[0..], pad);
-            return leaf;
+            leaf.header = .{ .len = 0, .prefix_len = 0, .kind = .leaf };
+            if (comptime has_windows) @memset(&leaf.windows, pad);
+            return @alignCast(&leaf.header);
         }
 
-        fn createInternal(gpa: Allocator) !*Internal {
+        fn createInternal(gpa: Allocator) !Node {
             const in = try gpa.create(Internal);
-            in.len = 0;
-            in.prefix_len = 0;
-            if (comptime has_windows) @memset(in.windows[0..], pad);
-            return in;
+            in.header = .{ .len = 0, .prefix_len = 0, .kind = .internal };
+            if (comptime has_windows) @memset(&in.windows, pad);
+            return @alignCast(&in.header);
         }
 
-        /// Set a node's prefix from its fences and stamp every window.
+        /// Set a node's lower fence, its prefix from both fences, and every
+        /// window. A node's own `low` is the fence the parent routes by.
         fn refit(self: *Self, node: Node, fences: Fences) void {
             var prefix: u16 = 0;
             if (comptime has_windows) {
@@ -696,12 +751,19 @@ pub fn Custom(
                     const low = fences.low.?;
                     const high = fences.high.?;
                     prefix = @intCast(commonPrefix(K, Context, self.context, low, high));
+                } else {
+                    // A border node has no fence on one side, so it strips
+                    // what every key of the tree shares and no more: a key
+                    // outside the range still shares that much.
+                    prefix = self.sharedPrefix();
                 }
             }
-            switch (node) {
-                .leaf => |leaf| {
-                    const n: usize = leaf.len;
-                    leaf.prefix_len = prefix;
+            node.prefix_len = prefix;
+            switch (node.kind) {
+                .leaf => {
+                    const leaf = asLeaf(node);
+                    const n: usize = leaf.header.len;
+                    leaf.low = fences.low orelse self.lowest orelse leaf.low;
                     if (comptime has_windows) {
                         for (0..n) |i| {
                             leaf.windows[i] = self.windowOf(leaf.elements[i].key, prefix);
@@ -709,11 +771,14 @@ pub fn Custom(
                         @memset(leaf.windows[n..], pad);
                     }
                 },
-                .internal => |in| {
-                    const n: usize = in.len;
-                    in.prefix_len = prefix;
+                .internal => {
+                    const in = asInternal(node);
+                    const n: usize = in.header.len;
+                    in.low = fences.low orelse self.lowest orelse in.low;
                     if (comptime has_windows) {
-                        for (0..n) |i| in.windows[i] = self.windowOf(in.keys[i], prefix);
+                        for (0..n) |i| {
+                            in.windows[i] = self.windowOf(lowOf(in.children[i + 1]), prefix);
+                        }
                         @memset(in.windows[n..], pad);
                     }
                 },
@@ -723,19 +788,20 @@ pub fn Custom(
         /// Split a full root into a new root with two children.
         fn splitRoot(self: *Self, gpa: Allocator, old: Node) !Node {
             const root = try createInternal(gpa);
-            root.children[0] = old;
-            const fences: Fences = .{ .low = self.lowest, .high = self.highest };
-            self.refit(.{ .internal = root }, fences);
-            self.splitChild(gpa, root, 0, fences) catch |err| {
-                gpa.destroy(root);
+            const fences = Fences{ .low = self.lowest, .high = self.highest };
+            const in = asInternal(root);
+            in.children[0] = old;
+            self.refit(root, fences);
+            self.splitChild(gpa, in, 0, fences) catch |err| {
+                gpa.destroy(in);
                 return err;
             };
-            self.root = .{ .internal = root };
-            return self.root.?;
+            self.root = root;
+            return root;
         }
 
-        /// Split `parent.children[idx]` in half, promote the middle key, and
-        /// refit both halves from their new fences.
+        /// Split `parent.children[idx]` in half. The new separator needs no
+        /// key: it is the right half's own low key.
         fn splitChild(
             self: *Self,
             gpa: Allocator,
@@ -744,36 +810,40 @@ pub fn Custom(
             fences: Fences,
         ) !void {
             const child = parent.children[idx];
-            switch (child) {
-                .leaf => |leaf| {
-                    const n: usize = leaf.len;
+            switch (child.kind) {
+                .leaf => {
+                    const leaf = asLeaf(child);
+                    const n: usize = leaf.header.len;
                     const mid = n / 2;
                     const right = try createLeaf(gpa);
-                    right.len = @intCast(n - mid);
-                    @memcpy(right.elements[0 .. n - mid], leaf.elements[mid..n]);
-                    const sep = right.elements[0].key;
-                    self.insertSeparator(parent, idx, sep, .{ .leaf = right });
-                    self.refit(.{ .leaf = right }, .{ .low = sep, .high = fences.high });
-                    leaf.len = @intCast(mid);
-                    self.refit(.{ .leaf = leaf }, .{ .low = fences.low, .high = sep });
+                    const r = asLeaf(right);
+                    r.header.len = @intCast(n - mid);
+                    @memcpy(r.elements[0 .. n - mid], leaf.elements[mid..n]);
+                    r.low = r.elements[0].key;
+                    leaf.header.len = @intCast(mid);
+                    self.insertChild(parent, idx, right);
+                    self.refit(right, .{ .low = r.low, .high = fences.high });
+                    self.refit(child, .{ .low = fences.low, .high = r.low });
                 },
-                .internal => |in| {
-                    const n: usize = in.len;
+                .internal => {
+                    const in = asInternal(child);
+                    const n: usize = in.header.len;
                     const mid = n / 2;
-                    const sep = in.keys[mid];
                     const right = try createInternal(gpa);
-                    right.len = @intCast(n - mid - 1);
-                    @memcpy(right.keys[0 .. n - mid - 1], in.keys[mid + 1 .. n]);
-                    @memcpy(right.children[0 .. n - mid], in.children[mid + 1 .. n + 1]);
-                    in.len = @intCast(mid);
-                    self.insertSeparator(parent, idx, sep, .{ .internal = right });
-                    self.refit(.{ .internal = right }, .{ .low = sep, .high = fences.high });
-                    self.refit(.{ .internal = in }, .{ .low = fences.low, .high = sep });
+                    const r = asInternal(right);
+                    r.header.len = @intCast(n - mid - 1);
+                    @memcpy(r.children[0 .. n - mid], in.children[mid + 1 .. n + 1]);
+                    r.low = lowOf(r.children[0]);
+                    in.header.len = @intCast(mid);
+                    self.insertChild(parent, idx, right);
+                    self.refit(right, .{ .low = r.low, .high = fences.high });
+                    self.refit(child, .{ .low = fences.low, .high = r.low });
                 },
             }
         }
 
-        /// One step of a root-to-leaf path: the node and the child to follow.
+        // --- removal and balance ---
+
         /// The keys on either side of a node: its separators in the parent,
         /// or the map's outer fences at the spines.
         const Fences = struct { low: ?K, high: ?K };
@@ -782,13 +852,53 @@ pub fn Custom(
         /// and the fences around the node.
         const Frame = struct { node: Node, index: usize, fences: Fences };
 
+        /// Rewrite what a leaf's changed smallest key affects: the separator
+        /// to its left, the leaf's own prefix, and the prefix of the previous
+        /// sibling, whose upper fence is that separator. A fence that moves
+        /// changes the common prefix for the whole spine under it, so each
+        /// refit walks the matching spine. Returns whether the map's smallest
+        /// key moved.
+        fn refreshLow(self: *Self, path: []const Frame, leaf: *Leaf) bool {
+            leaf.low = leaf.elements[0].key;
+            var node: Node = @alignCast(&leaf.header);
+            var i = path.len;
+            while (i > 0) {
+                i -= 1;
+                const frame = path[i];
+                const parent = asInternal(frame.node);
+                const idx = frame.index;
+                self.refitSpineAt(node, childFences(parent, idx, frame.fences), 0);
+                if (idx > 0) {
+                    self.setWindow(parent, idx - 1);
+                    const previous = childFences(parent, idx - 1, frame.fences);
+                    self.refitSpineAt(parent.children[idx - 1], previous, 1);
+                    return false;
+                }
+                parent.low = lowOf(node);
+                node = frame.node;
+            }
+            // Every ancestor was a first child, so the leaf is the map's
+            // leftmost and the smallest key moved with it.
+            self.lowest = leaf.low;
+            return true;
+        }
+
+        /// Recompute every frame's fences from the tree's current extremes.
+        fn refreshPath(self: *const Self, path: []Frame) void {
+            var outer = Fences{ .low = self.lowest, .high = self.highest };
+            for (path) |*frame| {
+                frame.fences = outer;
+                outer = childFences(asInternal(frame.node), frame.index, outer);
+            }
+        }
+
         /// Fix every node on the path that fell below the minimum fill.
         fn rebalanceUp(self: *Self, gpa: Allocator, path: []const Frame) void {
             var i = path.len;
             while (i > 0) {
                 i -= 1;
                 const frame = path[i];
-                const parent = frame.node.internal;
+                const parent = asInternal(frame.node);
                 if (fill(parent.children[frame.index]) >= min) break;
                 self.rebalance(gpa, parent, frame.index, frame.fences);
             }
@@ -803,7 +913,7 @@ pub fn Custom(
             idx: usize,
             outer: Fences,
         ) void {
-            const n: usize = parent.len;
+            const n: usize = parent.header.len;
             const left: ?usize = if (idx > 0) idx - 1 else null;
             const right: ?usize = if (idx < n) idx + 1 else null;
             if (left) |li| {
@@ -818,15 +928,39 @@ pub fn Custom(
             return self.merge(gpa, parent, idx, outer);
         }
 
-        /// The fences around `parent.children[idx]`: the separators beside it,
-        /// or the node's own outer fences at the borders.
+        /// The fences around `parent.children[idx]`: the members' own low
+        /// keys, or the node's outer fences at the borders.
         fn childFences(parent: *const Internal, idx: usize, outer: Fences) Fences {
-            const n: usize = parent.len;
+            const n: usize = parent.header.len;
             return .{
-                .low = if (idx > 0) parent.keys[idx - 1] else outer.low,
-                .high = if (idx < n) parent.keys[idx] else outer.high,
+                .low = if (idx > 0) lowOf(parent.children[idx]) else outer.low,
+                .high = if (idx < n) lowOf(parent.children[idx + 1]) else outer.high,
             };
         }
+
+        /// The length of the prefix every key in the map shares. A node with
+        /// no fence on one side strips exactly this much, so that a key which
+        /// shares it can be searched anywhere in the tree.
+        fn sharedPrefix(self: *const Self) u16 {
+            return self.shared_prefix;
+        }
+
+        /// Recompute the shared prefix from the extremes. Call it whenever
+        /// either extreme moves.
+        fn updateSharedPrefix(self: *Self) void {
+            if (comptime !has_windows) {
+                self.shared_prefix = 0;
+                return;
+            }
+            if (self.lowest == null or self.highest == null) {
+                self.shared_prefix = 0;
+                return;
+            }
+            const prefix = commonPrefix(K, Context, self.context, self.lowest.?, self.highest.?);
+            self.shared_prefix = @intCast(prefix);
+        }
+
+        // --- extremes ---
 
         /// Move the outer fences out to `key` when it lies outside the tree,
         /// and refit the spine whose fence moved. A fence that is too low (or
@@ -834,77 +968,94 @@ pub fn Custom(
         /// insert that later fails leaves the map with a wider range than its
         /// keys, and the next removal of that extreme recomputes it.
         fn widenExtremes(self: *Self, key: K) void {
+            var moved = false;
             if (self.lowest) |lowest| {
                 if (self.compare(key, lowest) == .lt) {
                     self.lowest = key;
-                    self.refitSpine(0);
+                    moved = true;
                 }
             } else {
                 self.lowest = key;
+                moved = true;
             }
             if (self.highest) |highest| {
                 if (self.compare(key, highest) == .gt) {
                     self.highest = key;
-                    self.refitSpine(1);
+                    moved = true;
                 }
             } else {
                 self.highest = key;
+                moved = true;
+            }
+            // The shared prefix is a property of both extremes, and every
+            // border node on either spine strips it.
+            if (moved) {
+                self.updateSharedPrefix();
+                self.refitSpines();
             }
         }
 
         /// Replace a removed extreme with the current one, and refit the
         /// spine whose outer fence moved.
-        fn noteRemoved(self: *Self, key: K) void {
+        fn noteRemoved(self: *Self, key: K, min_moved: bool) void {
             if (self.used == 0) {
                 self.lowest = null;
                 self.highest = null;
+                self.shared_prefix = 0;
                 return;
             }
-            var moved_low = false;
             var moved_high = false;
-            if (self.lowest) |lowest| {
-                if (self.compare(key, lowest) == .eq) {
-                    self.lowest = self.extremeKey(0);
-                    moved_low = true;
-                }
-            }
             if (self.highest) |highest| {
                 if (self.compare(key, highest) == .eq) {
                     self.highest = self.extremeKey(1);
                     moved_high = true;
                 }
             }
-            if (moved_low) self.refitSpine(0);
-            if (moved_high) self.refitSpine(1);
+            if (min_moved or moved_high) {
+                self.updateSharedPrefix();
+                self.refitSpines();
+            }
         }
 
         /// The smallest (`side = 0`) or largest (`side = 1`) key in the map.
         fn extremeKey(self: *const Self, comptime side: u1) K {
             var node = self.root.?;
-            while (true) switch (node) {
-                .leaf => |leaf| return if (side == 0)
-                    leaf.elements[0].key
-                else
-                    leaf.elements[leaf.len - 1].key,
-                .internal => |in| node = if (side == 0) in.children[0] else in.children[in.len],
-            };
+            while (node.kind == .internal) {
+                const in = asInternal(node);
+                node = if (side == 0) in.children[0] else in.children[in.header.len];
+            }
+            const leaf = asLeaf(node);
+            return if (side == 0)
+                leaf.elements[0].key
+            else
+                leaf.elements[leaf.header.len - 1].key;
         }
 
         /// Refit every node on the left (`side = 0`) or right spine, whose
         /// outer fence is the tree's extreme key.
+        /// Refit both spines: the shared prefix they strip changed.
+        fn refitSpines(self: *Self) void {
+            self.refitSpine(0);
+            self.refitSpine(1);
+        }
+
         fn refitSpine(self: *Self, comptime side: u1) void {
-            var node = self.root orelse return;
-            var outer: Fences = .{ .low = self.lowest, .high = self.highest };
+            const root = self.root orelse return;
+            self.refitSpineAt(root, .{ .low = self.lowest, .high = self.highest }, side);
+        }
+
+        /// Refit a node and the spine below it on one side. A fence that moves
+        /// down or up widens the common prefix for everything under it.
+        fn refitSpineAt(self: *Self, node_: Node, fences: Fences, comptime side: u1) void {
+            var node = node_;
+            var outer = fences;
             while (true) {
                 self.refit(node, outer);
-                switch (node) {
-                    .leaf => return,
-                    .internal => |in| {
-                        const idx: usize = if (side == 0) 0 else in.len;
-                        node = in.children[idx];
-                        outer = childFences(in, idx, outer);
-                    },
-                }
+                if (node.kind == .leaf) return;
+                const in = asInternal(node);
+                const idx: usize = if (side == 0) 0 else in.header.len;
+                node = in.children[idx];
+                outer = childFences(in, idx, outer);
             }
         }
 
@@ -913,37 +1064,34 @@ pub fn Custom(
             const left = parent.children[idx - 1];
             const child = parent.children[idx];
             const sep_idx = idx - 1;
-            switch (child) {
-                .leaf => |leaf| {
-                    const sibling = left.leaf;
-                    const moved = sibling.elements[sibling.len - 1];
-                    insertElement(self, leaf, 0, moved.key, moved.value);
-                    sibling.len -= 1;
-                    const sep = leaf.elements[0].key;
-                    self.setSeparator(parent, sep_idx, sep);
-                    self.refit(left, childFences(parent, idx - 1, outer));
-                    self.refit(child, childFences(parent, idx, outer));
+            switch (child.kind) {
+                .leaf => {
+                    const l = asLeaf(left);
+                    const c = asLeaf(child);
+                    const moved = l.elements[l.header.len - 1];
+                    self.insertElement(c, 0, moved.key, moved.value);
+                    l.header.len -= 1;
+                    c.low = c.elements[0].key;
                 },
-                .internal => |in| {
-                    const sibling = left.internal;
-                    const moved_key = sibling.keys[sibling.len - 1];
-                    const moved_child = sibling.children[sibling.len];
-                    const sep = parent.keys[sep_idx];
-                    var i: usize = in.len;
-                    while (i > 0) : (i -= 1) {
-                        in.keys[i] = in.keys[i - 1];
-                        in.children[i + 1] = in.children[i];
-                    }
-                    in.children[1] = in.children[0];
-                    in.children[0] = moved_child;
-                    in.keys[0] = sep;
-                    in.len += 1;
-                    sibling.len -= 1;
-                    self.setSeparator(parent, sep_idx, moved_key);
-                    self.refit(left, childFences(parent, idx - 1, outer));
-                    self.refit(child, childFences(parent, idx, outer));
+                .internal => {
+                    const l = asInternal(left);
+                    const c = asInternal(child);
+                    var i: usize = c.header.len;
+                    while (i > 0) : (i -= 1) c.children[i + 1] = c.children[i];
+                    // The loop leaves children[1..] shifted; child 0 still
+                    // holds the old first child, which moves up one slot.
+                    c.children[1] = c.children[0];
+                    c.children[0] = l.children[l.header.len];
+                    c.header.len += 1;
+                    l.header.len -= 1;
+                    c.low = lowOf(c.children[0]);
                 },
             }
+            self.setWindow(parent, sep_idx);
+            self.refit(left, childFences(parent, idx - 1, outer));
+            // The child's lower fence moved down, so its own prefix and the
+            // prefix of every leftmost descendant shrank.
+            self.refitSpineAt(child, childFences(parent, idx, outer), 0);
         }
 
         /// Move the right sibling's first entry into child `idx`.
@@ -951,42 +1099,39 @@ pub fn Custom(
             const child = parent.children[idx];
             const right = parent.children[idx + 1];
             const sep_idx = idx;
-            switch (child) {
-                .leaf => |leaf| {
-                    const sibling = right.leaf;
-                    const moved = sibling.elements[0];
-                    insertElement(self, leaf, leaf.len, moved.key, moved.value);
+            switch (child.kind) {
+                .leaf => {
+                    const c = asLeaf(child);
+                    const r = asLeaf(right);
+                    const moved = r.elements[0];
+                    self.insertElement(c, c.header.len, moved.key, moved.value);
                     var i: usize = 0;
-                    const n: usize = sibling.len;
-                    while (i + 1 < n) : (i += 1) sibling.elements[i] = sibling.elements[i + 1];
-                    sibling.len -= 1;
-                    self.setSeparator(parent, sep_idx, sibling.elements[0].key);
-                    self.refit(child, childFences(parent, idx, outer));
-                    self.refit(right, childFences(parent, idx + 1, outer));
+                    while (i + 1 < r.header.len) : (i += 1) r.elements[i] = r.elements[i + 1];
+                    r.header.len -= 1;
+                    r.low = r.elements[0].key;
                 },
-                .internal => |in| {
-                    const sibling = right.internal;
-                    const n: usize = sibling.len;
-                    in.keys[in.len] = parent.keys[sep_idx];
-                    in.children[in.len + 1] = sibling.children[0];
-                    in.len += 1;
-                    const moved_key = sibling.keys[0];
+                .internal => {
+                    const c = asInternal(child);
+                    const r = asInternal(right);
+                    c.children[c.header.len + 1] = r.children[0];
+                    c.header.len += 1;
                     var i: usize = 0;
-                    while (i + 1 < n) : (i += 1) {
-                        sibling.keys[i] = sibling.keys[i + 1];
-                        sibling.children[i] = sibling.children[i + 1];
+                    while (i + 1 < r.header.len) : (i += 1) {
+                        r.children[i] = r.children[i + 1];
                     }
-                    sibling.children[n - 1] = sibling.children[n];
-                    sibling.len -= 1;
-                    self.setSeparator(parent, sep_idx, moved_key);
-                    self.refit(child, childFences(parent, idx, outer));
-                    self.refit(right, childFences(parent, idx + 1, outer));
+                    r.children[r.header.len - 1] = r.children[r.header.len];
+                    r.header.len -= 1;
+                    r.low = lowOf(r.children[0]);
                 },
             }
+            self.setWindow(parent, sep_idx);
+            // The child's upper fence moved up, widening its prefix.
+            self.refitSpineAt(child, childFences(parent, idx, outer), 1);
+            self.refit(right, childFences(parent, idx + 1, outer));
         }
 
-        /// Merge children `sep_idx` and `sep_idx + 1`, dropping separator
-        /// `sep_idx` from the parent.
+        /// Merge children `sep_idx` and `sep_idx + 1`. No key moves down: the
+        /// separator they shared was only the right child's low key.
         fn merge(
             self: *Self,
             gpa: Allocator,
@@ -996,32 +1141,43 @@ pub fn Custom(
         ) void {
             const left = parent.children[sep_idx];
             const right = parent.children[sep_idx + 1];
-            const merged: Fences = .{
-                .low = childFences(parent, sep_idx, outer).low,
-                .high = childFences(parent, sep_idx + 1, outer).high,
+            const merged = Fences{
+                .low = if (sep_idx > 0) lowOf(left) else outer.low,
+                .high = if (sep_idx + 1 < parent.header.len)
+                    lowOf(parent.children[sep_idx + 2])
+                else
+                    outer.high,
             };
-            switch (left) {
-                .leaf => |leaf| {
-                    const sibling = right.leaf;
-                    const n: usize = leaf.len;
-                    const m: usize = sibling.len;
-                    @memcpy(leaf.elements[n .. n + m], sibling.elements[0..m]);
-                    leaf.len = @intCast(n + m);
-                    self.removeSeparator(parent, sep_idx);
+            // A merge at either edge leaves the merged node with no fence on
+            // that side, so everything below it strips only the shared prefix.
+            const at_left = sep_idx == 0;
+            const at_right = sep_idx + 1 == parent.header.len;
+            switch (left.kind) {
+                .leaf => {
+                    const l = asLeaf(left);
+                    const r = asLeaf(right);
+                    const n: usize = l.header.len;
+                    const m: usize = r.header.len;
+                    @memcpy(l.elements[n .. n + m], r.elements[0..m]);
+                    l.header.len = @intCast(n + m);
+                    self.removeChild(parent, sep_idx);
                     self.refit(left, merged);
-                    gpa.destroy(sibling);
+                    if (at_left) self.refitSpineAt(left, merged, 0);
+                    if (at_right) self.refitSpineAt(left, merged, 1);
+                    gpa.destroy(r);
                 },
-                .internal => |in| {
-                    const sibling = right.internal;
-                    const n: usize = in.len;
-                    const m: usize = sibling.len;
-                    in.keys[n] = parent.keys[sep_idx];
-                    @memcpy(in.keys[n + 1 .. n + 1 + m], sibling.keys[0..m]);
-                    @memcpy(in.children[n + 1 .. n + 2 + m], sibling.children[0 .. m + 1]);
-                    in.len = @intCast(n + 1 + m);
-                    self.removeSeparator(parent, sep_idx);
+                .internal => {
+                    const l = asInternal(left);
+                    const r = asInternal(right);
+                    const n: usize = l.header.len;
+                    const m: usize = r.header.len;
+                    @memcpy(l.children[n + 1 .. n + 2 + m], r.children[0 .. m + 1]);
+                    l.header.len = @intCast(n + 1 + m);
+                    self.removeChild(parent, sep_idx);
                     self.refit(left, merged);
-                    gpa.destroy(sibling);
+                    if (at_left) self.refitSpineAt(left, merged, 0);
+                    if (at_right) self.refitSpineAt(left, merged, 1);
+                    gpa.destroy(r);
                 },
             }
         }
@@ -1030,15 +1186,17 @@ pub fn Custom(
         /// free an empty root leaf.
         fn fixRoot(self: *Self, gpa: Allocator) void {
             const root = self.root orelse return;
-            switch (root) {
-                .leaf => |leaf| {
-                    if (leaf.len == 0) {
+            switch (root.kind) {
+                .leaf => {
+                    const leaf = asLeaf(root);
+                    if (leaf.header.len == 0) {
                         gpa.destroy(leaf);
                         self.root = null;
                     }
                 },
-                .internal => |in| {
-                    if (in.len == 0) {
+                .internal => {
+                    const in = asInternal(root);
+                    if (in.header.len == 0) {
                         self.root = in.children[0];
                         gpa.destroy(in);
                     }
@@ -1047,10 +1205,11 @@ pub fn Custom(
         }
 
         fn destroyNode(self: *Self, gpa: Allocator, node: Node) void {
-            switch (node) {
-                .leaf => |leaf| gpa.destroy(leaf),
-                .internal => |in| {
-                    const n: usize = in.len;
+            switch (node.kind) {
+                .leaf => gpa.destroy(asLeaf(node)),
+                .internal => {
+                    const in = asInternal(node);
+                    const n: usize = in.header.len;
                     for (0..n + 1) |i| destroyNode(self, gpa, in.children[i]);
                     gpa.destroy(in);
                 },
@@ -1070,28 +1229,26 @@ pub fn Custom(
             pub fn next(self: *Iterator) ?Entry {
                 while (self.depth > 0) {
                     const top = &self.frames[self.depth - 1];
-                    switch (top.node) {
-                        .leaf => |leaf| {
-                            if (top.index < leaf.len) {
-                                const i = top.index;
-                                top.index += 1;
-                                return .{
-                                    .key_ptr = &leaf.elements[i].key,
-                                    .value_ptr = &leaf.elements[i].value,
-                                };
-                            }
+                    if (top.node.kind == .leaf) {
+                        const leaf = asLeaf(top.node);
+                        if (top.index < leaf.header.len) {
+                            const i = top.index;
+                            top.index += 1;
+                            return .{
+                                .key_ptr = &leaf.elements[i].key,
+                                .value_ptr = &leaf.elements[i].value,
+                            };
+                        }
+                        self.depth -= 1;
+                        if (self.depth > 0) self.frames[self.depth - 1].index += 1;
+                    } else {
+                        const in = asInternal(top.node);
+                        if (top.index > in.header.len) {
                             self.depth -= 1;
                             if (self.depth > 0) self.frames[self.depth - 1].index += 1;
-                        },
-                        .internal => |in| {
-                            if (top.index > in.len) {
-                                self.depth -= 1;
-                                if (self.depth > 0) self.frames[self.depth - 1].index += 1;
-                                continue;
-                            }
-                            const child = in.children[top.index];
-                            self.descend(child, 0);
-                        },
+                            continue;
+                        }
+                        self.descend(in.children[top.index], 0);
                     }
                 }
                 return null;
@@ -1101,9 +1258,8 @@ pub fn Custom(
                 assert(self.depth < max_depth);
                 self.frames[self.depth] = .{ .node = node, .index = index };
                 self.depth += 1;
-                switch (node) {
-                    .leaf => {},
-                    .internal => |in| self.descend(in.children[index], 0),
+                if (node.kind == .internal) {
+                    self.descend(asInternal(node).children[index], 0);
                 }
             }
         };
@@ -1131,12 +1287,19 @@ pub fn Custom(
             leaf_depth: *?usize,
             seen: *usize,
         ) !void {
-            switch (node) {
-                .leaf => |leaf| {
-                    const n: usize = leaf.len;
-                    try testing.expect(n <= max);
+            const n: usize = node.len;
+            try testing.expect(n <= max);
+            // A prefix shorter than the fences allow is safe, only slower: a
+            // stale one must never be longer, or the windows would compare
+            // bytes the keys do not share.
+            try testing.expect(node.prefix_len <= expectedPrefix(self, fences));
+            switch (node.kind) {
+                .leaf => {
+                    const leaf = asLeaf(node);
                     if (!is_root) try testing.expect(n >= min);
-                    try testing.expectEqual(expectedPrefix(self, fences), leaf.prefix_len);
+                    // The separator to the left of a leaf is its own
+                    // smallest key, exactly.
+                    if (fences.low) |low| try testing.expect(self.compare(leaf.low, low) == .eq);
                     for (0..n) |i| {
                         const key = leaf.elements[i].key;
                         if (i > 0) {
@@ -1146,7 +1309,7 @@ pub fn Custom(
                         if (fences.low) |l| try testing.expect(self.compare(l, key) != .gt);
                         if (fences.high) |h| try testing.expect(self.compare(key, h) != .gt);
                         if (comptime has_windows) {
-                            const window = self.windowOf(key, leaf.prefix_len);
+                            const window = self.windowOf(key, node.prefix_len);
                             try testing.expectEqual(window, leaf.windows[i]);
                         }
                     }
@@ -1158,22 +1321,23 @@ pub fn Custom(
                         try testing.expectEqual(d, depth);
                     } else leaf_depth.* = depth;
                 },
-                .internal => |in| {
-                    const n: usize = in.len;
-                    try testing.expect(n <= max);
+                .internal => {
+                    const in = asInternal(node);
                     if (is_root) {
                         try testing.expect(n >= 1);
                     } else {
                         try testing.expect(n >= min);
                     }
-                    try testing.expectEqual(expectedPrefix(self, fences), in.prefix_len);
+                    if (fences.low) |low| try testing.expect(self.compare(in.low, low) == .eq);
                     for (0..n) |i| {
+                        const separator = lowOf(in.children[i + 1]);
                         if (i > 0) {
-                            const order = self.compare(in.keys[i - 1], in.keys[i]);
+                            const order = self.compare(lowOf(in.children[i]), separator);
                             try testing.expect(order == .lt);
                         }
+                        if (fences.high) |h| try testing.expect(self.compare(separator, h) != .gt);
                         if (comptime has_windows) {
-                            const window = self.windowOf(in.keys[i], in.prefix_len);
+                            const window = self.windowOf(separator, node.prefix_len);
                             try testing.expectEqual(window, in.windows[i]);
                         }
                     }
@@ -1197,7 +1361,7 @@ pub fn Custom(
 
         fn expectedPrefix(self: *const Self, fences: Fences) u16 {
             if (comptime !has_windows) return 0;
-            if (fences.low == null or fences.high == null) return 0;
+            if (fences.low == null or fences.high == null) return self.sharedPrefix();
             return @intCast(commonPrefix(K, Context, self.context, fences.low.?, fences.high.?));
         }
     };
@@ -1205,13 +1369,20 @@ pub fn Custom(
 
 /// Byte offset of the first byte where `a`'s and `b`'s encodings differ.
 fn commonPrefix(comptime K: type, comptime Context: type, context: Context, a: K, b: K) usize {
+    const capped = if (@hasDecl(Context, "encodedLen"))
+        @min(context.encodedLen(a), context.encodedLen(b))
+    else
+        max_prefix;
+    // Zero padding makes a key look like it continues with zeros, so a
+    // difference past the shorter key's end says nothing; the cap decides.
+    const limit = @min(capped, max_prefix);
     var offset: usize = 0;
-    while (offset < max_prefix) : (offset += 8) {
+    while (offset < limit) : (offset += 8) {
         const wa = context.inlineKey(a, offset);
         const wb = context.inlineKey(b, offset);
-        if (wa != wb) return offset + @as(usize, @clz(wa ^ wb)) / 8;
+        if (wa != wb) return @min(offset + @as(usize, @clz(wa ^ wb)) / 8, limit);
     }
-    return max_prefix;
+    return limit;
 }
 
 fn bytesWindow(bytes: []const u8, offset: usize) u64 {
@@ -1251,6 +1422,11 @@ pub fn AutoContext(comptime K: type) type {
             return math.order(a, b);
         }
 
+        /// The length of the key's encoding.
+        pub fn encodedLen(_: Self, _: K) usize {
+            return @bitSizeOf(K) / 8;
+        }
+
         pub fn inlineKey(_: Self, key: K, offset: usize) u64 {
             const bytes = @bitSizeOf(K) / 8;
             if (offset >= bytes) return 0;
@@ -1275,6 +1451,10 @@ pub const BytesContext = struct {
     /// a two-byte window ties far more often than it saves in cache lines.
     pub const inline_width: u16 = 4;
 
+    /// Thirty-one keys per node: a heap key's comparison is the expensive
+    /// part, so the tree trades node size for one fewer level.
+    pub const node_max: u16 = 31;
+
     /// Compare eight bytes at a time as big-endian words instead of calling
     /// `memcmp`: keys are short, and the call is not inlined.
     pub fn compare(_: BytesContext, a: []const u8, b: []const u8) Order {
@@ -1290,6 +1470,11 @@ pub const BytesContext = struct {
     /// the map falls back to `compare`, which does.
     pub fn compareFrom(_: BytesContext, a: []const u8, b: []const u8, offset: usize) Order {
         return compareBytes(a[@min(offset, a.len)..], b[@min(offset, b.len)..]);
+    }
+
+    /// The length of the key's encoding.
+    pub fn encodedLen(_: BytesContext, key: []const u8) usize {
+        return key.len;
     }
 };
 

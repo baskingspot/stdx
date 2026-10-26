@@ -297,9 +297,9 @@ takes a node from the caller for each element and chases pointers down the
 tree. `btree` is the ordered map: it grows, it takes the allocator per call,
 and it iterates in key order.
 
-A lookup reads a few cache lines, not one per key compared. A node holds 15
-keys, and the search compares one short window of every key with a single
-vector compare. The window starts where the keys a node routes already share
+A lookup reads a few cache lines, not one per key compared. A node holds a
+couple of dozen keys, and the search compares one short window of every key
+with a single vector compare. The window starts where the keys a node routes already share
 their first bytes, so a common prefix costs nothing. Keys that are slices stay on the heap, and a comparison reads their bytes
 only when two windows tie.
 

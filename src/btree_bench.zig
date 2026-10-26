@@ -97,6 +97,7 @@ fn fillStrings(gpa: Allocator, map: anytype) !void {
 // --- btree ---
 
 pub fn benchmarkBtreeU64GetHit(b: *testingx.B) !void {
+    b.reportCounters();
     var map: Map = .empty;
     defer map.clearAndFree(b.allocator);
     try fillU64(b.allocator, &map);
@@ -110,6 +111,7 @@ pub fn benchmarkBtreeU64GetHit(b: *testingx.B) !void {
 }
 
 pub fn benchmarkBtreeU64GetMiss(b: *testingx.B) !void {
+    b.reportCounters();
     var map: Map = .empty;
     defer map.clearAndFree(b.allocator);
     try fillU64(b.allocator, &map);
@@ -167,6 +169,7 @@ pub fn benchmarkBtreeU64Scan(b: *testingx.B) !void {
 }
 
 pub fn benchmarkBtreeStringGetHit(b: *testingx.B) !void {
+    b.reportCounters();
     var map: btree.String(usize) = .empty;
     defer map.clearAndFree(b.allocator);
     try fillStrings(b.allocator, &map);
@@ -180,6 +183,7 @@ pub fn benchmarkBtreeStringGetHit(b: *testingx.B) !void {
 }
 
 pub fn benchmarkBtreeStringGetMiss(b: *testingx.B) !void {
+    b.reportCounters();
     var map: btree.String(usize) = .empty;
     defer map.clearAndFree(b.allocator);
     try fillStrings(b.allocator, &map);
@@ -195,6 +199,7 @@ pub fn benchmarkBtreeStringGetMiss(b: *testingx.B) !void {
 // --- std.AutoHashMap ---
 
 pub fn benchmarkHashMapU64GetHit(b: *testingx.B) !void {
+    b.reportCounters();
     var map: HashMap = .init(b.allocator);
     defer map.deinit();
     fillU64Probes();
@@ -212,6 +217,7 @@ pub fn benchmarkHashMapU64GetHit(b: *testingx.B) !void {
 }
 
 pub fn benchmarkHashMapU64GetMiss(b: *testingx.B) !void {
+    b.reportCounters();
     var map: HashMap = .init(b.allocator);
     defer map.deinit();
     fillU64Probes();
@@ -271,6 +277,7 @@ fn sortedSearch(keys: []const u64, key: u64) ?usize {
 }
 
 pub fn benchmarkSortedU64GetHit(b: *testingx.B) !void {
+    b.reportCounters();
     const keys = try b.allocator.alloc(u64, entry_count);
     defer b.allocator.free(keys);
     for (keys, 0..) |*key, i| key.* = keyAt(i);
@@ -288,6 +295,7 @@ pub fn benchmarkSortedU64GetHit(b: *testingx.B) !void {
 }
 
 pub fn benchmarkSortedU64GetMiss(b: *testingx.B) !void {
+    b.reportCounters();
     const keys = try b.allocator.alloc(u64, entry_count);
     defer b.allocator.free(keys);
     for (keys, 0..) |*key, i| key.* = keyAt(i);
@@ -316,6 +324,7 @@ fn stringSearch(keys: []const []const u8, key: []const u8) ?usize {
 }
 
 pub fn benchmarkSortedStringGetHit(b: *testingx.B) !void {
+    b.reportCounters();
     const keys = try b.allocator.alloc([]const u8, string_count);
     defer b.allocator.free(keys);
     try fillStringProbes();
@@ -335,6 +344,7 @@ pub fn benchmarkSortedStringGetHit(b: *testingx.B) !void {
 }
 
 pub fn benchmarkSortedStringGetMiss(b: *testingx.B) !void {
+    b.reportCounters();
     const keys = try b.allocator.alloc([]const u8, string_count);
     defer b.allocator.free(keys);
     try fillStringProbes();
@@ -358,6 +368,7 @@ pub fn benchmarkSortedStringGetMiss(b: *testingx.B) !void {
 const swiss = stdx.swiss;
 
 pub fn benchmarkSwissU64GetHit(b: *testingx.B) !void {
+    b.reportCounters();
     var map: swiss.Auto(u64, u64) = .empty;
     defer map.deinit(b.allocator);
     try fillU64(b.allocator, &map);
@@ -371,6 +382,7 @@ pub fn benchmarkSwissU64GetHit(b: *testingx.B) !void {
 }
 
 pub fn benchmarkSwissU64GetMiss(b: *testingx.B) !void {
+    b.reportCounters();
     var map: swiss.Auto(u64, u64) = .empty;
     defer map.deinit(b.allocator);
     try fillU64(b.allocator, &map);
@@ -411,6 +423,7 @@ pub fn benchmarkSwissU64Scan(b: *testingx.B) !void {
 }
 
 pub fn benchmarkSwissStringGetHit(b: *testingx.B) !void {
+    b.reportCounters();
     var map: swiss.String(usize) = .empty;
     defer map.deinit(b.allocator);
     try fillStrings(b.allocator, &map);
@@ -424,6 +437,7 @@ pub fn benchmarkSwissStringGetHit(b: *testingx.B) !void {
 }
 
 pub fn benchmarkSwissStringGetMiss(b: *testingx.B) !void {
+    b.reportCounters();
     var map: swiss.String(usize) = .empty;
     defer map.deinit(b.allocator);
     try fillStrings(b.allocator, &map);

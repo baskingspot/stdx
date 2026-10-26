@@ -173,6 +173,29 @@ time. Measured, perf: 9.3 cache misses per probe for the tree against
 stops being able to keep its top levels resident. Node counts at 1M:
 depth 5, 95k leaves at 10.5 average fill, 9.7k internal nodes.
 
+Layout, from matching bbtree's node shape (2026-10-25): internal nodes
+now carry no key array. A child's own `low` key is the separator to its
+left, so an internal node is a header, one key, windows and edges, 176
+bytes at 15 keys against 416 before, and an edge is a tagged 8-byte
+pointer instead of a tagged union. Node size became a per-context knob:
+15 keys for integers, 31 for byte strings, where 31 is 22% faster (81 ns
+against 102 for a string hit) because the tree drops a level. The lean
+internals alone bought nothing measurable (u64 hit 53 against 52, inside
+noise): a level costs two cache lines either way, so what pays is fewer
+levels, not smaller nodes.
+
+Measured against the Rust original on this machine, same workloads,
+their crate at `-C target-cpu=native` with LTO: u64 get hit 53.4
+against 39.3, miss 40.9 against 39.0; 200K string keys 81.4 against
+64.8, miss 64.4 against 60.2. So misses match and hits do not: their
+hit costs the same as their miss because their leaf search always reads
+an entry line, while ours reads it only when the window ties, so our
+hit pays a line their baseline already pays. Two follow-ups were tried
+and dropped: leaf windows of 8 bytes for strings (no change), and
+trusting the stripped prefix after a tree-prefix check, which cost more
+than the full-key compare it saved (81.6 against 76.4 with the check,
+once the shared prefix was cached).
+
 The lesson: against a static sorted array the tree wins only where a
 comparison reads the heap (strings), and elsewhere it is within 1.4x
 while supporting inserts, removals, and ordered iteration. Node width 2
