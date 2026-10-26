@@ -132,18 +132,19 @@ pub fn Custom(
         const window_count = if (has_windows) vec_len else 0;
         /// The lanes one compare covers: one vector register, as the target
         /// suggests, and never more lanes than the node has.
-        const chunk_len = blk: {
-            const suggested = std.simd.suggestVectorLength(Word) orelse vec_len;
-            break :blk @min(suggested, vec_len);
-        };
+        const chunk_len = if (std.simd.suggestVectorLength(Word)) |suggestion|
+            @min(suggestion, vec_len)
+        else
+            vec_len;
+
         comptime {
             assert(vec_len % chunk_len == 0);
         }
         /// One register of window lanes, and the constants the count works in:
         /// an all-ones lane subtracts one from a counter.
-        const Vec = @Vector(chunk_len, Word);
-        const lane_ones: Vec = @splat(math.maxInt(Word));
-        const lane_zeros: Vec = @splat(0);
+        const Lane = @Vector(chunk_len, Word);
+        const lane_ones: Lane = @splat(math.maxInt(Word));
+        const lane_zeros: Lane = @splat(0);
         /// A node's window array: one lane per slot, real keys first and
         /// `pad` for the rest. The `len` field says where the real ones end.
         const Windows = [window_count]Word;
@@ -621,19 +622,18 @@ pub fn Custom(
         /// ones; `countReal` clips them.
         const Counts = struct { below: usize, equal: usize };
 
-        /// How many windows sit below and equal to `target`, in one pass.
+        /// How many windows sit below and equal to `target`.
         ///
-        /// Each lane of a compare holds all ones where the test holds, and
-        /// subtracting it from a lane counter adds one; the counters are
-        /// added up once at the end. A single wide vector compare makes the
-        /// compiler widen the lanes and shuffle the result back down, which
-        /// costs more than the compares themselves.
+        /// The compare runs a register at a time: one wide vector over the
+        /// whole node makes the compiler widen the lanes and shuffle each
+        /// compare back down to a scalar, which costs more than the compares
+        /// themselves.
         fn countWindows(windows: *const Windows, target: Word) Counts {
-            const splat_target: Vec = @splat(target);
-            var below: Vec = lane_zeros;
-            var equal: Vec = lane_zeros;
+            const splat_target: Lane = @splat(target);
+            var below: Lane = lane_zeros;
+            var equal: Lane = lane_zeros;
             inline for (0..vec_len / chunk_len) |c| {
-                const lanes: Vec = windows[c * chunk_len ..][0..chunk_len].*;
+                const lanes: Lane = windows[c * chunk_len ..][0..chunk_len].*;
                 // All-ones lanes subtracted from the counters add one, and
                 // that first subtraction wraps.
                 below -%= @select(Word, lanes < splat_target, lane_ones, lane_zeros);

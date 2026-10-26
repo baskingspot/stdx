@@ -194,9 +194,11 @@ a 16-lane u16 compare lowered to eight `cmhi.4s` plus uzp1/ext/zip1
 shuffles into `addv`, about 22 instructions on a serial chain, where
 NEON has a native 8-lane u16 compare.
 
-Porting bbtree's count (its D56: compare into all-ones lanes, subtract
-them into per-lane counters, reduce once) fixed it, and it is in
-THIRD_PARTY.md under MIT. At max 15 it cut a lookup from 268 to 234
+Porting bbtree's count (its D56) fixed it, and it is in THIRD_PARTY.md
+under MIT: compare a register at a time, then `std.simd.countTrues` over
+each chunk, which is the same select-and-reduce with std's name on it.
+The chunk is `std.simd.suggestVectorLength`, 16 u16 lanes on an SVE
+core and 8 on plain NEON. At max 15 it cut a lookup from 268 to 234
 instructions and 53.4 to 49.1 ns; with the level cheaper, max 31 finally
 paid: 41.0/39.5 on u64 and 70.4/59.2 on 200K strings, against their
 39.3/39.0 and 64.7/60.2. Misses are at parity, string misses ahead, and
