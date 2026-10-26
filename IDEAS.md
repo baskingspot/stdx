@@ -184,33 +184,24 @@ internals alone bought nothing measurable (u64 hit 53 against 52, inside
 noise): a level costs two cache lines either way, so what pays is fewer
 levels, not smaller nodes.
 
-Where the remaining hit gap is (perf, per lookup, 1M u64): theirs 328
+Where the remaining hit gap was (perf, per lookup, 1M u64): theirs 328
 instructions, 5.9 cache misses, 128 cycles; ours 268, 10.5 and 174. We
-execute fewer instructions and take more misses, so the gap is depth,
-not code: our tree is 6 levels at 1M (max 15, 10.5 average fill), and
-their page-sized nodes hold about 50 keys, so theirs is 4 or 5. Every
-attempt to buy a level back costs more than it saves: max 31 (depth 5)
-runs 63.9 ns against 53.4 because a 32-lane compare is not twice a
-16-lane one, chunked 8-lane compares are worse still at 66.8, and
-exact-lane vectors (47 lanes of u8, one cache line) collapse to 160 ns
-because LLVM scalarizes them. The disassembly says why: a 16-lane u16
-compare lowers to eight `cmhi.4s` plus `uzp1`/`ext`/`zip1` shuffles into
-`addv`, about 22 instructions on a serial shuffle chain, where NEON has
-a native 8-lane `u16` compare. A hand-written NEON count, the fix
-bbtree made in its D56, is the one lever left; it needs per-target SIMD,
-so it is a project of its own rather than a knob.
+executed fewer instructions and took more misses, so the gap was depth:
+our tree was 6 levels at 1M, theirs 4 or 5. But buying a level back
+failed every way we tried (max 31 at 63.9 ns, 8-lane chunks at 66.8,
+exact-lane vectors at 160) because of one thing the disassembly showed:
+a 16-lane u16 compare lowered to eight `cmhi.4s` plus uzp1/ext/zip1
+shuffles into `addv`, about 22 instructions on a serial chain, where
+NEON has a native 8-lane u16 compare.
 
-Measured against the Rust original on this machine, same workloads,
-their crate at `-C target-cpu=native` with LTO: u64 get hit 53.4
-against 39.3, miss 40.9 against 39.0; 200K string keys 81.4 against
-64.8, miss 64.4 against 60.2. So misses match and hits do not: their
-hit costs the same as their miss because their leaf search always reads
-an entry line, while ours reads it only when the window ties, so our
-hit pays a line their baseline already pays. Two follow-ups were tried
-and dropped: leaf windows of 8 bytes for strings (no change), and
-trusting the stripped prefix after a tree-prefix check, which cost more
-than the full-key compare it saved (81.6 against 76.4 with the check,
-once the shared prefix was cached).
+Porting bbtree's count (its D56: compare into all-ones lanes, subtract
+them into per-lane counters, reduce once) fixed it, and it is in
+THIRD_PARTY.md under MIT. At max 15 it cut a lookup from 268 to 234
+instructions and 53.4 to 49.1 ns; with the level cheaper, max 31 finally
+paid: 41.0/39.5 on u64 and 70.4/59.2 on 200K strings, against their
+39.3/39.0 and 64.7/60.2. Misses are at parity, string misses ahead, and
+hits are 4% (integers) and 9% (strings) behind. 31 is now the default
+node size for both key types; 47 and 63 measured worse.
 
 The lesson: against a static sorted array the tree wins only where a
 comparison reads the heap (strings), and elsewhere it is within 1.4x

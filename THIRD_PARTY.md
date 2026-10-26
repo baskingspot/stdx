@@ -59,6 +59,19 @@ transcribed from `ascii_number.h` (credit @aqrit; the technique is Daniel
 Lemire's SWAR digit parsing, an extension of Wojciech Muła's). The credit
 and technique links are kept in the file header.
 
+## bbtree
+
+Upstream: https://github.com/XiangpengHao/bbtree (tag `v0.1.5`), `bbtree/src/tree/node/vector_count.rs`.
+License: MIT or Apache-2.0, at our option; stdx takes MIT, "Copyright (c)
+2026 Xiangpeng Hao". The MIT terms are those reproduced below for rapidhash,
+with that copyright line.
+
+`btree`'s window count follows their `NeonCount` (their decision D56): each
+compare yields all-ones lanes, subtracting a lane from a counter adds one, and
+the counters are added up once at the end. Zig's `@Vector` over the whole node
+compiles the sum into a widening and a shuffle chain, which their note and our
+disassembly both describe; the per-register form is the fix.
+
 ## Design references
 
 These are designs stdx implemented on its own. No code was copied, so no
@@ -73,3 +86,23 @@ cache-miss cost model, inline keys, prefix stripping between a node's fences,
 and the rule that the smallest and largest keys fence the spines are his.
 Inline keys and prefix keys themselves trace further back, to Graefe and
 Larson (ICDE 2001) and Bayer and Unterauer (TODS 1977).
+
+Copyright (c) 2026 Xiangpeng Hao
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

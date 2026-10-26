@@ -16,16 +16,18 @@
 //! trace further back, to Graefe and Larson (ICDE 2001) and Bayer and
 //! Unterauer (TODS 1977); the outer-fence rule for the spines is his.
 //!
-//! 1. **Node size.** A node holds 15 keys for integer keys and 31 for byte
-//!    strings, so a search is a linear scan over one or two cache lines,
-//!    never a pointer chase per key. `Config.max` sets it per map.
+//! 1. **Node size.** A node holds 31 keys, so a search is a linear scan over
+//!    a few cache lines, never a pointer chase per key. `Config.max` sets it
+//!    per map.
 //! 2. **Inline keys.** Each key's first bytes, as one big-endian word, sit in
 //!    a dense array in front of the keys. A search compares those words with
 //!    one vector compare and a popcount, and reads a real key only when two
 //!    words tie. For `[]const u8` keys this keeps the comparison off the heap.
 //!    An internal node holds only windows and child pointers: the separator
 //!    to a child's left is that child's own smallest key, so no node carries
-//!    one key copy per slot.
+//!    one key copy per slot. The count that turns a compare into a position
+//!    keeps one counter per lane and adds them up once, because a single wide
+//!    vector makes the compiler shuffle each compare back down to a scalar.
 //! 3. **Prefix keys.** Every key in a node shares the bytes its two fences
 //!    (the nearest separators around it) share. The node stores that shared
 //!    length and keeps windows at that offset, so long common prefixes cost

@@ -63,9 +63,8 @@ const stability = @import("../stability.zig");
 /// Compile-time knobs for a map's nodes.
 pub const Config = struct {
     /// Maximum keys per node, odd and at least 3. A split leaves
-    /// `(max - 1) / 2` keys on each side with the middle one promoted. Null
-    /// takes the context's `node_max`.
-    max: ?u16 = null,
+    /// `(max - 1) / 2` keys on each side with the middle one promoted.
+    max: u16 = 31,
     /// Bytes of each window kept in the node: 2, 4, or 8. Null takes the
     /// context's `inline_width`, which is the width its measurements chose.
     width: ?u16 = null,
@@ -102,9 +101,8 @@ pub fn Custom(
         const Self = @This();
 
         comptime {
-            switch (config.max orelse 15) {
-                3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 63 => {},
-                else => @compileError("btree.Config.max must be an odd number"),
+            if (config.max < 3 or config.max % 2 == 0) {
+                @compileError("btree.Config.max must be odd and at least 3");
             }
             switch (config.width orelse 2) {
                 2, 4, 8 => {},
@@ -116,8 +114,7 @@ pub fn Custom(
         }
 
         /// Maximum keys per node.
-        const max: usize = config.max orelse
-            (if (@hasDecl(Context, "node_max")) Context.node_max else 15);
+        const max: usize = config.max;
         /// Minimum keys per node, the root excepted.
         const min: usize = (max - 1) / 2;
         /// Bytes of each window kept.
@@ -133,16 +130,12 @@ pub fn Custom(
         const vec_len = math.ceilPowerOfTwoAssert(usize, max);
         /// Window slots per node; none without a codec.
         const window_count = if (has_windows) vec_len else 0;
+        /// The lanes one compare covers: a single vector register.
+        const chunk_len = 8;
         /// A node's window array: one lane per slot, real keys first and
         /// `pad` for the rest. The `len` field says where the real ones end.
         const Windows = [window_count]Word;
         /// A whole node's windows as one vector, for a single compare.
-        const Lanes = @Vector(vec_len, Word);
-        /// One bool per lane: what that compare produces, before `@bitCast`
-        /// packs it into a `Mask`.
-        const LaneMask = @Vector(vec_len, bool);
-        /// The packed lane result, one bit per lane.
-        const Mask = @Int(.unsigned, vec_len);
         /// An unused lane: never smaller than any real window.
         const pad: Word = math.maxInt(Word);
 
@@ -530,11 +523,10 @@ pub fn Custom(
                 return binarySearchLeaf(self, leaf, 0, n, key);
             } else {
                 const target = self.windowOf(key, leaf.header.prefix_len);
-                const less = countLess(&leaf.windows, target);
-                if (less == n or leaf.windows[less] != target) {
-                    return .{ .pos = less, .found = false };
-                }
-                const leq = countLeq(&leaf.windows, target, n);
+                const counts = countReal(&leaf.windows, target, n);
+                const less = counts.below;
+                if (counts.equal == 0) return .{ .pos = less, .found = false };
+                const leq = less + counts.equal;
                 const tie_offset = @as(usize, leaf.header.prefix_len) + width;
                 if (leq - less == 1) {
                     const order = self.compareFrom(leaf.elements[less].key, key, tie_offset);
@@ -578,9 +570,10 @@ pub fn Custom(
                 return self.upperBound(in, 0, n, key);
             } else {
                 const target = self.windowOf(key, in.header.prefix_len);
-                const less = countLess(&in.windows, target);
-                if (less == n or in.windows[less] != target) return less;
-                const leq = countLeq(&in.windows, target, n);
+                const counts = countReal(&in.windows, target, n);
+                const less = counts.below;
+                if (counts.equal == 0) return less;
+                const leq = less + counts.equal;
                 const tie_offset = @as(usize, in.header.prefix_len) + width;
                 if (leq - less == 1) {
                     const separator = lowOf(in.children[less + 1]);
@@ -611,30 +604,42 @@ pub fn Custom(
             return lo;
         }
 
-        fn splat(target: Word) Lanes {
-            return @splat(target);
+        /// How many real windows sit below and at a target. Padding lanes
+        /// hold the maximum word, so they only count for a target of all
+        /// ones; `countReal` clips them.
+        const Counts = struct { below: usize, equal: usize };
+
+        /// How many windows sit below and equal to `target`, in one pass.
+        ///
+        /// Each lane of a compare holds all ones where the test holds, and
+        /// subtracting it from a lane counter adds one; the counters are
+        /// added up once at the end. A single wide vector compare makes the
+        /// compiler widen the lanes and shuffle the result back down, which
+        /// costs more than the compares themselves.
+        fn countWindows(windows: *const Windows, target: Word) Counts {
+            const Vec = @Vector(chunk_len, Word);
+            const ones: Vec = @splat(math.maxInt(Word));
+            const zeros: Vec = @splat(0);
+            const splat_target: Vec = @splat(target);
+            var below: Vec = zeros;
+            var equal: Vec = zeros;
+            inline for (0..vec_len / chunk_len) |c| {
+                const lanes: Vec = windows[c * chunk_len ..][0..chunk_len].*;
+                // All-ones lanes subtracted from the counters add one, and
+                // that first subtraction wraps.
+                below -%= @select(Word, lanes < splat_target, ones, zeros);
+                equal -%= @select(Word, lanes == splat_target, ones, zeros);
+            }
+            return .{ .below = @reduce(.Add, below), .equal = @reduce(.Add, equal) };
         }
 
-        /// Number of real windows strictly below `target`. Padding lanes hold
-        /// the maximum word, so they never count.
-        fn countLess(windows: *const Windows, target: Word) usize {
-            const lanes: Lanes = windows.*;
-            const less: LaneMask = lanes < splat(target);
-            const mask: Mask = @bitCast(less);
-            return @popCount(mask);
-        }
-
-        /// Number of real windows at or below `target`, bounded by `len`.
-        fn countLeq(windows: *const Windows, target: Word, len: usize) usize {
-            if (len == 0) return 0;
-            const lanes: Lanes = windows.*;
-            const leq: LaneMask = lanes <= splat(target);
-            const mask: Mask = @as(Mask, @bitCast(leq)) & lenMask(len);
-            return @popCount(mask);
-        }
-
-        fn lenMask(len: usize) Mask {
-            return ~@as(Mask, 0) >> @intCast(vec_len - len);
+        /// The real windows below and at `target`, clipped to `len`: the
+        /// lanes past the last key hold the maximum word, so only a target of
+        /// all ones can count them.
+        fn countReal(windows: *const Windows, target: Word, len: usize) Counts {
+            const counts = countWindows(windows, target);
+            const below = @min(counts.below, len);
+            return .{ .below = below, .equal = @min(counts.equal, len - below) };
         }
 
         fn compare(self: *const Self, a: K, b: K) Order {
@@ -1450,10 +1455,6 @@ pub const BytesContext = struct {
     /// Four bytes: byte strings share long prefixes and then differ late, so
     /// a two-byte window ties far more often than it saves in cache lines.
     pub const inline_width: u16 = 4;
-
-    /// Thirty-one keys per node: a heap key's comparison is the expensive
-    /// part, so the tree trades node size for one fewer level.
-    pub const node_max: u16 = 31;
 
     /// Compare eight bytes at a time as big-endian words instead of calling
     /// `memcmp`: keys are short, and the call is not inlined.
