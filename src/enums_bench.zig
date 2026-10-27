@@ -4,10 +4,11 @@
 //! byte changed (a same-length miss), and lengths no keyword has.
 
 const std = @import("std");
-const testingx = @import("testingx");
+const mem = std.mem;
 
 const stdx = @import("stdx");
 const enums = stdx.enums;
+const testingx = @import("testingx");
 
 const Corpus = struct {
     words: [128][]const u8 = undefined,
@@ -55,7 +56,7 @@ const three_names = .{ "transaction", "session", "statement" };
 
 fn eqlThree(str: []const u8) u8 {
     inline for (three) |kv| {
-        if (std.mem.eql(u8, str, kv[0])) return @intFromEnum(kv[1]);
+        if (mem.eql(u8, str, kv[0])) return @intFromEnum(kv[1]);
     }
     return @intFromEnum(Mode.unknown);
 }
@@ -140,7 +141,7 @@ const sixteen_names = .{
 
 fn eqlSixteen(str: []const u8) u8 {
     inline for (sixteen) |kv| {
-        if (std.mem.eql(u8, str, kv[0])) return @intFromEnum(kv[1]);
+        if (mem.eql(u8, str, kv[0])) return @intFromEnum(kv[1]);
     }
     return @intFromEnum(Mode16.unknown);
 }

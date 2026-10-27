@@ -11,6 +11,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
 - [Ordered maps](#ordered-maps): `btree` keeps the keys sorted for iteration and range scans, with cache-sized nodes and a stripped prefix at every node.
 - [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
+- [String dispatch](#string-dispatch): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`. `stringToEnum` matches an existing enum with fixed-length compares.
 - [Binary encoding](#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, with the byte order fixed at comptime and a slot for a length or checksum written later.
 - [Base32](#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
@@ -268,20 +269,6 @@ When the map is full, `put` fails for a new key. It still updates an existing ke
 
 For string keys, use std unless you want one of those properties from `static_map`. For a dense enum key, `std.EnumMap` fits. For any other key type, std has no table of this kind.
 
-## Classify a string
-
-`enums.Open` turns a list of byte strings into a non-exhaustive enum. Switch on the tags, and put the miss in `else`:
-
-```zig
-{{ load_data(path="examples/enums_classify.zig", format="plain") | trim_end }}
-```
-
-`enums.Closed` takes the name of a fallback tag and generates an exhaustive enum. The compiler then checks that every tag has an arm. Use `Open` when `else` is the simplest way to handle the miss, and `Closed` when the fallback deserves a name in the switch.
-
-The compiler switches on the byte length first. A value whose length no tag has costs one test. Each arm compares only the tags of that length, with a load-sized compare fixed at compile time. The compare is byte-exact; the input does not have to be text.
-
-A tag may be any non-empty byte string without a null byte. Write a tag that is not an identifier as `.@"content-type"`. For keys that cannot be tag names, use `static_map.String` or `std.StaticStringMap`. `enums.stringToEnum(E, value)` is `std.meta.stringToEnum` for an existing enum, with the same length-first lookup.
-
 ## Test membership cheaply
 
 `bloom` is a Bloom filter. `contains` never misses a key that was added. It can report a key that was never added, at a known rate. The rate holds only while the filter holds the number of keys that you sized it for.
@@ -399,6 +386,22 @@ An empty or malformed string returns `error.InvalidCharacter`. A number too larg
 ```
 
 `.overflow = .unchecked` skips the overflow check. The caller promises that the value fits. A value that does not fit is a safety-checked panic in Debug and ReleaseSafe, and undefined behavior in ReleaseFast. `fmt.atoiUnchecked` is the shorthand.
+
+# String dispatch
+
+`enums.Open` turns a list of byte strings into a non-exhaustive enum. Switch on the tags, and put the miss in `else`:
+
+```zig
+{{ load_data(path="examples/enums_classify.zig", format="plain") | trim_end }}
+```
+
+`enums.Closed` takes the name of a fallback tag and generates an exhaustive enum. The compiler then checks that every tag has an arm. Use `Open` when `else` is the simplest way to handle the miss, and `Closed` when the fallback deserves a name in the switch.
+
+The compiler switches on the byte length first. A value whose length no tag has costs one test. Each arm compares only the tags of that length, with a fixed-length compare at compile time. The compare is byte-exact. The input does not have to be text.
+
+A tag is any non-empty byte string without a null byte. Write a tag that is not an identifier as `.@"content-type"`. For keys that cannot be tag names, use `static_map.String` or `std.StaticStringMap`.
+
+`enums.stringToEnum(E, value)` matches the field names of an existing enum, like `std.meta.stringToEnum`. It compares each candidate with fixed-length loads.
 
 # Binary encoding
 

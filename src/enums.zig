@@ -30,16 +30,18 @@
 //! }
 //! ```
 //!
-//! The lookup compares bytes exactly, not text. A tag may be any non-empty
+//! The lookup compares bytes exactly, not text. A tag is any non-empty
 //! byte string without a null byte, so `"content-type"` is the tag
 //! `.@"content-type"`. For keys that cannot be tag names, use
 //! `static_map.String` or `std.StaticStringMap`.
 //!
-//! `stringToEnum` is `std.meta.stringToEnum` for an existing enum, with the
-//! same length-first lookup.
+//! `stringToEnum` is `std.meta.stringToEnum` for an existing enum, with
+//! fixed-length loads.
 
 const std = @import("std");
 const testing = std.testing;
+const math = std.math;
+const mem = std.mem;
 
 /// A non-exhaustive enum generated from `names`, plus the lookup.
 ///
@@ -52,7 +54,7 @@ pub fn Open(comptime names: anytype) type {
     return struct {
         /// The generated enum: one tag per name, plus the unnamed miss value.
         pub const Tag = blk: {
-            const IntTag = std.math.IntFittingRange(0, names.len);
+            const IntTag = math.IntFittingRange(0, names.len);
             var name_array: [names.len][]const u8 = undefined;
             var value_array: [names.len]IntTag = undefined;
             for (names, 0..) |name, i| {
@@ -100,7 +102,7 @@ pub fn Closed(comptime names: anytype, comptime fallback: []const u8) type {
         validate(names);
         checkTag(fallback);
         for (names) |name| {
-            if (std.mem.eql(u8, name, fallback)) {
+            if (mem.eql(u8, name, fallback)) {
                 @compileError("enums.Closed: fallback \"" ++ fallback ++ "\" is also a name");
             }
         }
@@ -110,7 +112,7 @@ pub fn Closed(comptime names: anytype, comptime fallback: []const u8) type {
         /// The generated enum: one tag per name, plus `fallback`.
         pub const Tag = blk: {
             const total = names.len + 1;
-            const IntTag = std.math.IntFittingRange(0, total - 1);
+            const IntTag = math.IntFittingRange(0, total - 1);
             var name_array: [total][]const u8 = undefined;
             var value_array: [total]IntTag = undefined;
             for (names, 0..) |name, i| {
@@ -152,7 +154,7 @@ pub fn Closed(comptime names: anytype, comptime fallback: []const u8) type {
 }
 
 /// The enum value for `value`, or null. The contract of
-/// `std.meta.stringToEnum`, with the byte length checked first.
+/// `std.meta.stringToEnum`, with fixed-length loads.
 pub fn stringToEnum(comptime E: type, value: []const u8) ?E {
     const Table = struct {
         const fields = switch (@typeInfo(E)) {
@@ -174,7 +176,7 @@ pub fn stringToEnum(comptime E: type, value: []const u8) ?E {
         };
     };
 
-    const i = indexOf(Table.keys, value) orelse return null;
+    const i = indexOf(&Table.keys, value) orelse return null;
     return Table.values[i];
 }
 
@@ -183,7 +185,7 @@ fn validate(comptime names: anytype) void {
     for (names, 0..) |name, i| {
         checkTag(name);
         for (names, 0..) |other, j| {
-            if (i < j and std.mem.eql(u8, name, other)) {
+            if (i < j and mem.eql(u8, name, other)) {
                 @compileError("enums: duplicate name \"" ++ name[0..name.len] ++ "\"");
             }
         }
@@ -196,7 +198,7 @@ fn checkTag(comptime name: []const u8) void {
     if (name.len == 0) {
         @compileError("enums: an empty name cannot be a tag");
     }
-    if (std.mem.indexOfScalar(u8, name, 0) != null) {
+    if (mem.indexOfScalar(u8, name, 0) != null) {
         @compileError("enums: a name cannot contain a null byte");
     }
 }
@@ -205,8 +207,8 @@ fn checkTag(comptime name: []const u8) void {
 ///
 /// The compiler switches on `value.len` first, so a value whose length no
 /// key has costs one test. Each arm then compares only the keys of that
-/// length.
-fn indexOf(comptime keys: anytype, value: []const u8) ?usize {
+/// length, with a fixed-length compare.
+fn indexOf(comptime keys: []const []const u8, value: []const u8) ?usize {
     if (keys.len == 0) return null;
 
     const max_len = comptime blk: {
@@ -232,13 +234,13 @@ fn indexOf(comptime keys: anytype, value: []const u8) ?usize {
 /// Compare `a` and `b`, whose length is known to be `len`, using the
 /// widest loads that stay in bounds.
 ///
-/// `std.mem.eql` cannot see the length here, so it computes its load
+/// `mem.eql` cannot see the length here, so it computes its load
 /// offsets at runtime. With `len` fixed, two loads from the ends cover
 /// any slice up to 16 bytes, and longer slices walk 8-byte chunks.
 /// The loads use native byte order on both sides. Equality does not
 /// depend on the order.
 fn eqlFixed(comptime len: usize, a: []const u8, b: []const u8) bool {
-    if (len < 4) return std.mem.eql(u8, a[0..len], b[0..len]);
+    if (len < 4) return mem.eql(u8, a[0..len], b[0..len]);
     if (len == 4) return u32At(a, 0) == u32At(b, 0);
     if (len < 8) return u32At(a, 0) == u32At(b, 0) and u32At(a, len - 4) == u32At(b, len - 4);
     if (len == 8) return u64At(a, 0) == u64At(b, 0);
@@ -359,21 +361,46 @@ test "tags can contain any non-null byte" {
 
 test "every length up to 40 compares exactly" {
     const C = Open(.{
-        "a",                               "ab",
-        "abc",                             "abcd",
-        "abcde",                           "abcdef",
-        "abcdefg",                         "abcdefgh",
-        "abcdefghi",                       "abcdefghij",
-        "abcdefghijk",                     "abcdefghijkl",
-        "abcdefghijklm",                   "abcdefghijklmn",
-        "abcdefghijklmno",                 "abcdefghijklmnop",
-        "abcdefghijklmnopq",               "abcdefghijklmnopqr",
-        "abcdefghijklmnopqrs",             "abcdefghijklmnopqrst",
-        "abcdefghijklmnopqrstu",           "abcdefghijklmnopqrstuv",
-        "abcdefghijklmnopqrstuvw",         "abcdefghijklmnopqrstuvwx",
-        "abcdefghijklmnopqrstuvwxy",       "abcdefghijklmnopqrstuvwxyz",
-        "abcdefghijklmnopqrstuvwxyzabc",   "abcdefghijklmnopqrstuvwxyzabcd",
-        "abcdefghijklmnopqrstuvwxyzabcde", "abcdefghijklmnopqrstuvwxyzabcdef",
+        "a",
+        "ab",
+        "abc",
+        "abcd",
+        "abcde",
+        "abcdef",
+        "abcdefg",
+        "abcdefgh",
+        "abcdefghi",
+        "abcdefghij",
+        "abcdefghijk",
+        "abcdefghijkl",
+        "abcdefghijklm",
+        "abcdefghijklmn",
+        "abcdefghijklmno",
+        "abcdefghijklmnop",
+        "abcdefghijklmnopq",
+        "abcdefghijklmnopqr",
+        "abcdefghijklmnopqrs",
+        "abcdefghijklmnopqrst",
+        "abcdefghijklmnopqrstu",
+        "abcdefghijklmnopqrstuv",
+        "abcdefghijklmnopqrstuvw",
+        "abcdefghijklmnopqrstuvwx",
+        "abcdefghijklmnopqrstuvwxy",
+        "abcdefghijklmnopqrstuvwxyz",
+        "abcdefghijklmnopqrstuvwxyza",
+        "abcdefghijklmnopqrstuvwxyzab",
+        "abcdefghijklmnopqrstuvwxyzabc",
+        "abcdefghijklmnopqrstuvwxyzabcd",
+        "abcdefghijklmnopqrstuvwxyzabcde",
+        "abcdefghijklmnopqrstuvwxyzabcdef",
+        "abcdefghijklmnopqrstuvwxyzabcdefg",
+        "abcdefghijklmnopqrstuvwxyzabcdefgh",
+        "abcdefghijklmnopqrstuvwxyzabcdefghi",
+        "abcdefghijklmnopqrstuvwxyzabcdefghij",
+        "abcdefghijklmnopqrstuvwxyzabcdefghijk",
+        "abcdefghijklmnopqrstuvwxyzabcdefghijkl",
+        "abcdefghijklmnopqrstuvwxyzabcdefghijklm",
+        "abcdefghijklmnopqrstuvwxyzabcdefghijklmn",
     });
 
     inline for (C.keys, 0..) |key, i| {
