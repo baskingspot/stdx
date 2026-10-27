@@ -101,6 +101,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`btree`](api/#stdx.btree)                                   | An ordered map that grows: sorted iteration, and lookups by key.                                                                                                                  |
 | [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                                         |
 | [`buffer`](api/#stdx.buffer)                                 | Fixed-capacity buffers. `Array` owns its storage. `Slice` and `Queue` borrow it, and `Queue` consumes from the front.                                                             |
+| [`enums`](api/#stdx.enums)                                   | Switch on a byte string: generate an open or closed enum from a list, or look up an existing enum.                                                                                |
 | [`fmt`](api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                                                                                         |
 | [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
 | [`heap`](api/#stdx.heap)                                     | `SlabAllocator` and `SizeClassPool`.                                                                                                                                              |
@@ -266,6 +267,20 @@ When the map is full, `put` fails for a new key. It still updates an existing ke
 - What only std has: `getLongestPrefix`, which finds the longest key that starts a string, and `init`, which builds the map at runtime with an allocator. `static_map` has neither.
 
 For string keys, use std unless you want one of those properties from `static_map`. For a dense enum key, `std.EnumMap` fits. For any other key type, std has no table of this kind.
+
+## Classify a string
+
+`enums.Open` turns a list of byte strings into a non-exhaustive enum. Switch on the tags, and put the miss in `else`:
+
+```zig
+{{ load_data(path="examples/enums_classify.zig", format="plain") | trim_end }}
+```
+
+`enums.Closed` takes the name of a fallback tag and generates an exhaustive enum. The compiler then checks that every tag has an arm. Use `Open` when `else` is the simplest way to handle the miss, and `Closed` when the fallback deserves a name in the switch.
+
+The compiler switches on the byte length first. A value whose length no tag has costs one test. Each arm compares only the tags of that length, with a load-sized compare fixed at compile time. The compare is byte-exact; the input does not have to be text.
+
+A tag may be any non-empty byte string without a null byte. Write a tag that is not an identifier as `.@"content-type"`. For keys that cannot be tag names, use `static_map.String` or `std.StaticStringMap`. `enums.stringToEnum(E, value)` is `std.meta.stringToEnum` for an existing enum, with the same length-first lookup.
 
 ## Test membership cheaply
 

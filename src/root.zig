@@ -20,6 +20,7 @@ pub const btree = @import("btree.zig");
 pub const bounded_array_hash_map = @import("bounded_array_hash_map.zig");
 pub const BoundedWriter = @import("BoundedWriter.zig");
 pub const buffer = @import("buffer.zig");
+pub const enums = @import("enums.zig");
 pub const fmt = @import("fmt.zig");
 pub const hash = @import("hash.zig");
 pub const heap = @import("heap.zig");

@@ -11,6 +11,7 @@ const bloom = @import("bloom_bench.zig");
 const btree = @import("btree_bench.zig");
 const bounded_array_hash_map = @import("bounded_array_hash_map_bench.zig");
 const buffer = @import("buffer_bench.zig");
+const enums = @import("enums_bench.zig");
 const fmt = @import("fmt_bench.zig");
 const hash = @import("hash/bench.zig");
 const heap = @import("heap_bench.zig");
@@ -33,6 +34,7 @@ pub fn benchmarkMain(b: *testingx.B) !void {
     try b.addMod(btree);
     try b.addMod(bounded_array_hash_map);
     try b.addMod(buffer);
+    try b.addMod(enums);
     try b.addMod(fmt);
     try b.addMod(hash);
     try b.addMod(heap);

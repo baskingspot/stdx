@@ -5,6 +5,14 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `enums.Open` and `enums.Closed`: turn a comptime list of byte strings into
+  an enum, then switch on the tags. `Open` is non-exhaustive with an unnamed
+  miss value and an `else` arm. `Closed` adds a named fallback tag and is
+  exhaustive. `enums.stringToEnum` is `std.meta.stringToEnum` with the byte
+  length checked first.
+
 ## [0.1.0] - 2026-10-26
 
 The first release. Everything the guide documents ships here.

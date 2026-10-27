@@ -20,6 +20,7 @@ pub const containers_priority_queue = @import("containers_priority_queue.zig");
 pub const containers_set = @import("containers_set.zig");
 pub const containers_static_map = @import("containers_static_map.zig");
 pub const containers_swiss_map = @import("containers_swiss_map.zig");
+pub const enums_classify = @import("enums_classify.zig");
 pub const hash_keyed_map = @import("hash_keyed_map.zig");
 pub const heap_slab_records = @import("heap_slab_records.zig");
 pub const mem_secret = @import("mem_secret.zig");

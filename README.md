@@ -16,6 +16,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Fixed-capacity containers](https://baskingspot.dev/stdx/#fixed-capacity-containers): lists, queues, bitsets, maps, sets, Bloom filters, and comptime lookup tables. No allocator and no `deinit`; `Array` owns its storage, and `Slice` and `Queue` borrow it.
 - [Ordered maps](https://baskingspot.dev/stdx/#ordered-maps): `btree.Auto` and `btree.String` keep the keys sorted for iteration and lookups by key.
 - [Strict parsing](https://baskingspot.dev/stdx/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
+- [String dispatch](https://baskingspot.dev/stdx/#classify-a-string): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`, and `stringToEnum` speeds up the existing-enum case. The length picks the branch.
 - [Binary encoding](https://baskingspot.dev/stdx/#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, in big or little endian selected at comptime, with a reserved slot for a length or checksum written later.
 - [Base32](https://baskingspot.dev/stdx/#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](https://baskingspot.dev/stdx/#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks. `HostPort` splits `host:port` config text.
