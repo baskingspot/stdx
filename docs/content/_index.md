@@ -10,7 +10,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Choosing a container](#choosing-a-container): which fixed-capacity type fits a need, and when to use std or `swiss` instead.
 - [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
 - [Ordered maps](#ordered-maps): `btree` keeps the keys sorted for iteration and range scans, with cache-sized nodes and a stripped prefix at every node.
-- [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
+- [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest. `fmt.parseBool` accepts Go's boolean spellings.
 - [String dispatch](#string-dispatch): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`. `stringToEnum` matches an existing enum with fixed-length compares.
 - [Prefix matching](#match-a-prefix): `prefix_map.Map` stores byte prefixes in a compressed radix tree and returns the longest match.
 - [Initialize once](#initialize-once): `once.Cell` and `once.Lazy` set a value at most once. The `Sync` variants share it across threads.
@@ -106,7 +106,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                                         |
 | [`buffer`](api/#stdx.buffer)                                 | Fixed-capacity buffers. `Array` owns its storage. `Slice` and `Queue` borrow it, and `Queue` consumes from the front.                                                             |
 | [`enums`](api/#stdx.enums)                                   | Switch on a byte string: generate an open or closed enum from a list, or look up an existing enum.                                                                                |
-| [`fmt`](api/#stdx.fmt)                                       | Strict number parsing (`atoi`) and comptime hex decoding.                                                                                                                         |
+| [`fmt`](api/#stdx.fmt)                                       | Strict parsing for integers and booleans (`atoi`, `parseBool`), and comptime hex decoding.                                                                                        |
 | [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
 | [`heap`](api/#stdx.heap)                                     | `SlabAllocator` and `SizeClassPool`.                                                                                                                                              |
 | [`mem`](api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                                          |
@@ -392,6 +392,14 @@ An empty or malformed string returns `error.InvalidCharacter`. A number too larg
 ```
 
 `.overflow = .unchecked` skips the overflow check. The caller promises that the value fits. A value that does not fit is a safety-checked panic in Debug and ReleaseSafe, and undefined behavior in ReleaseFast. `fmt.atoiUnchecked` is the shorthand.
+
+## Parse a boolean
+
+`fmt.parseBool` accepts the spellings of Go's `strconv.ParseBool`: `1`, `t`, `T`, `TRUE`, `true`, `True`, and the same set for false. Anything else returns null.
+
+```zig
+{{ load_data(path="examples/parsing_bool.zig", format="plain") | trim_end }}
+```
 
 # String dispatch
 

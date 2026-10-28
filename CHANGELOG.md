@@ -7,6 +7,10 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `fmt.parseBool`: the boolean spellings of Go's `strconv.ParseBool` (`1`,
+  `t`, `T`, `TRUE`, `true`, `True`, and the false set). Returns null for
+  anything else.
+
 - `sort.radix`: a stable LSD radix sort for signed and unsigned integers,
   with a caller-owned scratch slice. `sort.nth` and `sort.select` partition a
   slice around the n-th element with a 3-way quickselect and a depth fallback.

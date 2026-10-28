@@ -15,7 +15,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Choosing a container](https://baskingspot.dev/stdx/#choosing-a-container): which fixed-capacity type fits a need, and when to use std or `swiss` instead.
 - [Fixed-capacity containers](https://baskingspot.dev/stdx/#fixed-capacity-containers): lists, queues, bitsets, maps, sets, Bloom filters, and comptime lookup tables. No allocator and no `deinit`; `Array` owns its storage, and `Slice` and `Queue` borrow it.
 - [Ordered maps](https://baskingspot.dev/stdx/#ordered-maps): `btree.Auto` and `btree.String` keep the keys sorted for iteration and lookups by key.
-- [Strict parsing](https://baskingspot.dev/stdx/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
+- [Strict parsing](https://baskingspot.dev/stdx/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest. `fmt.parseBool` accepts Go's boolean spellings.
 - [String dispatch](https://baskingspot.dev/stdx/#string-dispatch): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`. `stringToEnum` matches an existing enum with fixed-length compares.
 - [Prefix matching](https://baskingspot.dev/stdx/#match-a-prefix): `prefix_map.Map` is a compressed radix tree over byte strings. It builds at comptime or runtime and returns the longest stored prefix.
 - [Initialize once](https://baskingspot.dev/stdx/#initialize-once): `once.Cell` and `once.Lazy` set a value at most once. The `Sync` variants share it across threads with a lock-free read.

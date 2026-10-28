@@ -1,13 +1,15 @@
 //! Format extensions to `std.fmt`.
 //!
-//! Strict decode and parse helpers where `std.fmt` is liberal: no bases, no
-//! underscores — and bad comptime literals are compile errors, not runtime
-//! ones.
+//! Strict decode and parse helpers where `std.fmt` is liberal: one integer
+//! grammar, Go's boolean spellings, no bases, no underscores. Bad comptime
+//! literals are compile errors, not runtime ones.
 
 const std = @import("std");
 const testing = std.testing;
 
 const atoi_mod = @import("fmt/atoi.zig");
+const static_map = @import("static_map.zig");
+
 pub const atoi = atoi_mod.atoi;
 pub const atoiUnchecked = atoi_mod.atoiUnchecked;
 pub const atoiWith = atoi_mod.atoiWith;
@@ -52,4 +54,43 @@ test "comptimeHex: a long literal" {
     try testing.expectEqual(@as(usize, 256), bytes.len);
     try testing.expectEqual(@as(u8, 0x01), bytes[0]);
     try testing.expectEqual(@as(u8, 0xef), bytes[255]);
+}
+
+/// Parse a boolean with the spellings of Go's `strconv.ParseBool`: `1`, `t`,
+/// `T`, `TRUE`, `true`, `True`, and the same set for false. Returns null for
+/// anything else.
+pub fn parseBool(raw: []const u8) ?bool {
+    return static_map.String(bool, .{
+        .{ "true", true },
+        .{ "TRUE", true },
+        .{ "True", true },
+        .{ "t", true },
+        .{ "T", true },
+        .{ "1", true },
+        .{ "false", false },
+        .{ "FALSE", false },
+        .{ "False", false },
+        .{ "f", false },
+        .{ "F", false },
+        .{ "0", false },
+    }).get(raw);
+}
+
+test parseBool {
+    try testing.expect(parseBool("true").?);
+    try testing.expect(parseBool("TRUE").?);
+    try testing.expect(parseBool("True").?);
+    try testing.expect(parseBool("t").?);
+    try testing.expect(parseBool("T").?);
+    try testing.expect(parseBool("1").?);
+    try testing.expect(!parseBool("false").?);
+    try testing.expect(!parseBool("FALSE").?);
+    try testing.expect(!parseBool("False").?);
+    try testing.expect(!parseBool("f").?);
+    try testing.expect(!parseBool("F").?);
+    try testing.expect(!parseBool("0").?);
+    try testing.expectEqual(null, parseBool(""));
+    try testing.expectEqual(null, parseBool("nope"));
+    try testing.expectEqual(null, parseBool("TrUe"));
+    try testing.expectEqual(null, parseBool("yes"));
 }
