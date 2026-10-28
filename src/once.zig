@@ -30,7 +30,11 @@ pub fn Cell(comptime T: type) type {
 
         /// The value, or null.
         pub fn get(self: *Self) ?*T {
-            return if (self.initialized) &self.value else null;
+            if (!self.initialized) {
+                @branchHint(.unlikely);
+                return null;
+            }
+            return &self.value;
         }
 
         /// Whether a value has been set.
@@ -48,9 +52,15 @@ pub fn Cell(comptime T: type) type {
         /// The value, initialized by `f` on the first call.
         pub fn getOrInit(self: *Self, ctx: anytype, comptime f: fn (@TypeOf(ctx)) T) *T {
             if (!self.initialized) {
-                self.value = f(ctx);
-                self.initialized = true;
+                @branchHint(.cold);
+                return self.initSlow(ctx, f);
             }
+            return &self.value;
+        }
+
+        noinline fn initSlow(self: *Self, ctx: anytype, comptime f: fn (@TypeOf(ctx)) T) *T {
+            self.value = f(ctx);
+            self.initialized = true;
             return &self.value;
         }
 
@@ -58,9 +68,15 @@ pub fn Cell(comptime T: type) type {
         /// leaves the cell empty, so a later call can try again.
         pub fn getOrTryInit(self: *Self, ctx: anytype, comptime f: anytype) InitError(f)!*T {
             if (!self.initialized) {
-                self.value = try f(ctx);
-                self.initialized = true;
+                @branchHint(.cold);
+                return self.tryInitSlow(ctx, f);
             }
+            return &self.value;
+        }
+
+        noinline fn tryInitSlow(self: *Self, ctx: anytype, comptime f: anytype) InitError(f)!*T {
+            self.value = try f(ctx);
+            self.initialized = true;
             return &self.value;
         }
 
@@ -94,7 +110,10 @@ pub fn SyncCell(comptime T: type) type {
 
         /// The value, or null. The fast path is one acquire load.
         pub fn get(self: *Self) ?*T {
-            if (self.state.load(.acquire) != .initialized) return null;
+            if (self.state.load(.acquire) != .initialized) {
+                @branchHint(.unlikely);
+                return null;
+            }
             return &self.value;
         }
 
@@ -120,7 +139,19 @@ pub fn SyncCell(comptime T: type) type {
             ctx: anytype,
             comptime f: fn (@TypeOf(ctx)) T,
         ) Io.Cancelable!*T {
-            if (self.state.load(.acquire) == .initialized) return &self.value;
+            if (self.state.load(.acquire) != .initialized) {
+                @branchHint(.cold);
+                return self.initSlow(io, ctx, f);
+            }
+            return &self.value;
+        }
+
+        noinline fn initSlow(
+            self: *Self,
+            io: Io,
+            ctx: anytype,
+            comptime f: fn (@TypeOf(ctx)) T,
+        ) Io.Cancelable!*T {
             try self.mutex.lock(io);
             defer self.mutex.unlock(io);
             if (self.state.load(.acquire) == .initialized) return &self.value;
@@ -137,7 +168,19 @@ pub fn SyncCell(comptime T: type) type {
             ctx: anytype,
             comptime f: anytype,
         ) (InitError(f) || Io.Cancelable)!*T {
-            if (self.state.load(.acquire) == .initialized) return &self.value;
+            if (self.state.load(.acquire) != .initialized) {
+                @branchHint(.cold);
+                return self.tryInitSlow(io, ctx, f);
+            }
+            return &self.value;
+        }
+
+        noinline fn tryInitSlow(
+            self: *Self,
+            io: Io,
+            ctx: anytype,
+            comptime f: anytype,
+        ) (InitError(f) || Io.Cancelable)!*T {
             try self.mutex.lock(io);
             defer self.mutex.unlock(io);
             if (self.state.load(.acquire) == .initialized) return &self.value;
