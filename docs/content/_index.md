@@ -15,6 +15,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Prefix matching](#match-a-prefix): `prefix_map.Map` stores byte prefixes in a compressed radix tree and returns the longest match.
 - [Initialize once](#initialize-once): `once.Cell` and `once.Lazy` set a value at most once. The `Sync` variants share it across threads.
 - [Sort](#sort): `sort.radix` is a stable integer radix sort, and `sort.nth`/`sort.select` find the k-th element without sorting the rest.
+- [Cache the recent](#cache-the-recent): `lru.String` and `lru.Auto` keep a fixed number of recent entries and evict the tail.
 - [Binary encoding](#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, with the byte order fixed at comptime and a slot for a length or checksum written later.
 - [Base32](#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
@@ -109,6 +110,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`fmt`](api/#stdx.fmt)                                       | Strict parsing for integers and booleans (`atoi`, `parseBool`), and comptime hex decoding.                                                                                        |
 | [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
 | [`heap`](api/#stdx.heap)                                     | `SlabAllocator` and `SizeClassPool`.                                                                                                                                              |
+| [`lru`](api/#stdx.lru)                                       | A fixed-capacity LRU cache with no allocator and no eviction callback.                                                                                                            |
 | [`mem`](api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                                          |
 | [`multi_array`](api/#stdx.multi_array)                       | Struct-of-arrays types with the storage inside the value.                                                                                                                         |
 | [`net`](api/#stdx.net)                                       | IPv4 addresses and CIDR prefixes, after Go's `net/netip`: parse, classify, order, step, and test containment. `Ip4Endpoint` holds octets and port; `HostPort` splits config text. |
@@ -143,6 +145,7 @@ Find the need in the table. Then read the section for that type in [Fixed-capaci
 | One array per struct field                            | `multi_array.Buffer`                       | Runtime length. `multi_array.Array` has a fixed length.                                 |
 | The smallest item first                               | `priority_queue.Custom`                    | A binary heap. You supply the comparison.                                               |
 | A map that keeps insertion order                      | `bounded_array_hash_map.Auto` or `.String` | Fixed capacity.                                                                         |
+| The N most recent entries, evicting the rest          | `lru.Auto` or `.String`                    | Fixed capacity. A hit moves to the front.                                               |
 | A set                                                 | `set.Auto` or `.String`                    | A map with no values, plus set algebra.                                                 |
 | A set of indices in a reused workspace                | `bit_set.Scratch`                          | Reset clears only a validity map.                                                       |
 | A constant lookup table                               | `static_map.Auto` or `.String`             | Built at compile time from a literal. Not the same as `std.StaticStringMap`: see below. |
@@ -456,6 +459,20 @@ Use it for route tables, layered configuration, or a set of byte prefixes. For e
 `sort.nth` partitions a slice so the value at `n` is the n-th smallest, in expected O(n). `sort.select` returns that value. Both take a comparison context, like `std.mem.sort`, and a depth limit falls back to `std.mem.sortUnstable` on the active range.
 
 `radix` is ascending only. For a descending integer order, sort ascending and reverse, or use a comparison sort. `radix` is stable; `nth` and `select` are not.
+
+# Cache the recent
+
+`lru.String(V, capacity)` and `lru.Auto(K, V, capacity)` keep up to `capacity` entries. A new key at capacity evicts the least-recently-used entry.
+
+```zig
+{{ load_data(path="examples/lru_cache.zig", format="plain") | trim_end }}
+```
+
+The index is a `bounded_array_hash_map` from key to a node slot. The nodes form a doubly linked list with integer links, so a hit relinks and no entry data moves. `get` moves a hit to the front. `peek` leaves the order alone. `put` returns the displaced entry: the old value for an existing key, or the evicted entry for a new one. `popLru` and `popMru` return whole entries.
+
+The value pointers from `get` and `peek` keep their address for the cache's lifetime. After an entry is removed, a later `put` can reuse its node, so an old pointer then refers to the new value.
+
+There is no eviction callback. The caller cleans up a value that owns resources. `clear` drops the values. Drain with the iterator first when they need cleanup. Keys are borrowed, and the cache stores the key handle twice, once in the index and once in the node. Capacity is fixed at comptime and must be at least one.
 
 # Binary encoding
 

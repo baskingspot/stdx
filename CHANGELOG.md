@@ -7,6 +7,11 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `lru.Custom`, `lru.Auto`, and `lru.String`: a fixed-capacity LRU cache.
+  `get` and `peek`; `put` returns the replaced value or the evicted entry;
+  `remove`, `popLru`, `popMru`, an iterator, and `clear`. No allocator and no
+  eviction callback.
+
 - `fmt.parseBool`: the boolean spellings of Go's `strconv.ParseBool` (`1`,
   `t`, `T`, `TRUE`, `true`, `True`, and the false set). Returns null for
   anything else.
