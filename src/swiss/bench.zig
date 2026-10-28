@@ -67,12 +67,12 @@ pub fn benchmarkSwissSmall(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     for (small_keys) |k| try map.put(b.allocator, k, k);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&small_keys)) |k| {
             if (map.get(k)) |v| sink +%= v;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSwissSmallMiss(b: *testingx.B) !void {
@@ -80,12 +80,12 @@ pub fn benchmarkSwissSmallMiss(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     for (small_keys) |k| try map.put(b.allocator, k, k);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (small_keys) |k| {
             if (map.get(k ^ 1)) |v| sink +%= v;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSwissLarge(b: *testingx.B) !void {
@@ -93,12 +93,12 @@ pub fn benchmarkSwissLarge(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     try fillLarge(b.allocator, &map, &large_hit_keys, &large_miss_keys);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&large_hit_keys)) |k| {
             if (map.get(k)) |v| sink +%= v;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSwissLargeMiss(b: *testingx.B) !void {
@@ -106,12 +106,12 @@ pub fn benchmarkSwissLargeMiss(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     try fillLarge(b.allocator, &map, &large_hit_keys, &large_miss_keys);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&large_miss_keys)) |k| {
             if (map.get(k)) |v| sink +%= v;
         }
     }
-    b.keepAlive(sink);
 }
 
 /// One op: grow an empty map to `growth_target` entries. The timed op IS

@@ -18,12 +18,12 @@ pub fn benchmarkMultiArrayColumnSum(b: *testingx.B) !void {
     const column = list.items(.a);
 
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const values = b.blackBox(column);
         var sum: u64 = 0;
         for (values) |value| sum +%= value;
         sink +%= sum;
     }
-    b.keepAlive(sink);
     b.keepAlive(&list);
 }

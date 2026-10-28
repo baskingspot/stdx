@@ -43,38 +43,38 @@ const hash_large = blk: {
 
 pub fn benchmarkRapidhashSmall(b: *testingx.B) !void {
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     var i: usize = 0;
     while (try b.loop()) {
         const key: []const u8 = b.blackBox(&hash_keys[i & (hash_keys.len - 1)]);
         sink +%= RapidHash.hash(0, key[0..hash_key_lens[i % hash_key_lens.len]]);
         i += 1;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkWyhashSmall(b: *testingx.B) !void {
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     var i: usize = 0;
     while (try b.loop()) {
         const key: []const u8 = b.blackBox(&hash_keys[i & (hash_keys.len - 1)]);
         sink +%= std.hash.Wyhash.hash(0, key[0..hash_key_lens[i % hash_key_lens.len]]);
         i += 1;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkRapidhashLarge(b: *testingx.B) !void {
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         sink +%= RapidHash.hash(0, b.blackBox(&hash_large));
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkWyhashLarge(b: *testingx.B) !void {
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         sink +%= std.hash.Wyhash.hash(0, b.blackBox(&hash_large));
     }
-    b.keepAlive(sink);
 }

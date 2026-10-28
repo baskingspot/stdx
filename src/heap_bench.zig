@@ -20,12 +20,12 @@ pub fn benchmarkSlabAllocFree(b: *testingx.B) !void {
     defer slab.deinit(gpa);
 
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const ptr = slab.alloc(gpa, 64);
         sink +%= @intFromPtr(ptr);
         slab.free(gpa, ptr, 64);
     }
-    b.keepAlive(sink);
 }
 
 const Pool = heap.SizeClassPool(&.{ 64, 256, 1024 });
@@ -41,11 +41,11 @@ pub fn benchmarkSizeClassPoolCreate(b: *testingx.B) !void {
     }
 
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const block = try pool.create(256);
         sink +%= block.len;
         pool.destroy(block);
     }
-    b.keepAlive(sink);
     pool.deinit();
 }

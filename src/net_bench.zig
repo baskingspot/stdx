@@ -11,11 +11,11 @@ pub fn benchmarkIp4Parse(b: *testingx.B) !void {
     const hidden = b.blackBox(&text);
 
     var sink: u8 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const ip = net.Ip4.parse(hidden) catch unreachable;
         sink +%= ip.bytes[0];
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkPrefix4Parse(b: *testingx.B) !void {
@@ -23,11 +23,11 @@ pub fn benchmarkPrefix4Parse(b: *testingx.B) !void {
     const hidden = b.blackBox(&text);
 
     var sink: u8 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const prefix = net.Prefix4.parse(hidden) catch unreachable;
         sink +%= prefix.addr.bytes[0];
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkHostPortParse(b: *testingx.B) !void {
@@ -35,9 +35,9 @@ pub fn benchmarkHostPortParse(b: *testingx.B) !void {
     const hidden = b.blackBox(&text);
 
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const endpoint = net.HostPort.parse(hidden, 53) catch unreachable;
         sink +%= endpoint.host.len + endpoint.port;
     }
-    b.keepAlive(sink);
 }

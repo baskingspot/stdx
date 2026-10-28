@@ -145,11 +145,11 @@ pub fn benchmarkSelectMedian(b: *testingx.B) !void {
     fillRandom(u32, base, &seed);
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         @memcpy(items, base);
         sink +%= sort.select(u32, items, n / 2, {}, std.sort.asc(u32));
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSortMedian(b: *testingx.B) !void {
@@ -162,10 +162,10 @@ pub fn benchmarkSortMedian(b: *testingx.B) !void {
     fillRandom(u32, base, &seed);
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         @memcpy(items, base);
         std.mem.sortUnstable(u32, items, {}, std.sort.asc(u32));
         sink +%= items[n / 2];
     }
-    b.keepAlive(sink);
 }

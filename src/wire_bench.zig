@@ -9,6 +9,7 @@ pub fn benchmarkWireWrite(b: *testingx.B) !void {
     var storage: [64]u8 = undefined;
     var writer: wire.Writer(.big) = .init(&storage);
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         writer.clear();
@@ -19,7 +20,6 @@ pub fn benchmarkWireWrite(b: *testingx.B) !void {
         writer.appendAssumeCapacity(u64, i);
         sink +%= writer.buffered().len + writer.constBuffered()[0];
     }
-    b.keepAlive(sink);
     b.keepAlive(&writer);
 }
 
@@ -34,6 +34,7 @@ pub fn benchmarkWireRead(b: *testingx.B) !void {
     const input_len = seed.constBuffered().len;
 
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const input = b.blackBox(&storage)[0..input_len];
         var reader: wire.Reader(.big) = .init(input);
@@ -44,5 +45,4 @@ pub fn benchmarkWireRead(b: *testingx.B) !void {
         sink +%= reader.assumeRead(u64);
         sink +%= @as(u64, @intCast(reader.remaining().len));
     }
-    b.keepAlive(sink);
 }

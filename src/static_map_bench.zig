@@ -14,10 +14,10 @@ const Table = static_map.Auto(u8, u16, .{
 
 pub fn benchmarkStaticMapGet(b: *testingx.B) !void {
     var sink: u16 = 0;
+    defer b.keepAlive(sink);
     var i: u8 = 0;
     while (try b.loop()) : (i +%= 1) {
         const key = b.blackBox(&i).* & 15;
         sink +%= Table.get(key) orelse 0;
     }
-    b.keepAlive(sink);
 }

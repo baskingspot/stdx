@@ -20,12 +20,12 @@ pub fn benchmarkLruGetHit(b: *testingx.B) !void {
     warm(&cache);
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         const key = b.blackBox(&i).* & 1023;
         sink +%= cache.get(key).?.*;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkLruGetMiss(b: *testingx.B) !void {
@@ -33,22 +33,22 @@ pub fn benchmarkLruGetMiss(b: *testingx.B) !void {
     warm(&cache);
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         const key = (b.blackBox(&i).* & 1023) + 1024;
         sink += @intFromBool(cache.get(key) == null);
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkLruPut(b: *testingx.B) !void {
     var cache: Cache = .empty;
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         const key = b.blackBox(&i).* & 2047;
         sink +%= cache.put(key, key).replaced orelse 0;
     }
-    b.keepAlive(sink);
 }

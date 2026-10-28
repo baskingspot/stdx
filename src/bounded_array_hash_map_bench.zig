@@ -57,44 +57,44 @@ pub fn benchmarkRobinSmall(b: *testingx.B) !void {
     var map: robin.Auto(u64, u64, small_capacity) = .empty;
     for (small_keys) |k| try map.put(k, k);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&small_keys)) |k| {
             if (map.get(k)) |v| sink +%= v;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkRobinSmallMiss(b: *testingx.B) !void {
     var map: robin.Auto(u64, u64, small_capacity) = .empty;
     for (small_keys) |k| try map.put(k, k);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (small_keys) |k| {
             if (map.get(k ^ 1)) |v| sink +%= v;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkRobinLarge(b: *testingx.B) !void {
     try ensureLargeFilled();
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&large_hit_keys)) |k| {
             if (large_robin.get(k)) |v| sink +%= v;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkRobinLargeMiss(b: *testingx.B) !void {
     try ensureLargeFilled();
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&large_miss_keys)) |k| {
             if (large_robin.get(k)) |v| sink +%= v;
         }
     }
-    b.keepAlive(sink);
 }

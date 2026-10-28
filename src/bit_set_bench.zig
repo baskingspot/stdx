@@ -45,6 +45,7 @@ fn lookupBatch(comptime capacity: usize, b: *testingx.B) !void {
     while (bit < lookups) : (bit += 1) set.set(capacity - 1 - bit);
 
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     var i: usize = 0;
     while (try b.loop()) : (i += 1) {
         var found: usize = 0;
@@ -56,7 +57,6 @@ fn lookupBatch(comptime capacity: usize, b: *testingx.B) !void {
         }
         sink +%= found;
     }
-    b.keepAlive(sink);
     b.keepAlive(&set);
 }
 
@@ -77,6 +77,7 @@ fn reuse(
     set.clear();
 
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     var i: usize = 0;
     while (try b.loop()) : (i += 1) {
         set.clear();
@@ -88,7 +89,6 @@ fn reuse(
             sink += @intFromBool(set.isSet(offset));
         }
     }
-    b.keepAlive(sink);
     b.keepAlive(&set);
 }
 

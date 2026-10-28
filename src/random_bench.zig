@@ -10,11 +10,11 @@ pub fn benchmarkRandomFill32(b: *testingx.B) !void {
     random.fill(&buffer);
 
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         random.fill(&buffer);
         sink +%= buffer[0];
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkRandomFill1024(b: *testingx.B) !void {
@@ -22,9 +22,9 @@ pub fn benchmarkRandomFill1024(b: *testingx.B) !void {
     random.fill(&buffer);
 
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         random.fill(&buffer);
         sink +%= buffer[0] + buffer[buffer.len - 1];
     }
-    b.keepAlive(sink);
 }

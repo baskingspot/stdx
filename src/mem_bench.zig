@@ -22,11 +22,11 @@ pub fn benchmarkLastIndexOfNonZero(b: *testingx.B) !void {
     buffer[0] = 1;
 
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const hidden = b.blackBox(&buffer);
         sink +%= memx.lastIndexOfNonZero(hidden).?;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkScalarLastNonZero(b: *testingx.B) !void {
@@ -34,9 +34,9 @@ pub fn benchmarkScalarLastNonZero(b: *testingx.B) !void {
     buffer[0] = 1;
 
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const hidden = b.blackBox(&buffer);
         sink +%= scalarLastNonZero(hidden).?;
     }
-    b.keepAlive(sink);
 }

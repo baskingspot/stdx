@@ -102,12 +102,12 @@ pub fn benchmarkBtreeU64GetHit(b: *testingx.B) !void {
     defer map.clearAndFree(b.allocator);
     try fillU64(b.allocator, &map);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&hit_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkBtreeU64GetMiss(b: *testingx.B) !void {
@@ -116,16 +116,17 @@ pub fn benchmarkBtreeU64GetMiss(b: *testingx.B) !void {
     defer map.clearAndFree(b.allocator);
     try fillU64(b.allocator, &map);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&miss_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkBtreeU64Build(b: *testingx.B) !void {
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     var state: u64 = 1;
     while (try b.loop()) {
         var map: Map = .empty;
@@ -136,7 +137,6 @@ pub fn benchmarkBtreeU64Build(b: *testingx.B) !void {
         }
         sink +%= map.count();
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkBtreeU64Churn(b: *testingx.B) !void {
@@ -145,6 +145,7 @@ pub fn benchmarkBtreeU64Churn(b: *testingx.B) !void {
     try fillU64(b.allocator, &map);
     const churn = 1024;
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(hit_keys[0..churn])) |key| {
             if (map.fetchRemove(b.allocator, key)) |value| sink +%= value;
@@ -153,7 +154,6 @@ pub fn benchmarkBtreeU64Churn(b: *testingx.B) !void {
             try map.put(b.allocator, key, key);
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkBtreeU64Scan(b: *testingx.B) !void {
@@ -161,11 +161,11 @@ pub fn benchmarkBtreeU64Scan(b: *testingx.B) !void {
     defer map.clearAndFree(b.allocator);
     try fillU64(b.allocator, &map);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         var it = map.iterator();
         while (it.next()) |entry| sink +%= entry.value_ptr.*;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkBtreeStringGetHit(b: *testingx.B) !void {
@@ -174,12 +174,12 @@ pub fn benchmarkBtreeStringGetHit(b: *testingx.B) !void {
     defer map.clearAndFree(b.allocator);
     try fillStrings(b.allocator, &map);
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&string_hit_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkBtreeStringGetMiss(b: *testingx.B) !void {
@@ -188,12 +188,12 @@ pub fn benchmarkBtreeStringGetMiss(b: *testingx.B) !void {
     defer map.clearAndFree(b.allocator);
     try fillStrings(b.allocator, &map);
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&string_miss_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 // --- std.AutoHashMap ---
@@ -208,12 +208,12 @@ pub fn benchmarkHashMapU64GetHit(b: *testingx.B) !void {
         try map.put(key, key);
     }
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&hit_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkHashMapU64GetMiss(b: *testingx.B) !void {
@@ -226,16 +226,17 @@ pub fn benchmarkHashMapU64GetMiss(b: *testingx.B) !void {
         try map.put(key, key);
     }
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&miss_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkHashMapU64Build(b: *testingx.B) !void {
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     var state: u64 = 1;
     while (try b.loop()) {
         var map: HashMap = .init(b.allocator);
@@ -246,7 +247,6 @@ pub fn benchmarkHashMapU64Build(b: *testingx.B) !void {
         }
         sink +%= map.count();
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkHashMapU64Scan(b: *testingx.B) !void {
@@ -257,11 +257,11 @@ pub fn benchmarkHashMapU64Scan(b: *testingx.B) !void {
         try map.put(key, key);
     }
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         var it = map.valueIterator();
         while (it.next()) |value| sink +%= value.*;
     }
-    b.keepAlive(sink);
 }
 
 // --- sorted array + binary search ---
@@ -286,12 +286,12 @@ pub fn benchmarkSortedU64GetHit(b: *testingx.B) !void {
         hit_keys[i] = keys[i * (entry_count / probe_count)];
     }
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&hit_keys)) |key| {
             if (sortedSearch(keys, key)) |index| sink +%= keys[index];
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSortedU64GetMiss(b: *testingx.B) !void {
@@ -305,12 +305,12 @@ pub fn benchmarkSortedU64GetMiss(b: *testingx.B) !void {
     }
     for (&miss_keys, hit_keys) |*miss, hit| miss.* = hit ^ (1 << 63);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&miss_keys)) |key| {
             if (sortedSearch(keys, key)) |index| sink +%= keys[index];
         }
     }
-    b.keepAlive(sink);
 }
 
 fn stringSearch(keys: []const []const u8, key: []const u8) ?usize {
@@ -335,12 +335,12 @@ pub fn benchmarkSortedStringGetHit(b: *testingx.B) !void {
         }
     }.lessThan);
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&string_hit_keys)) |key| {
             if (stringSearch(keys, key)) |index| sink +%= index;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSortedStringGetMiss(b: *testingx.B) !void {
@@ -355,12 +355,12 @@ pub fn benchmarkSortedStringGetMiss(b: *testingx.B) !void {
         }
     }.lessThan);
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&string_miss_keys)) |key| {
             if (stringSearch(keys, key)) |index| sink +%= index;
         }
     }
-    b.keepAlive(sink);
 }
 
 // --- swiss, for the unordered comparison ---
@@ -373,12 +373,12 @@ pub fn benchmarkSwissU64GetHit(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     try fillU64(b.allocator, &map);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&hit_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSwissU64GetMiss(b: *testingx.B) !void {
@@ -387,16 +387,17 @@ pub fn benchmarkSwissU64GetMiss(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     try fillU64(b.allocator, &map);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&miss_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSwissU64Build(b: *testingx.B) !void {
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     var state: u64 = 1;
     while (try b.loop()) {
         var map: swiss.Auto(u64, u64) = .empty;
@@ -407,7 +408,6 @@ pub fn benchmarkSwissU64Build(b: *testingx.B) !void {
         }
         sink +%= map.count();
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSwissU64Scan(b: *testingx.B) !void {
@@ -415,11 +415,11 @@ pub fn benchmarkSwissU64Scan(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     try fillU64(b.allocator, &map);
     var sink: u64 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         var it = map.valueIterator();
         while (it.next()) |value| sink +%= value.*;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSwissStringGetHit(b: *testingx.B) !void {
@@ -428,12 +428,12 @@ pub fn benchmarkSwissStringGetHit(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     try fillStrings(b.allocator, &map);
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&string_hit_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkSwissStringGetMiss(b: *testingx.B) !void {
@@ -442,10 +442,10 @@ pub fn benchmarkSwissStringGetMiss(b: *testingx.B) !void {
     defer map.deinit(b.allocator);
     try fillStrings(b.allocator, &map);
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         for (b.blackBox(&string_miss_keys)) |key| {
             if (map.get(key)) |value| sink +%= value;
         }
     }
-    b.keepAlive(sink);
 }

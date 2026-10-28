@@ -37,11 +37,11 @@ var corpus: Corpus = .{};
 fn run(b: *testingx.B, comptime kvs: anytype, comptime f: fn ([]const u8) u8) !void {
     corpus.init(kvs);
     var sink: u16 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         sink +%= f(corpus.words[b.blackBox(&i).* & 127]);
     }
-    b.keepAlive(sink);
 }
 
 const Mode = enum { transaction, session, statement, unknown };

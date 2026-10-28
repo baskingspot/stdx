@@ -15,6 +15,7 @@ const Queue = priority_queue.Custom(u32, void, 256, minOrder);
 pub fn benchmarkPriorityQueuePushPop(b: *testingx.B) !void {
     var queue: Queue = .empty;
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         queue.clear();
@@ -22,6 +23,5 @@ pub fn benchmarkPriorityQueuePushPop(b: *testingx.B) !void {
         while (j < 32) : (j += 1) queue.pushAssumeCapacity(i +% j);
         while (queue.pop()) |value| sink +%= value;
     }
-    b.keepAlive(sink);
     b.keepAlive(&queue);
 }

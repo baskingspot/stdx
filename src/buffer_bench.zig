@@ -9,13 +9,13 @@ const buffer = stdx.buffer;
 pub fn benchmarkArrayAppend(b: *testingx.B) !void {
     var list: buffer.Array(u32, 256) = .empty;
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         if (list.remainingCapacity() == 0) list.clear();
         list.appendAssumeCapacity(i);
         sink +%= list.get(list.len - 1);
     }
-    b.keepAlive(sink);
     b.keepAlive(&list);
 }
 
@@ -26,6 +26,7 @@ pub fn benchmarkQueueReuse(b: *testingx.B) !void {
     for (&chunk, 0..) |*byte, index| byte.* = @truncate(index);
 
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         queue.clear();
         @memcpy(queue.unusedCapacitySlice()[0..chunk.len], &chunk);
@@ -34,6 +35,5 @@ pub fn benchmarkQueueReuse(b: *testingx.B) !void {
         queue.rebase();
         sink +%= queue.bufferedLen() + queue.constBuffered()[0];
     }
-    b.keepAlive(sink);
     b.keepAlive(&queue);
 }

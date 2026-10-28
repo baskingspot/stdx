@@ -54,11 +54,11 @@ pub fn benchmarkPrefixMapGet(b: *testingx.B) !void {
     defer map.deinit(std.heap.page_allocator);
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         sink +%= map.get(probes[b.blackBox(&i).* & (probes.len - 1)]) orelse 0;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkPrefixMapLongest(b: *testingx.B) !void {
@@ -67,11 +67,11 @@ pub fn benchmarkPrefixMapLongest(b: *testingx.B) !void {
     defer map.deinit(std.heap.page_allocator);
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         sink +%= map.getLongestPrefix(probes[b.blackBox(&i).* & (probes.len - 1)]) orelse 0;
     }
-    b.keepAlive(sink);
 }
 
 const Static = std.StaticStringMap(u16);
@@ -82,11 +82,11 @@ pub fn benchmarkStaticStringMapGet(b: *testingx.B) !void {
     defer map.deinit(std.heap.page_allocator);
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         sink +%= map.get(probes[b.blackBox(&i).* & (probes.len - 1)]) orelse 0;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkStaticStringMapLongest(b: *testingx.B) !void {
@@ -95,6 +95,7 @@ pub fn benchmarkStaticStringMapLongest(b: *testingx.B) !void {
     defer map.deinit(std.heap.page_allocator);
 
     var sink: u32 = 0;
+    defer b.keepAlive(sink);
     var i: u32 = 0;
     while (try b.loop()) : (i +%= 1) {
         const kv = map.getLongestPrefix(probes[b.blackBox(&i).* & (probes.len - 1)]) orelse {
@@ -102,5 +103,4 @@ pub fn benchmarkStaticStringMapLongest(b: *testingx.B) !void {
         };
         sink +%= kv.value;
     }
-    b.keepAlive(sink);
 }

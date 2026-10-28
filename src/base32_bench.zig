@@ -10,13 +10,13 @@ pub fn benchmarkBase32Encode(b: *testingx.B) !void {
     for (&key, 0..) |*byte, index| byte.* = @truncate(index * 31);
 
     var sink: u8 = 0;
+    defer b.keepAlive(sink);
     var i: u8 = 0;
     while (try b.loop()) : (i +%= 1) {
         key[0] = i;
         const token = base32.encode(10, &key);
         sink +%= token[0];
     }
-    b.keepAlive(sink);
     b.keepAlive(&key);
 }
 
@@ -25,9 +25,9 @@ pub fn benchmarkBase32Decode(b: *testingx.B) !void {
     const hidden = b.blackBox(&token);
 
     var sink: u8 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const bytes = try base32.decode(10, hidden);
         sink +%= bytes[0];
     }
-    b.keepAlive(sink);
 }

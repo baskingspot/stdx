@@ -11,6 +11,7 @@ const timex = stdx.time;
 pub fn benchmarkWriteRfc3339Millis(b: *testingx.B) !void {
     var buffer: [40]u8 = undefined;
     var sink: usize = 0;
+    defer b.keepAlive(sink);
     var i: u64 = 0;
     while (try b.loop()) : (i +%= 1) {
         var writer: Io.Writer = .fixed(&buffer);
@@ -20,7 +21,6 @@ pub fn benchmarkWriteRfc3339Millis(b: *testingx.B) !void {
         try timex.writeRfc3339(&writer, timestamp, .milliseconds);
         sink +%= writer.buffered().len;
     }
-    b.keepAlive(sink);
 }
 
 pub fn benchmarkCachedClockRead(b: *testingx.B) !void {
@@ -28,9 +28,9 @@ pub fn benchmarkCachedClockRead(b: *testingx.B) !void {
     _ = clock.refresh();
 
     var sink: i128 = 0;
+    defer b.keepAlive(sink);
     while (try b.loop()) {
         const hidden = b.blackBox(&clock);
         sink +%= @as(i128, hidden.now().nanoseconds);
     }
-    b.keepAlive(sink);
 }
