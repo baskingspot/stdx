@@ -2,7 +2,7 @@ const std = @import("std");
 const prefix_map = @import("stdx").prefix_map;
 
 // The tree is a constant. Shared prefixes are stored once.
-const routes = prefix_map.Map(u8).initComptime(.{
+const routes: prefix_map.Map(u8) = .initComptime(.{
     .{ "api/", 1 },
     .{ "api/v1/", 2 },
     .{ "static/", 3 },
@@ -18,7 +18,7 @@ test "exact and longest-prefix lookups" {
 }
 
 test "build at runtime" {
-    const runtime = try prefix_map.Map(u8).init(.{
+    const runtime: prefix_map.Map(u8) = try .init(.{
         .{ "api/", 1 },
         .{ "api/v1/", 2 },
         .{ "static/", 3 },

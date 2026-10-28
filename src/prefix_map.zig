@@ -18,6 +18,8 @@
 const std = @import("std");
 const mem = std.mem;
 const testing = std.testing;
+const math = std.math;
+const Allocator = mem.Allocator;
 
 pub fn Map(comptime V: type) type {
     return struct {
@@ -41,7 +43,7 @@ pub fn Map(comptime V: type) type {
             value: V,
         };
 
-        const none = std.math.maxInt(u32);
+        const none = math.maxInt(u32);
 
         nodes: []const Node,
         children: []const Child,
@@ -119,7 +121,7 @@ pub fn Map(comptime V: type) type {
                 var prefix_total: usize = 0;
                 for (kvs) |kv| prefix_total += kv[0].len;
                 @setEvalBranchQuota(
-                    10 * n * std.math.log2_int_ceil(usize, @max(n, 2)) + 10 * prefix_total + 1000,
+                    10 * n * math.log2_int_ceil(usize, @max(n, 2)) + 10 * prefix_total + 1000,
                 );
 
                 var entries: [n]Entry = undefined;
@@ -182,7 +184,7 @@ pub fn Map(comptime V: type) type {
         /// copied. Release the map with `deinit`.
         ///
         /// A duplicate key returns `error.DuplicateKey`.
-        pub fn init(kvs: anytype, allocator: mem.Allocator) !Self {
+        pub fn init(kvs: anytype, allocator: Allocator) !Self {
             const n = kvs.len;
             const entries = try allocator.alloc(Entry, n);
             defer allocator.free(entries);
@@ -195,7 +197,7 @@ pub fn Map(comptime V: type) type {
                 }
             }
 
-            var counter = Builder{ .entries = entries };
+            var counter: Builder = .{ .entries = entries };
             if (n == 0) counter.node_count = 1 else _ = counter.build(false, 0, n, 0);
 
             const nodes = try allocator.alloc(Node, counter.node_count);
@@ -235,7 +237,7 @@ pub fn Map(comptime V: type) type {
 
         /// Free a map built with `init`. Do not call this for a map built with
         /// `initComptime`: that storage is a constant.
-        pub fn deinit(self: Self, allocator: mem.Allocator) void {
+        pub fn deinit(self: Self, allocator: Allocator) void {
             allocator.free(self.nodes);
             allocator.free(self.children);
             allocator.free(self.prefix_bytes);
@@ -391,7 +393,7 @@ pub fn Map(comptime V: type) type {
 
 const TestValue = u16;
 
-const routes = Map(TestValue).initComptime(.{
+const routes: Map(TestValue) = .initComptime(.{
     .{ "api/", 1 },
     .{ "api/v1/", 2 },
     .{ "api/v1/users/", 3 },
@@ -411,7 +413,7 @@ test "exact and longest-prefix lookups" {
 }
 
 test "a key that is a prefix of another" {
-    const m = Map(u8).initComptime(.{
+    const m: Map(u8) = .initComptime(.{
         .{ "abc", 1 },
         .{ "abcd", 2 },
         .{ "abce", 3 },
@@ -425,7 +427,7 @@ test "a key that is a prefix of another" {
 }
 
 test "empty key is the default prefix" {
-    const m = Map(u8).initComptime(.{
+    const m: Map(u8) = .initComptime(.{
         .{ "", 0 },
         .{ "a", 1 },
     });
@@ -435,12 +437,12 @@ test "empty key is the default prefix" {
 }
 
 test "empty map" {
-    const m = Map(u8).initComptime(.{});
+    const m: Map(u8) = .initComptime(.{});
     try testing.expectEqual(@as(?u8, null), m.get(""));
     try testing.expectEqual(@as(?u8, null), m.get("anything"));
     try testing.expectEqual(@as(usize, 0), m.count());
 
-    const r = try Map(u8).init(.{}, testing.allocator);
+    const r: Map(u8) = try .init(.{}, testing.allocator);
     defer r.deinit(testing.allocator);
     try testing.expectEqual(@as(?u8, null), r.get("anything"));
     try testing.expectEqual(@as(usize, 0), r.count());
@@ -453,7 +455,7 @@ test "runtime build matches comptime build" {
         .{ "api/v1/users/", 3 },
         .{ "static/", 4 },
     };
-    const r = try Map(TestValue).init(kvs, testing.allocator);
+    const r: Map(TestValue) = try .init(kvs, testing.allocator);
     defer r.deinit(testing.allocator);
 
     inline for (.{
@@ -485,7 +487,7 @@ test "runtime duplicate key" {
 test "runtime keys are copied" {
     var key_buf = [_]u8{ 'a', 'b', 'c' };
     var kvs = [_]struct { []const u8, u8 }{.{ key_buf[0..], 7 }};
-    const m = try Map(u8).init(&kvs, testing.allocator);
+    const m: Map(u8) = try .init(&kvs, testing.allocator);
     defer m.deinit(testing.allocator);
     key_buf[0] = 'z';
     try testing.expectEqual(@as(?u8, 7), m.get("abc"));
@@ -494,7 +496,7 @@ test "runtime keys are copied" {
 
 test "long keys, null bytes, and set values" {
     const long = "abcdefghijklmnopqrstuvwxyz" ** 12;
-    const m = Map(void).initComptime(.{
+    const m: Map(void) = .initComptime(.{
         .{ long, {} },
         .{ "a\x00b", {} },
     });
@@ -513,7 +515,7 @@ test "matches a linear scan over many keys" {
         kvs[i] = .{ key, @intCast(i) };
     }
 
-    const m = try Map(u16).init(&kvs, testing.allocator);
+    const m: Map(u16) = try .init(&kvs, testing.allocator);
     defer m.deinit(testing.allocator);
 
     const probes = [_][]const u8{
