@@ -7,6 +7,11 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `prefix_map.Map`: a compressed radix tree over byte strings, with `get` and
+  `getLongestPrefix`. Build at comptime with `initComptime`, or at runtime with
+  `init` and `deinit`. A duplicate key is a compile error at comptime and
+  `error.DuplicateKey` at runtime.
+
 - `enums.Open` and `enums.Closed`: turn a comptime list of byte strings into
   an enum, then switch on the tags. `Open` is non-exhaustive with an unnamed
   miss value and an `else` arm. `Closed` adds a named fallback tag and is

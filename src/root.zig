@@ -29,6 +29,7 @@ pub const multi_array = @import("multi_array.zig");
 pub const net = @import("net.zig");
 const pages_mod = @import("pages.zig");
 pub const posix = @import("posix.zig");
+pub const prefix_map = @import("prefix_map.zig");
 pub const priority_queue = @import("priority_queue.zig");
 pub const random = @import("random.zig");
 pub const set = @import("set.zig");

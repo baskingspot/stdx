@@ -18,6 +18,7 @@ const heap = @import("heap_bench.zig");
 const mem = @import("mem_bench.zig");
 const multi_array = @import("multi_array_bench.zig");
 const net = @import("net_bench.zig");
+const prefix_map = @import("prefix_map_bench.zig");
 const priority_queue = @import("priority_queue_bench.zig");
 const random = @import("random_bench.zig");
 const slot_ring = @import("slot_ring_bench.zig");
@@ -41,6 +42,7 @@ pub fn benchmarkMain(b: *testingx.B) !void {
     try b.addMod(mem);
     try b.addMod(multi_array);
     try b.addMod(net);
+    try b.addMod(prefix_map);
     try b.addMod(priority_queue);
     try b.addMod(random);
     try b.addMod(slot_ring);

@@ -32,6 +32,7 @@ pub const net_prefix = @import("net_prefix.zig");
 pub const net_range = @import("net_range.zig");
 pub const net_std_types = @import("net_std_types.zig");
 pub const parsing_atoi = @import("parsing_atoi.zig");
+pub const prefix_map_routes = @import("prefix_map_routes.zig");
 pub const parsing_leading_zeros = @import("parsing_leading_zeros.zig");
 pub const random_token = @import("random_token.zig");
 // slot_ring is Linux only, so its example is too: elsewhere the module is

@@ -12,6 +12,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Ordered maps](#ordered-maps): `btree` keeps the keys sorted for iteration and range scans, with cache-sized nodes and a stripped prefix at every node.
 - [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
 - [String dispatch](#string-dispatch): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`. `stringToEnum` matches an existing enum with fixed-length compares.
+- [Prefix matching](#match-a-prefix): `prefix_map.Map` stores byte prefixes in a compressed radix tree and returns the longest match.
 - [Binary encoding](#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, with the byte order fixed at comptime and a slot for a length or checksum written later.
 - [Base32](#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
@@ -111,6 +112,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`net`](api/#stdx.net)                                       | IPv4 addresses and CIDR prefixes, after Go's `net/netip`: parse, classify, order, step, and test containment. `Ip4Endpoint` holds octets and port; `HostPort` splits config text. |
 | [`pages`](api/#stdx.pages)                                   | Release whole kernel pages back to the OS. API reference only. Linux only.                                                                                                        |
 | [`posix`](api/#stdx.posix)                                   | `getsockname`, `getpeername`, `setsockopt`, and `getsockopt` on raw socket handles. See [Work with a raw socket fd](#work-with-a-raw-socket-fd).                                  |
+| [`prefix_map`](api/#stdx.prefix_map)                         | A compressed radix tree for exact and longest-prefix lookups.                                                                                                                     |
 | [`priority_queue`](api/#stdx.priority_queue)                 | A priority queue with a fixed capacity.                                                                                                                                           |
 | [`random`](api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                                                                                        |
 | [`set`](api/#stdx.set)                                       | A bounded set with set algebra.                                                                                                                                                   |
@@ -402,6 +404,20 @@ The compiler switches on the byte length first. A value whose length no tag has 
 A tag is any non-empty byte string without a null byte. Write a tag that is not an identifier as `.@"content-type"`. For keys that cannot be tag names, use `static_map.String` or `std.StaticStringMap`.
 
 `enums.stringToEnum(E, value)` matches the field names of an existing enum, like `std.meta.stringToEnum`. It compares each candidate with fixed-length loads.
+
+# Match a prefix
+
+`prefix_map.Map(V)` is a compressed radix tree over byte strings. `get` is an exact lookup. `getLongestPrefix` returns the value of the longest stored key that is a prefix of the input.
+
+```zig
+{{ load_data(path="examples/prefix_map_routes.zig", format="plain") | trim_end }}
+```
+
+The keys are copied into the tree, so the input slices do not need to outlive `init`. `initComptime` puts the tree in the binary. `init` builds the same four slices with an allocator, and `deinit` releases them. A duplicate key is a compile error at comptime and `error.DuplicateKey` at runtime.
+
+The tree stores each shared prefix once and branches on the next byte, so a lookup walks one node per branch, not one node per byte. Children sit in a sorted range. A node with more than eight children uses a binary search.
+
+Use it for route tables, layered configuration, or a set of byte prefixes. For exact keys at scale, use `static_map.String`. A hash is faster when you do not need prefix semantics. `std.StaticStringMap.getLongestPrefix` probes the map once per prefix length. This tree walks one node per branch, so the gap grows with the key count.
 
 # Binary encoding
 
