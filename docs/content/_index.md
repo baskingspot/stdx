@@ -13,6 +13,8 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
 - [String dispatch](#string-dispatch): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`. `stringToEnum` matches an existing enum with fixed-length compares.
 - [Prefix matching](#match-a-prefix): `prefix_map.Map` stores byte prefixes in a compressed radix tree and returns the longest match.
+- [Initialize once](#initialize-once): `once.Cell` and `once.Lazy` set a value at most once. The `Sync` variants share it across threads.
+- [Sort](#sort): `sort.radix` is a stable integer radix sort, and `sort.nth`/`sort.select` find the k-th element without sorting the rest.
 - [Binary encoding](#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, with the byte order fixed at comptime and a slot for a length or checksum written later.
 - [Base32](#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
@@ -92,7 +94,7 @@ The [API reference](api/) has the contract for each symbol. This guide has the r
 
 # Modules
 
-A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posix`, `heap`, `hash`. A concept std lacks gets its own: `bloom`, `swiss`, `set`. A container family follows `std.array_hash_map`. The module names the concept, and the constructors inside are `Custom`, `Auto`, and `String`.
+A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posix`, `heap`, `hash`. A concept std lacks gets its own: `bloom`, `once`, `swiss`, `set`. A container family follows `std.array_hash_map`. The module names the concept, and the constructors inside are `Custom`, `Auto`, and `String`.
 
 | Module                                                       | Use it for                                                                                                                                                                        |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -110,6 +112,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`mem`](api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                                          |
 | [`multi_array`](api/#stdx.multi_array)                       | Struct-of-arrays types with the storage inside the value.                                                                                                                         |
 | [`net`](api/#stdx.net)                                       | IPv4 addresses and CIDR prefixes, after Go's `net/netip`: parse, classify, order, step, and test containment. `Ip4Endpoint` holds octets and port; `HostPort` splits config text. |
+| [`once`](api/#stdx.once)                                     | Set-once values and lazy initialization, single-threaded and thread-safe.                                                                                                         |
 | [`pages`](api/#stdx.pages)                                   | Release whole kernel pages back to the OS. API reference only. Linux only.                                                                                                        |
 | [`posix`](api/#stdx.posix)                                   | `getsockname`, `getpeername`, `setsockopt`, and `getsockopt` on raw socket handles. See [Work with a raw socket fd](#work-with-a-raw-socket-fd).                                  |
 | [`prefix_map`](api/#stdx.prefix_map)                         | A compressed radix tree for exact and longest-prefix lookups.                                                                                                                     |
@@ -117,6 +120,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`random`](api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                                                                                        |
 | [`set`](api/#stdx.set)                                       | A bounded set with set algebra.                                                                                                                                                   |
 | [`slot_ring`](api/#stdx.slot_ring)                           | A bounded MPSC ring for log lines: producers never block, and one consumer drains. Linux only.                                                                                    |
+| [`sort`](api/#stdx.sort)                                     | A stable integer radix sort, and selection of the k-th element.                                                                                                                   |
 | [`static_map`](api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                                                                                            |
 | [`stdio`](api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                                                                                    |
 | [`swiss`](api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                                                                                                  |
@@ -418,6 +422,32 @@ The keys are copied into the tree, so the input slices do not need to outlive `i
 The tree stores each shared prefix once and branches on the next byte, so a lookup walks one node per branch, not one node per byte. Children sit in a sorted range. A node with more than eight children uses a binary search.
 
 Use it for route tables, layered configuration, or a set of byte prefixes. For exact keys at scale, use `static_map.String`. A hash is faster when you do not need prefix semantics. `std.StaticStringMap.getLongestPrefix` probes the map once per prefix length. This tree walks one node per branch, so the gap grows with the key count.
+
+# Initialize once
+
+`once.Cell(T)` holds a value that is set at most once. `get` returns null until the value exists. `getOrInit` initializes it on the first call. `once.Lazy(T, init)` fixes the initializer at compile time, so `get` is the cell call.
+
+```zig
+{{ load_data(path="examples/once_lazy.zig", format="plain") | trim_end }}
+```
+
+`Cell` and `Lazy` are single-threaded. `SyncCell` and `SyncLazy` share the value across threads. The fast path is one acquire load. The first initialization takes an `Io.Mutex`, and threads that arrive together wait for the winner. `SyncCell.get` never blocks. `getOrInit` does.
+
+`set` returns `error.AlreadySet` when a value exists. `take` moves the value out of an unsync cell. A failed `getOrTryInit` leaves the cell empty, so a later call can try again. Do not copy a cell after use.
+
+# Sort
+
+`std.mem.sort` is the stable WikiSort/block sort, and `std.mem.sortUnstable` is pdqsort. `sort` adds the cases those do not cover.
+
+`sort.radix` is a stable LSD radix sort for signed and unsigned integers. It makes one pass per digit, so its cost does not depend on comparisons. The caller supplies a scratch slice at least as long as the items, and it must not overlap them. Use it for large, unordered integer arrays. `std.mem.sortUnstable` wins on sorted or nearly sorted input; at small sizes the fixed passes do not pay off.
+
+```zig
+{{ load_data(path="examples/sort_radix.zig", format="plain") | trim_end }}
+```
+
+`sort.nth` partitions a slice so the value at `n` is the n-th smallest, in expected O(n). `sort.select` returns that value. Both take a comparison context, like `std.mem.sort`, and a depth limit falls back to `std.mem.sortUnstable` on the active range.
+
+`radix` is ascending only. For a descending integer order, sort ascending and reverse, or use a comparison sort. `radix` is stable; `nth` and `select` are not.
 
 # Binary encoding
 

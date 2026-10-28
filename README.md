@@ -18,6 +18,8 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Strict parsing](https://baskingspot.dev/stdx/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest.
 - [String dispatch](https://baskingspot.dev/stdx/#string-dispatch): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`. `stringToEnum` matches an existing enum with fixed-length compares.
 - [Prefix matching](https://baskingspot.dev/stdx/#match-a-prefix): `prefix_map.Map` is a compressed radix tree over byte strings. It builds at comptime or runtime and returns the longest stored prefix.
+- [Initialize once](https://baskingspot.dev/stdx/#initialize-once): `once.Cell` and `once.Lazy` set a value at most once. The `Sync` variants share it across threads with a lock-free read.
+- [Sort](https://baskingspot.dev/stdx/#sort): `sort.radix` is a stable integer radix sort. `sort.nth` and `sort.select` find the k-th element without sorting the rest.
 - [Binary encoding](https://baskingspot.dev/stdx/#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, in big or little endian selected at comptime, with a reserved slot for a length or checksum written later.
 - [Base32](https://baskingspot.dev/stdx/#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](https://baskingspot.dev/stdx/#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks. `HostPort` splits `host:port` config text.

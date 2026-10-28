@@ -22,6 +22,7 @@ const prefix_map = @import("prefix_map_bench.zig");
 const priority_queue = @import("priority_queue_bench.zig");
 const random = @import("random_bench.zig");
 const slot_ring = @import("slot_ring_bench.zig");
+const sort = @import("sort_bench.zig");
 const static_map = @import("static_map_bench.zig");
 const swiss = @import("swiss/bench.zig");
 const time = @import("time_bench.zig");
@@ -46,6 +47,7 @@ pub fn benchmarkMain(b: *testingx.B) !void {
     try b.addMod(priority_queue);
     try b.addMod(random);
     try b.addMod(slot_ring);
+    try b.addMod(sort);
     try b.addMod(static_map);
     try b.addMod(swiss);
     try b.addMod(time);

@@ -31,6 +31,7 @@ pub const net_parse = @import("net_parse.zig");
 pub const net_prefix = @import("net_prefix.zig");
 pub const net_range = @import("net_range.zig");
 pub const net_std_types = @import("net_std_types.zig");
+pub const once_lazy = @import("once_lazy.zig");
 pub const parsing_atoi = @import("parsing_atoi.zig");
 pub const prefix_map_routes = @import("prefix_map_routes.zig");
 pub const parsing_leading_zeros = @import("parsing_leading_zeros.zig");
@@ -42,6 +43,7 @@ pub const slot_ring_logging = if (builtin.os.tag == .linux)
     slot_ring_logging_example
 else
     struct {};
+pub const sort_radix = @import("sort_radix.zig");
 pub const stdio_stream = @import("stdio_stream.zig");
 pub const time_cached_clock = @import("time_cached_clock.zig");
 pub const time_deadline = @import("time_deadline.zig");

@@ -3,7 +3,7 @@
 //!
 //! A module that extends a std namespace takes its name (`mem`, `fmt`, `net`,
 //! `posix`, `heap`, `hash`). A concept std lacks gets its own (`bloom`,
-//! `swiss`, `set`). A container family follows `std.array_hash_map`: the
+//! `once`, `swiss`, `set`). A container family follows `std.array_hash_map`: the
 //! module names the concept, and the constructors inside are `Custom`, `Auto`,
 //! and `String`.
 //!
@@ -27,6 +27,7 @@ pub const heap = @import("heap.zig");
 pub const mem = @import("mem.zig");
 pub const multi_array = @import("multi_array.zig");
 pub const net = @import("net.zig");
+pub const once = @import("once.zig");
 const pages_mod = @import("pages.zig");
 pub const posix = @import("posix.zig");
 pub const prefix_map = @import("prefix_map.zig");
@@ -49,6 +50,7 @@ pub const pages = if (builtin.os.tag == .linux) pages_mod else void;
 /// Linux-only by design; the comptime branch prunes the import on other
 /// platforms so the package builds on darwin.
 pub const slot_ring = if (builtin.os.tag == .linux) slot_ring_mod else void;
+pub const sort = @import("sort.zig");
 
 test {
     std.testing.refAllDecls(@This());

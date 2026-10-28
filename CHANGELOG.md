@@ -7,6 +7,15 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `sort.radix`: a stable LSD radix sort for signed and unsigned integers,
+  with a caller-owned scratch slice. `sort.nth` and `sort.select` partition a
+  slice around the n-th element with a 3-way quickselect and a depth fallback.
+
+- `once.Cell` and `once.Lazy`: a value set at most once, with `get`,
+  `getOrInit`, `getOrTryInit`, `set`, and `take`. `once.SyncCell` and
+  `once.SyncLazy` add an atomic fast path and an `Io.Mutex` for the first
+  initialization.
+
 - `prefix_map.Map`: a compressed radix tree over byte strings, with `get` and
   `getLongestPrefix`. Build at comptime with `initComptime`, or at runtime with
   `init` and `deinit`. A duplicate key is a compile error at comptime and
