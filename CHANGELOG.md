@@ -17,9 +17,9 @@ All notable changes to stdx are recorded here. The format follows
   the three quoting forms follow one set of rules. Key and value slices are
   borrowed from the caller's source, except the escape bytes of a
   double-quoted value, which go into a caller-owned scratch buffer. A bad line
-  returns a `Diagnostic` with the byte offset, the line, and the problem;
-  `lineText` returns that line. Duplicate keys are kept in order and
-  `Doc.get` returns the last. No variable expansion.
+  returns `Error` and fills the `Diagnostics` the caller passed; `lineText`
+  returns that line. Duplicate keys are kept in order and `Doc.get` returns the
+  last. No variable expansion.
 
 - `lru.Custom`, `lru.Auto`, and `lru.String`: a fixed-capacity LRU cache.
   `get` and `peek`; `put` returns the replaced value or the evicted entry;
@@ -49,6 +49,13 @@ All notable changes to stdx are recorded here. The format follows
   miss value and an `else` arm. `Closed` adds a named fallback tag and is
   exhaustive. `enums.stringToEnum` matches enum field names like
   `std.meta.stringToEnum`, with fixed-length loads.
+
+### Changed
+
+- `dotenv.parse` returns `Error!Doc` instead of a `Result` union with `.doc`
+  and `.diagnostic` arms. A failed parse fills a caller-owned `Diagnostics`
+  through `ParseOptions.diagnostics`, which gained the column of the offending
+  byte. A successful parse leaves that value untouched.
 
 ## [0.1.0] - 2026-10-26
 

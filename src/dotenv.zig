@@ -80,19 +80,24 @@ pub const Error = error{
     ScratchFull,
 };
 
-/// Where a parse stopped, and why.
-pub const Diagnostic = struct {
+/// Where a parse stopped, and why. `parse` fills every field before it
+/// returns the error, and writes nothing at all when the parse succeeds.
+pub const Diagnostics = struct {
     /// Byte offset into the original source. For `EntriesFull` this is the
     /// start of the entry that did not fit; for `ScratchFull` it is the
     /// escape whose decoded byte did not fit.
     offset: usize,
     /// The 1-based line of `offset`, counted on the original bytes.
     line: u32,
+    /// The 1-based column of `offset`, counted in bytes from the last newline
+    /// before it. On the first line a UTF-8 BOM counts like any other byte,
+    /// the way `std.json.Diagnostics.getColumn` counts it.
+    column: u32,
     /// The failure.
     problem: Error,
 
     /// The problem in a few words, for a log line.
-    pub fn message(self: Diagnostic) []const u8 {
+    pub fn message(self: Diagnostics) []const u8 {
         return switch (self.problem) {
             error.MissingEquals => "a line with no '='",
             error.InvalidKey => "invalid key",
@@ -105,11 +110,10 @@ pub const Diagnostic = struct {
     }
 };
 
-/// A parse either produces a document or stops on one diagnostic. A caller
-/// reads one arm, so a failed parse cannot be read as an empty file.
-pub const Result = union(enum) {
-    doc: Doc,
-    diagnostic: Diagnostic,
+/// Options for `parse`.
+pub const ParseOptions = struct {
+    /// Filled on a failed parse. Untouched when the parse succeeds.
+    diagnostics: ?*Diagnostics = null,
 };
 
 /// A parsed source: every entry in file order, duplicates included.
@@ -145,19 +149,24 @@ pub const Doc = struct {
 /// into `entries`. All three outlive the `Doc`, and none of them may move
 /// while it is in use.
 ///
-/// A capacity that is too small is a diagnostic, not a panic:
+/// A capacity that is too small is an error, not a panic:
 /// `error.EntriesFull` when the file holds more assignments than `entries`,
 /// and `error.ScratchFull` when the escapes decode to more bytes than
 /// `scratch` holds. A caller that does not know the count allocates
 /// `entries` from an arena and retries on `error.EntriesFull`.
-pub fn parse(source: []const u8, entries: []Entry, scratch: []u8) Result {
-    var parser: Parser = .init(source, entries, scratch);
-    const doc = parser.run() catch |problem| return .{ .diagnostic = .{
-        .offset = parser.failure,
-        .line = lineOf(source, parser.failure),
-        .problem = problem,
-    } };
-    return .{ .doc = doc };
+///
+/// A failure returns one of `Error`. Set `options.diagnostics` to a
+/// `Diagnostics` value to receive the position of the byte that stopped the
+/// parse. Nothing is copied: the parser writes into that value directly, and
+/// it stays untouched when the parse succeeds.
+pub fn parse(
+    source: []const u8,
+    entries: []Entry,
+    scratch: []u8,
+    options: ParseOptions,
+) Error!Doc {
+    var parser: Parser = .init(source, entries, scratch, options.diagnostics);
+    return parser.run();
 }
 
 /// The bytes of 1-based `line`, without the line terminator and without the
@@ -177,12 +186,6 @@ pub fn lineText(source: []const u8, line: u32) []const u8 {
     return source[start..stop];
 }
 
-/// The 1-based line that `offset` falls on.
-fn lineOf(source: []const u8, offset: usize) u32 {
-    assert(offset <= source.len);
-    return @intCast(mem.count(u8, source[0..offset], "\n") + 1);
-}
-
 /// The single-pass scanner. `pos` is always the next byte to read, and `line`
 /// follows it, so an entry's line number costs nothing extra.
 const Parser = struct {
@@ -193,10 +196,15 @@ const Parser = struct {
     count: usize,
     scratch: []u8,
     written: usize,
-    /// Offset of the failure. Valid only after a helper returned an error.
-    failure: usize,
+    /// The caller's struct, or null when the caller asked for no position.
+    diagnostics: ?*Diagnostics,
 
-    fn init(source: []const u8, entries: []Entry, scratch: []u8) Parser {
+    fn init(
+        source: []const u8,
+        entries: []Entry,
+        scratch: []u8,
+        diagnostics: ?*Diagnostics,
+    ) Parser {
         return .{
             .source = source,
             .pos = if (mem.startsWith(u8, source, bom)) bom.len else 0,
@@ -205,7 +213,7 @@ const Parser = struct {
             .count = 0,
             .scratch = scratch,
             .written = 0,
-            .failure = 0,
+            .diagnostics = diagnostics,
         };
     }
 
@@ -398,10 +406,26 @@ const Parser = struct {
     }
 
     fn fail(self: *Parser, problem: Error, origin: usize) Error {
-        self.failure = origin;
+        if (self.diagnostics) |diagnostics| {
+            noteError(diagnostics, self.source, origin, problem);
+        }
         return problem;
     }
 };
+
+/// Fill `diagnostics` with the position and the cause of a failure at
+/// `offset`.
+fn noteError(diagnostics: *Diagnostics, source: []const u8, offset: usize, problem: Error) void {
+    assert(offset <= source.len);
+    const before = source[0..offset];
+    const line_start = if (mem.findScalarLast(u8, before, '\n')) |newline| newline + 1 else 0;
+    diagnostics.* = .{
+        .offset = offset,
+        .line = @intCast(1 + mem.count(u8, before, "\n")),
+        .column = @intCast(offset - line_start + 1),
+        .problem = problem,
+    };
+}
 
 fn isBlank(byte: u8) bool {
     return byte == ' ' or byte == '\t';
@@ -595,14 +619,16 @@ test "BOM and CRLF" {
     try testing.expectEqual(@as(u32, 2), doc.entries[1].line);
     try testing.expectEqualStrings("2", doc.get("B").?);
 
-    // The offsets and the line numbers count the original bytes, BOM and
-    // CRLF included.
-    const bad = switch (parse("\xEF\xBB\xBFA=1\r\nB.c=2\r\n", &entries, &scratch)) {
-        .doc => return error.ExpectedDiagnostic,
-        .diagnostic => |d| d,
-    };
-    try testing.expectEqual(Error.InvalidKey, bad.problem);
+    // The offsets, the lines, and the columns count the original bytes, BOM
+    // and CRLF included.
+    const bad = try expectFailure(
+        "\xEF\xBB\xBFA=1\r\nB.c=2\r\n",
+        &entries,
+        &scratch,
+        error.InvalidKey,
+    );
     try testing.expectEqual(@as(u32, 2), bad.line);
+    try testing.expectEqual(@as(u32, 2), bad.column);
     try testing.expectEqual(@as(usize, 9), bad.offset);
 
     // A trailing `\r` with no `\n` is part of the last terminator.
@@ -614,33 +640,115 @@ test "diagnostics" {
     var entries: [8]Entry = undefined;
     var scratch: [32]u8 = undefined;
 
-    const cases = [_]struct { source: []const u8, problem: Error, line: u32, offset: usize }{
-        // A key outside the grammar is an error, and the offset points at
+    const Case = struct {
+        source: []const u8,
+        problem: Error,
+        line: u32,
+        column: u32,
+        offset: usize,
+    };
+    const cases = [_]Case{
+        // A key outside the grammar is an error, and the position points at
         // the first offending byte.
-        .{ .source = "A=1\nFOO.BAR=2\n", .problem = error.InvalidKey, .line = 2, .offset = 7 },
-        .{ .source = "1A=2", .problem = error.InvalidKey, .line = 1, .offset = 0 },
-        .{ .source = "A-B=2", .problem = error.InvalidKey, .line = 1, .offset = 1 },
-        .{ .source = "=2", .problem = error.InvalidKey, .line = 1, .offset = 0 },
-        .{ .source = "A=1\n\nNO ASSIGN=1\n", .problem = error.InvalidKey, .line = 3, .offset = 7 },
-        .{ .source = "\n\nFOO", .problem = error.MissingEquals, .line = 3, .offset = 2 },
-        .{ .source = "A=\"\\q\"", .problem = error.InvalidEscape, .line = 1, .offset = 3 },
-        .{ .source = "A='open", .problem = error.UnterminatedQuote, .line = 1, .offset = 2 },
-        .{ .source = "A=\"open", .problem = error.UnterminatedQuote, .line = 1, .offset = 2 },
-        .{ .source = "A=\"x\\", .problem = error.UnterminatedQuote, .line = 1, .offset = 2 },
-        // A multiline value reports the line the escape is on.
-        .{ .source = "A=\"one\n\\q\"", .problem = error.InvalidEscape, .line = 2, .offset = 7 },
-        .{ .source = "A='x' y", .problem = error.TrailingCharacters, .line = 1, .offset = 6 },
-        .{ .source = "A=\"x\"#c", .problem = error.TrailingCharacters, .line = 1, .offset = 5 },
+        .{
+            .source = "A=1\nFOO.BAR=2\n",
+            .problem = error.InvalidKey,
+            .line = 2,
+            .column = 4,
+            .offset = 7,
+        },
+        .{
+            .source = "1A=2",
+            .problem = error.InvalidKey,
+            .line = 1,
+            .column = 1,
+            .offset = 0,
+        },
+        .{
+            .source = "A-B=2",
+            .problem = error.InvalidKey,
+            .line = 1,
+            .column = 2,
+            .offset = 1,
+        },
+        .{
+            .source = "=2",
+            .problem = error.InvalidKey,
+            .line = 1,
+            .column = 1,
+            .offset = 0,
+        },
+        .{
+            .source = "A=1\n\nNO ASSIGN=1\n",
+            .problem = error.InvalidKey,
+            .line = 3,
+            .column = 3,
+            .offset = 7,
+        },
+        .{
+            .source = "\n\nFOO",
+            .problem = error.MissingEquals,
+            .line = 3,
+            .column = 1,
+            .offset = 2,
+        },
+        .{
+            .source = "A=\"\\q\"",
+            .problem = error.InvalidEscape,
+            .line = 1,
+            .column = 4,
+            .offset = 3,
+        },
+        .{
+            .source = "A='open",
+            .problem = error.UnterminatedQuote,
+            .line = 1,
+            .column = 3,
+            .offset = 2,
+        },
+        .{
+            .source = "A=\"open",
+            .problem = error.UnterminatedQuote,
+            .line = 1,
+            .column = 3,
+            .offset = 2,
+        },
+        .{
+            .source = "A=\"x\\",
+            .problem = error.UnterminatedQuote,
+            .line = 1,
+            .column = 3,
+            .offset = 2,
+        },
+        // A multiline value reports the line and the column the escape is on.
+        .{
+            .source = "A=\"one\n\\q\"",
+            .problem = error.InvalidEscape,
+            .line = 2,
+            .column = 1,
+            .offset = 7,
+        },
+        .{
+            .source = "A='x' y",
+            .problem = error.TrailingCharacters,
+            .line = 1,
+            .column = 7,
+            .offset = 6,
+        },
+        .{
+            .source = "A=\"x\"#c",
+            .problem = error.TrailingCharacters,
+            .line = 1,
+            .column = 6,
+            .offset = 5,
+        },
     };
     for (cases) |case| {
-        switch (parse(case.source, &entries, &scratch)) {
-            .doc => return error.ExpectedDiagnostic,
-            .diagnostic => |d| {
-                try testing.expectEqual(case.problem, d.problem);
-                try testing.expectEqual(case.line, d.line);
-                try testing.expectEqual(case.offset, d.offset);
-            },
-        }
+        const d = try expectFailure(case.source, &entries, &scratch, case.problem);
+        try testing.expectEqual(case.problem, d.problem);
+        try testing.expectEqual(case.line, d.line);
+        try testing.expectEqual(case.column, d.column);
+        try testing.expectEqual(case.offset, d.offset);
     }
 }
 
@@ -657,14 +765,12 @@ test "diagnostic messages" {
         error.ScratchFull,
     };
     for (problems, 0..) |problem, i| {
-        const message = (Diagnostic{ .offset = 0, .line = 1, .problem = problem }).message();
+        const d: Diagnostics = .{ .offset = 0, .line = 1, .column = 1, .problem = problem };
+        const message = d.message();
         try testing.expect(message.len != 0);
         for (problems[0..i]) |earlier| {
-            try testing.expect(!mem.eql(
-                u8,
-                message,
-                (Diagnostic{ .offset = 0, .line = 1, .problem = earlier }).message(),
-            ));
+            const e: Diagnostics = .{ .offset = 0, .line = 1, .column = 1, .problem = earlier };
+            try testing.expect(!mem.eql(u8, message, e.message()));
         }
     }
 }
@@ -674,14 +780,10 @@ test "caller capacity" {
     var scratch: [32]u8 = undefined;
 
     // More assignments than slots: the entry that did not fit names its line.
-    switch (parse("A=1\nB=2\n", &small, &scratch)) {
-        .doc => return error.ExpectedDiagnostic,
-        .diagnostic => |d| {
-            try testing.expectEqual(Error.EntriesFull, d.problem);
-            try testing.expectEqual(@as(u32, 2), d.line);
-            try testing.expectEqual(@as(usize, 4), d.offset);
-        },
-    }
+    const full = try expectFailure("A=1\nB=2\n", &small, &scratch, error.EntriesFull);
+    try testing.expectEqual(@as(u32, 2), full.line);
+    try testing.expectEqual(@as(u32, 1), full.column);
+    try testing.expectEqual(@as(usize, 4), full.offset);
 
     // The scratch holds the whole decoded value, not just the escape bytes.
     var entries: [4]Entry = undefined;
@@ -690,10 +792,7 @@ test "caller capacity" {
     try testing.expectEqualStrings("x\ny", decoded.get("A").?);
 
     var none: [0]u8 = undefined;
-    switch (parse("A=\"\\n\\t\"", &entries, &none)) {
-        .doc => return error.ExpectedDiagnostic,
-        .diagnostic => |d| try testing.expectEqual(Error.ScratchFull, d.problem),
-    }
+    _ = try expectFailure("A=\"\\n\\t\"", &entries, &none, error.ScratchFull);
     // A source with no escape needs no scratch at all.
     const plain = try expectDoc("A=\"plain\"", &entries, &none);
     try testing.expectEqualStrings("plain", plain.get("A").?);
@@ -716,15 +815,32 @@ test "lineText" {
     try testing.expectEqualStrings("", lineText(source, 5));
     try testing.expectEqualStrings("", lineText(source, 0));
 
-    // The diagnostic and the text agree on the line.
+    // The diagnostics and the text agree on the line.
     var entries: [8]Entry = undefined;
     var scratch: [32]u8 = undefined;
-    const d = switch (parse(source, &entries, &scratch)) {
-        .doc => return error.ExpectedDiagnostic,
-        .diagnostic => |diagnostic| diagnostic,
-    };
-    try testing.expectEqual(Error.TrailingCharacters, d.problem);
+    const d = try expectFailure(source, &entries, &scratch, error.TrailingCharacters);
     try testing.expectEqualStrings("C='x' y", lineText(source, d.line));
+}
+
+test "a successful parse leaves the caller's diagnostics untouched" {
+    // A value no parse would produce, so a write of any field shows up.
+    const untouched: Diagnostics = .{
+        .offset = std.math.maxInt(usize),
+        .line = 0,
+        .column = 0,
+        .problem = error.ScratchFull,
+    };
+    var entries: [4]Entry = undefined;
+    var scratch: [16]u8 = undefined;
+    var diagnostics: Diagnostics = untouched;
+
+    const doc = try parse("A=1\n", &entries, &scratch, .{ .diagnostics = &diagnostics });
+    try testing.expectEqualStrings("1", doc.get("A").?);
+    try testing.expectEqual(untouched, diagnostics);
+
+    // A caller that wants no position passes no diagnostics, and still gets
+    // the error.
+    try testing.expectError(error.InvalidKey, parse("A.b=1\n", &entries, &scratch, .{}));
 }
 
 /// The largest source the fuzz test hands to `parse`. Its scratch is the same
@@ -756,32 +872,35 @@ fn fuzzAny(_: void, smith: *testing.Smith) anyerror!void {
 }
 
 /// What any input must keep: no panic, every slice inside the buffer it came
-/// from, and entries in file order.
+/// from, entries in file order, and a failure whose position agrees with the
+/// error that came with it.
 fn checkParse(source: []const u8) !void {
     assert(source.len <= fuzz_bytes);
     var entries: [16]Entry = undefined;
     var scratch: [fuzz_bytes]u8 = undefined;
-    switch (parse(source, &entries, &scratch)) {
-        .doc => |doc| {
-            var previous_line: u32 = 0;
-            for (doc.entries) |entry| {
-                try testing.expect(within(source, entry.key));
-                try testing.expect(within(source, entry.value) or within(&scratch, entry.value));
-                try testing.expect(previous_line <= entry.line);
-                // A key never spans lines.
-                try testing.expectEqual(@as(usize, 0), mem.count(u8, entry.key, "\n"));
-                previous_line = entry.line;
-            }
-            if (doc.entries.len != 0) {
-                const last = doc.entries[doc.entries.len - 1];
-                try testing.expectEqualStrings(last.value, doc.get(last.key).?);
-            }
-        },
-        .diagnostic => |d| {
-            try testing.expect(d.offset <= source.len);
-            try testing.expect(d.line >= 1);
-            _ = lineText(source, d.line);
-        },
+    var diagnostics: Diagnostics = undefined;
+    if (parse(source, &entries, &scratch, .{ .diagnostics = &diagnostics })) |doc| {
+        var previous_line: u32 = 0;
+        for (doc.entries) |entry| {
+            try testing.expect(within(source, entry.key));
+            try testing.expect(within(source, entry.value) or within(&scratch, entry.value));
+            try testing.expect(previous_line <= entry.line);
+            // A key never spans lines.
+            try testing.expectEqual(@as(usize, 0), mem.count(u8, entry.key, "\n"));
+            previous_line = entry.line;
+        }
+        if (doc.entries.len != 0) {
+            const last = doc.entries[doc.entries.len - 1];
+            try testing.expectEqualStrings(last.value, doc.get(last.key).?);
+        }
+    } else |problem| {
+        // The error union and the struct report the same failure.
+        try testing.expectEqual(problem, diagnostics.problem);
+        try testing.expect(diagnostics.offset <= source.len);
+        try testing.expect(diagnostics.line >= 1);
+        try testing.expect(diagnostics.column >= 1);
+        try testing.expect(diagnostics.column <= diagnostics.offset + 1);
+        _ = lineText(source, diagnostics.line);
     }
 }
 
@@ -792,20 +911,36 @@ fn within(buf: []const u8, slice: []const u8) bool {
     return at >= start and at + slice.len <= start + buf.len;
 }
 
-/// Parse `source` and require a document, printing the diagnostic when the
+/// Parse `source` and require a document, printing the diagnostics when the
 /// requirement fails.
 fn expectDoc(source: []const u8, entries: []Entry, scratch: []u8) !Doc {
-    return switch (parse(source, entries, scratch)) {
-        .doc => |doc| doc,
-        .diagnostic => |d| {
-            std.debug.print("\ndotenv: {s} at line {d}, offset {d}\n", .{
-                d.message(),
-                d.line,
-                d.offset,
-            });
-            return error.UnexpectedDiagnostic;
-        },
+    var diagnostics: Diagnostics = undefined;
+    return parse(source, entries, scratch, .{ .diagnostics = &diagnostics }) catch {
+        std.debug.print("\ndotenv: {s} at line {d}, column {d}, offset {d}\n", .{
+            diagnostics.message(),
+            diagnostics.line,
+            diagnostics.column,
+            diagnostics.offset,
+        });
+        return error.UnexpectedDiagnostic;
     };
+}
+
+/// Parse `source` and require the failure `want`, returning the diagnostics
+/// the caller's struct received.
+fn expectFailure(
+    source: []const u8,
+    entries: []Entry,
+    scratch: []u8,
+    want: Error,
+) !Diagnostics {
+    var diagnostics: Diagnostics = undefined;
+    try testing.expectError(
+        want,
+        parse(source, entries, scratch, .{ .diagnostics = &diagnostics }),
+    );
+    try testing.expectEqual(want, diagnostics.problem);
+    return diagnostics;
 }
 
 test {

@@ -12,15 +12,20 @@ test "report the line that does not parse" {
 
     var entries: [8]dotenv.Entry = undefined;
     var scratch: [source.len]u8 = undefined;
-    const diagnostic = switch (dotenv.parse(source, &entries, &scratch)) {
-        .doc => return error.ExpectedDiagnostic,
-        .diagnostic => |d| d,
-    };
 
-    // The offset points into the original bytes, and the line counts them.
-    try std.testing.expectEqual(dotenv.Error.InvalidKey, diagnostic.problem);
-    try std.testing.expectEqual(@as(u32, 3), diagnostic.line);
+    // `parse` returns the error. The position comes back through the struct,
+    // so a caller that only fails fast passes no options at all.
+    var diagnostic: dotenv.Diagnostics = undefined;
+    try std.testing.expectError(
+        dotenv.Error.InvalidKey,
+        dotenv.parse(source, &entries, &scratch, .{ .diagnostics = &diagnostic }),
+    );
+
+    // The offset points into the original bytes, and the line and column
+    // count them.
     try std.testing.expectEqual('.', source[diagnostic.offset]);
+    try std.testing.expectEqual(@as(u32, 3), diagnostic.line);
+    try std.testing.expectEqual(@as(u32, 8), diagnostic.column);
 
     // `lineText` returns the offending line for a message or a log line.
     try std.testing.expectEqualStrings("invalid key", diagnostic.message());
