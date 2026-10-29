@@ -11,6 +11,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
 - [Ordered maps](#ordered-maps): `btree` keeps the keys sorted for iteration and range scans, with cache-sized nodes and a stripped prefix at every node.
 - [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest. `fmt.parseBool` accepts Go's boolean spellings.
+- [Configuration files](#configuration-files): `dotenv.parse` reads a `.env` file against one documented grammar, returns borrowed slices, and reports the line that does not fit.
 - [JSON with comments](#json-with-comments): `jsonc.parseFromSlice` reads a config file with `//` and `/* */` comments and trailing commas, and keeps every byte offset so `std.json` errors point at the right line and column in the source.
 - [String dispatch](#string-dispatch): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`. `stringToEnum` matches an existing enum with fixed-length compares.
 - [Prefix matching](#match-a-prefix): `prefix_map.Map` stores byte prefixes in a compressed radix tree and returns the longest match.
@@ -107,6 +108,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`btree`](api/#stdx.btree)                                   | An ordered map that grows: sorted iteration, and lookups by key.                                                                                                                  |
 | [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                                         |
 | [`buffer`](api/#stdx.buffer)                                 | Fixed-capacity buffers. `Array` owns its storage. `Slice` and `Queue` borrow it, and `Queue` consumes from the front.                                                             |
+| [`dotenv`](api/#stdx.dotenv)                                 | A `.env` parser: one grammar, borrowed key and value slices, and the line number when a line does not fit.                                                                        |
 | [`enums`](api/#stdx.enums)                                   | Switch on a byte string: generate an open or closed enum from a list, or look up an existing enum.                                                                                |
 | [`fmt`](api/#stdx.fmt)                                       | Strict parsing for integers and booleans (`atoi`, `parseBool`), and comptime hex decoding.                                                                                        |
 | [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
@@ -404,6 +406,32 @@ An empty or malformed string returns `error.InvalidCharacter`. A number too larg
 
 ```zig
 {{ load_data(path="examples/parsing_bool.zig", format="plain") | trim_end }}
+```
+
+# Configuration files
+
+A `.env` file is text that a deploy step writes and a program reads. The format has no specification, and the loaders disagree about whitespace, comments, and quotes. `dotenv` implements one grammar, written out at the top of the module, so a file either parses or reports the line that does not fit. The parse allocates nothing.
+
+## Parse a dotenv file
+
+`dotenv.parse` takes the source bytes, an array of entries, and a scratch buffer for the escape bytes of double-quoted values. It returns a `.doc` arm with the entries, or a `.diagnostic` arm with the problem.
+
+A key, an unquoted value, and a quoted value without escapes are slices of the source. Only an escaped value is copied, into the scratch buffer. A source of `n` bytes never needs more than `n` bytes of scratch.
+
+The entry array bounds the file. A file with more assignments reports `error.EntriesFull`, and a caller that does not know the count allocates the array from an arena and retries.
+
+Nothing expands a variable. `$VAR` stays four bytes, because the environment belongs to the caller.
+
+```zig
+{{ load_data(path="examples/dotenv_load.zig", format="plain") | trim_end }}
+```
+
+## Report the bad line
+
+`Diagnostic` carries the byte offset, the 1-based line, and the problem. The offset points into the original bytes, so a CRLF file and a byte order mark do not shift it. `lineText` returns the bytes of that line without the terminator, for a message or a log line.
+
+```zig
+{{ load_data(path="examples/dotenv_diagnostic.zig", format="plain") | trim_end }}
 ```
 
 # JSON with comments
