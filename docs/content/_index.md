@@ -11,6 +11,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
 - [Ordered maps](#ordered-maps): `btree` keeps the keys sorted for iteration and range scans, with cache-sized nodes and a stripped prefix at every node.
 - [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest. `fmt.parseBool` accepts Go's boolean spellings.
+- [JSON with comments](#json-with-comments): `jsonc.parseFromSlice` reads a config file with `//` and `/* */` comments and trailing commas, and keeps every byte offset so `std.json` errors point at the right line and column in the source.
 - [String dispatch](#string-dispatch): `enums.Open` and `enums.Closed` turn a byte-string list into an enum for a `switch`. `stringToEnum` matches an existing enum with fixed-length compares.
 - [Prefix matching](#match-a-prefix): `prefix_map.Map` stores byte prefixes in a compressed radix tree and returns the longest match.
 - [Initialize once](#initialize-once): `once.Cell` and `once.Lazy` set a value at most once. The `Sync` variants share it across threads.
@@ -110,6 +111,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`fmt`](api/#stdx.fmt)                                       | Strict parsing for integers and booleans (`atoi`, `parseBool`), and comptime hex decoding.                                                                                        |
 | [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
 | [`heap`](api/#stdx.heap)                                     | `SlabAllocator` and `SizeClassPool`.                                                                                                                                              |
+| [`jsonc`](api/#stdx.jsonc)                                   | JSON with `//` and `/* */` comments and trailing commas. The scrub keeps every byte offset for `std.json` diagnostics.                                                            |
 | [`lru`](api/#stdx.lru)                                       | A fixed-capacity LRU cache with no allocator and no eviction callback.                                                                                                            |
 | [`mem`](api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                                          |
 | [`multi_array`](api/#stdx.multi_array)                       | Struct-of-arrays types with the storage inside the value.                                                                                                                         |
@@ -403,6 +405,40 @@ An empty or malformed string returns `error.InvalidCharacter`. A number too larg
 ```zig
 {{ load_data(path="examples/parsing_bool.zig", format="plain") | trim_end }}
 ```
+
+# JSON with comments
+
+JSONC is JSON with `//` and `/* */` comments and a trailing comma before `}` or `]`. `jsonc` does not parse JSON. It blanks the comments and the trailing commas in a copy of the source, then gives the copy to `std.json`. Every JSON rule and every JSON error stays with `std.json`.
+
+The copy has the same length as the source. Every byte keeps its offset, so a `std.json` diagnostic names the same line and column in the original file.
+
+## Read a config file
+
+`jsonc.parseFromSlice` scrubs the source and parses the copy. It returns a value that owns the parsed data and the scrubbed bytes. Call `deinit` when the value is no longer needed.
+
+```zig
+{{ load_data(path="examples/jsonc_config.zig", format="plain") | trim_end }}
+```
+
+Both extensions are on by default. Set `comments` or `trailing_commas` to false in `Options` to reject that extension. With both false, the scrub still blanks a UTF-8 BOM and changes nothing else.
+
+## Keep byte offsets
+
+`jsonc.scrub` returns an owned copy of the source. `jsonc.scrubInPlace` does the same work in a buffer that the caller owns, so a file read into mutable memory needs no second allocation.
+
+A `std.json` position is available only through `std.json.Diagnostics`. Build a `std.json.Scanner` over the scrub output and call `enableDiagnostics`. Parse with `std.json.parseFromTokenSource`. The reported line, column, and byte offset refer to the original source.
+
+```zig
+{{ load_data(path="examples/jsonc_diagnostics.zig", format="plain") | trim_end }}
+```
+
+`error.UnterminatedBlockComment` is the only syntax failure that the scrubber reports. Pass a `jsonc.Diagnostics` to `scrubWithDiagnostics` or `scrubInPlaceWithDiagnostics` to get the position of the opening `/*`.
+
+## Know the limits
+
+The scrub handles comments, trailing commas, and a UTF-8 BOM at offset 0. Every other byte reaches `std.json` unchanged.
+
+JSON5 features need a real parser and stay out: single quotes, unquoted keys, hexadecimal numbers, `NaN`, `Infinity`, and a leading or trailing decimal point. A document with one of them returns an error from `std.json`.
 
 # String dispatch
 

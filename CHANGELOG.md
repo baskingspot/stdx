@@ -7,6 +7,12 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `jsonc`: read JSON with `//` and `/* */` comments and a trailing comma.
+  `scrub` and `scrubInPlace` blank the comments and the comma to spaces and
+  keep every byte offset, so `std.json` parses the copy and reports the
+  caller's line and column. `parseFromSlice` returns a value that owns the
+  scrubbed copy.
+
 - `lru.Custom`, `lru.Auto`, and `lru.String`: a fixed-capacity LRU cache.
   `get` and `peek`; `put` returns the replaced value or the evicted entry;
   `remove`, `popLru`, `popMru`, an iterator, and `clear`. No allocator and no
