@@ -12,6 +12,14 @@ All notable changes to stdx are recorded here. The format follows
   keep every byte offset, so `std.json` parses the copy and reports the
   caller's line and column. `parseFromSlice` returns a value that owns the
   scrubbed copy.
+- `dotenv.parse`: a `.env` parser with one documented grammar. Keys match
+  `[A-Za-z_][A-Za-z0-9_]*`, an `export` prefix is accepted, and comments and
+  the three quoting forms follow one set of rules. Key and value slices are
+  borrowed from the caller's source, except the escape bytes of a
+  double-quoted value, which go into a caller-owned scratch buffer. A bad line
+  returns a `Diagnostic` with the byte offset, the line, and the problem;
+  `lineText` returns that line. Duplicate keys are kept in order and
+  `Doc.get` returns the last. No variable expansion.
 
 - `lru.Custom`, `lru.Auto`, and `lru.String`: a fixed-capacity LRU cache.
   `get` and `peek`; `put` returns the replaced value or the evicted entry;
