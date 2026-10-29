@@ -18,6 +18,7 @@
         "src",
         "LICENSE",
         "LICENSE-ZIG",
+        "LICENSE-APACHE",
         "README.md",
         "THIRD_PARTY.md",
     },

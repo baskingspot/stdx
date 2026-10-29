@@ -12,12 +12,14 @@ const testing = std.testing;
 const Io = std.Io;
 const net = Io.net;
 const math = std.math;
+const print = std.debug.print;
 pub const Ip4Address = net.Ip4Address;
 pub const Ip6Address = net.Ip6Address;
 pub const IpAddress = net.IpAddress;
 const posix = std.posix;
 
 const fmt = @import("fmt.zig");
+const ip4_parse = @import("net/ip4.zig");
 
 pub const Ip4 = struct {
     bytes: [4]u8,
@@ -37,8 +39,23 @@ pub const Ip4 = struct {
     /// Parse dotted-quad notation, with `Ip4Address.parse` semantics:
     /// hostnames and IPv6 are parse errors, and non-canonical quads (leading
     /// zeros) are too.
+    ///
+    /// Canonical input takes the fast path in `net/ip4.zig`; everything it
+    /// rejects is malformed or non-canonical and goes to `diagnose`, which
+    /// names the error.
     pub fn parse(buf: []const u8) ParseError!Ip4 {
-        return fromIp4(try .parse(buf, 0));
+        return if (ip4_parse.parseFast(buf)) |bytes|
+            .init(bytes)
+        else
+            diagnose(buf);
+    }
+
+    /// Names the error for text the fast path rejected. A one-off exhaustive
+    /// run parsed all 2^32 canonical texts without a rejection, so reaching
+    /// the success arm would be a fast-path bug, not a valid parse to return.
+    fn diagnose(buf: []const u8) ParseError {
+        _ = try Ip4Address.parse(buf, 0);
+        unreachable;
     }
 
     /// Parses at compile time, reporting the offending string and error on
@@ -259,6 +276,173 @@ test Ip4 {
     var buf: [32]u8 = undefined;
     const formatted = try std.fmt.bufPrint(&buf, "{f}", .{addr});
     try testing.expectEqualStrings("10.1.2.3", formatted);
+}
+
+/// Every input either parses to the same octets as std or fails with the
+/// same error. The fast path falls back to std for errors, so this pins the
+/// boundary between the two.
+fn expectIp4MatchesStd(text: []const u8) !void {
+    // The fast path must accept every canonical input, not lean on the std
+    // fallback, so a rejection here would hide behind a correct parse.
+    if (Ip4Address.parse(text, 0)) |want| {
+        const fast = ip4_parse.parseFast(text) orelse {
+            print("fast path rejected valid {s}\n", .{text});
+            return error.TestUnexpectedResult;
+        };
+        try testing.expectEqual(want.bytes, fast);
+    } else |_| {
+        if (ip4_parse.parseFast(text)) |fast| {
+            print("fast path accepted invalid {s} as {any}\n", .{ text, fast });
+            return error.TestUnexpectedResult;
+        }
+    }
+
+    if (Ip4Address.parse(text, 0)) |want| {
+        const got = Ip4.parse(text) catch |err| {
+            print("Ip4.parse({s}) failed with {s}, std parsed {any}\n", .{
+                text, @errorName(err), want.bytes,
+            });
+            return error.TestUnexpectedResult;
+        };
+        try testing.expectEqual(want.bytes, got.bytes);
+    } else |want_err| {
+        if (Ip4.parse(text)) |got| {
+            print("Ip4.parse({s}) accepted {any}, std failed with {s}\n", .{
+                text, got.bytes, @errorName(want_err),
+            });
+            return error.TestUnexpectedResult;
+        } else |got_err| {
+            try testing.expectEqual(want_err, got_err);
+        }
+    }
+}
+
+test "Ip4.parse fast path matches std" {
+    // Every octet value in every position.
+    var v: u16 = 0;
+    while (v <= 255) : (v += 1) {
+        var buf: [32]u8 = undefined;
+        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "{d}.0.0.0", .{v}));
+        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "0.{d}.0.0", .{v}));
+        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "0.0.{d}.0", .{v}));
+        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "0.0.0.{d}", .{v}));
+        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "{d}.255.0.1", .{v}));
+        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "255.{d}.255.0", .{v}));
+        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "0.255.{d}.255", .{v}));
+        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "255.0.255.{d}", .{v}));
+    }
+
+    // Valid quads across the length space, each byte mutated to the values
+    // that most often trip a parser.
+    const mutation = [_]u8{ '0', '1', '9', '.', 'a', ' ', 0, 0xFF };
+    var a: u16 = 0;
+    while (a <= 255) : (a += 51) {
+        var b: u16 = 0;
+        while (b <= 255) : (b += 51) {
+            var c: u16 = 0;
+            while (c <= 255) : (c += 51) {
+                var d: u16 = 0;
+                while (d <= 255) : (d += 51) {
+                    var buf: [32]u8 = undefined;
+                    const text = try std.fmt.bufPrint(&buf, "{d}.{d}.{d}.{d}", .{ a, b, c, d });
+                    try expectIp4MatchesStd(text);
+                    var copy: [32]u8 = undefined;
+                    @memcpy(copy[0..text.len], text);
+                    for (0..text.len) |i| {
+                        const original = copy[i];
+                        for (mutation) |byte| {
+                            copy[i] = byte;
+                            try expectIp4MatchesStd(copy[0..text.len]);
+                        }
+                        copy[i] = original;
+                    }
+                }
+            }
+        }
+    }
+
+    // Shapes and edge cases std distinguishes: missing dots, extra dots,
+    // trailing junk, overflow, leading zeros, and the length bounds.
+    try expectIp4MatchesStd("");
+    try expectIp4MatchesStd(".");
+    try expectIp4MatchesStd("..");
+    try expectIp4MatchesStd("...");
+    try expectIp4MatchesStd("....");
+    try expectIp4MatchesStd("1.2.3.4");
+    try expectIp4MatchesStd("1.2.3.4.");
+    try expectIp4MatchesStd("1.2.3.4.5");
+    try expectIp4MatchesStd("1.2.3");
+    try expectIp4MatchesStd("1.2");
+    try expectIp4MatchesStd("1");
+    try expectIp4MatchesStd("1234.1.1.1");
+    try expectIp4MatchesStd("1.2345.1.1");
+    try expectIp4MatchesStd("1.1.1.1234");
+    try expectIp4MatchesStd("01.2.3.4");
+    try expectIp4MatchesStd("1.02.3.4");
+    try expectIp4MatchesStd("1.2.03.4");
+    try expectIp4MatchesStd("1.2.3.04");
+    try expectIp4MatchesStd("00.0.0.0");
+    try expectIp4MatchesStd("0.0.0.0");
+    try expectIp4MatchesStd("0.00.0.0");
+    try expectIp4MatchesStd("1.1.1.00");
+    try expectIp4MatchesStd("256.0.0.0");
+    try expectIp4MatchesStd("0.256.0.0");
+    try expectIp4MatchesStd("0.0.256.0");
+    try expectIp4MatchesStd("0.0.0.256");
+    try expectIp4MatchesStd("255.255.255.255");
+    try expectIp4MatchesStd("999.999.999.999");
+    try expectIp4MatchesStd("1.2.3. 4");
+    try expectIp4MatchesStd(" 1.2.3.4");
+    try expectIp4MatchesStd("1.2.3.4 ");
+    try expectIp4MatchesStd("1.2.3.+4");
+    try expectIp4MatchesStd("1.2.3.-4");
+    try expectIp4MatchesStd("1.2.3.4\n");
+    try expectIp4MatchesStd("1.2.3.4x");
+    try expectIp4MatchesStd("1.2.3.4\x00");
+    try expectIp4MatchesStd("1.2.3.4/24");
+    try expectIp4MatchesStd("::1");
+    try expectIp4MatchesStd("1.2.3.4:80");
+    try expectIp4MatchesStd("host");
+    try expectIp4MatchesStd("1.2.3.4\xff");
+    try expectIp4MatchesStd(".1.2.3.4");
+    try expectIp4MatchesStd("1..2.3.4");
+    try expectIp4MatchesStd("1.2..3.4");
+    try expectIp4MatchesStd("1.2.3..4");
+    try expectIp4MatchesStd("..1.2.3.4");
+    try expectIp4MatchesStd("1...2.3");
+    try expectIp4MatchesStd("1.2.3.4..");
+    try expectIp4MatchesStd("1.2.3.4.5.6");
+    try expectIp4MatchesStd(".1.2.3");
+    try expectIp4MatchesStd("1.2.3.");
+    try expectIp4MatchesStd("1..2..3");
+    try expectIp4MatchesStd("1.2.3.4a");
+    try expectIp4MatchesStd("a1.2.3.4");
+}
+
+test "fuzz: Ip4.parse matches std" {
+    try testing.fuzz({}, fuzzIp4, .{
+        .corpus = &.{
+            "0.0.0.0",
+            "255.255.255.255",
+            "01.2.3.4",
+            "1.2.3.256",
+            "1.2.3",
+            "1.2.3.4.5",
+            "1..2.3.4",
+            "1.2.3.4\n",
+        },
+    });
+}
+
+fn fuzzIp4(_: void, smith: *testing.Smith) anyerror!void {
+    var bytes: [24]u8 = undefined;
+    smith.bytes(&bytes);
+    const len = bytes[0] % 20;
+    try expectIp4MatchesStd(bytes[1..][0..len]);
+
+    const alphabet = "0123456789.";
+    for (bytes[1..][0..len]) |*byte| byte.* = alphabet[byte.* % alphabet.len];
+    try expectIp4MatchesStd(bytes[1..][0..len]);
 }
 
 /// IPv4 CIDR prefix: an `Ip4` network address plus a prefix length in bits.

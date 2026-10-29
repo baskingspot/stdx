@@ -72,6 +72,20 @@ the counters are added up once at the end. Zig's `@Vector` over the whole node
 compiles the sum into a widening and a shuffle chain, which their note and our
 disassembly both describe; the per-register form is the fix.
 
+## swift-endpoint
+
+Upstream: https://github.com/swift-dns/swift-endpoint
+(`Sources/IPAddress/IPv4Address/String+IPv4Address.swift`, commit
+`c030b658`).
+License: Apache-2.0; the full text is in `LICENSE-APACHE`.
+
+`src/net/ip4.zig` ports the fixed-window parser by Mahdi Bahrami, described
+in "A Very Fast IPv4 Parser, in Swift"
+(https://blog.mahdibm.com/posts/a-very-fast-ipv4-parser-in-swift/). Zig
+adaptations: `std.mem.readInt` windows, `@ctz`/`@clz`, the `ParseError`
+boundary, and a leading-zero rejection that upstream does not perform. The
+SWAR validation, segment folds, and constants are upstream's.
+
 ## Design references
 
 These are designs stdx implemented on its own. No code was copied, so no

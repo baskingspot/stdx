@@ -52,6 +52,11 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Changed
 
+- `net.Ip4.parse` takes a fixed-window SWAR fast path for canonical dotted
+  quads. On a 1M-address random corpus the fast path measured 6.8 ns per
+  address against 15.2 ns for the std parser. Results, the error set, and
+  non-canonical behavior are unchanged; anything the fast path rejects goes
+  through the std parser.
 - `dotenv.parse` returns `Error!Doc` instead of a `Result` union with `.doc`
   and `.diagnostic` arms. A failed parse fills a caller-owned `Diagnostics`
   through `ParseOptions.diagnostics`, which gained the column of the offending
