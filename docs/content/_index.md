@@ -414,7 +414,9 @@ A `.env` file is text that a deploy step writes and a program reads. The format 
 
 ## Parse a dotenv file
 
-`dotenv.parse` takes the source bytes, an array of entries, and a scratch buffer for the escape bytes of double-quoted values. It returns a `.doc` arm with the entries, or a `.diagnostic` arm with the problem.
+`dotenv.parse` takes the source bytes, an array of entries, a scratch buffer for the escape bytes of double-quoted values, and `ParseOptions`. It returns a `Doc` value. On failure it returns one of `Error`.
+
+Set the `diagnostics` field in `ParseOptions` to a `Diagnostics` value to receive the position of a failure. A successful parse does not touch that value, and a caller that wants no position passes `.{}`.
 
 A key, an unquoted value, and a quoted value without escapes are slices of the source. Only an escaped value is copied, into the scratch buffer. A source of `n` bytes never needs more than `n` bytes of scratch.
 
@@ -428,7 +430,7 @@ Nothing expands a variable. `$VAR` stays four bytes, because the environment bel
 
 ## Report the bad line
 
-`Diagnostic` carries the byte offset, the 1-based line, and the problem. The offset points into the original bytes, so a CRLF file and a byte order mark do not shift it. `lineText` returns the bytes of that line without the terminator, for a message or a log line.
+`Diagnostics` carries the byte offset, the 1-based line, the 1-based column in bytes, and the problem. The offset points into the original bytes, so a CRLF file and a byte order mark do not shift it. `lineText` returns the bytes of that line without the terminator, for a message or a log line.
 
 ```zig
 {{ load_data(path="examples/dotenv_diagnostic.zig", format="plain") | trim_end }}

@@ -17,12 +17,20 @@ test "read a configuration file" {
     // longer than the text it came from.
     var entries: [8]dotenv.Entry = undefined;
     var scratch: [source.len]u8 = undefined;
-    const doc = switch (dotenv.parse(source, &entries, &scratch)) {
-        .doc => |doc| doc,
-        .diagnostic => |d| {
-            std.debug.print("{s} at line {d}\n", .{ d.message(), d.line });
-            return error.BadConfig;
-        },
+
+    // A failed parse writes the byte that stopped it, and the line and column
+    // of that byte, into the caller's struct. A successful parse leaves the
+    // struct alone.
+    var diagnostics: dotenv.Diagnostics = undefined;
+    const doc = dotenv.parse(source, &entries, &scratch, .{
+        .diagnostics = &diagnostics,
+    }) catch {
+        std.debug.print("{s} at line {d}, column {d}\n", .{
+            diagnostics.message(),
+            diagnostics.line,
+            diagnostics.column,
+        });
+        return error.BadConfig;
     };
 
     // `get` returns the last assignment, so a duplicate key is not an error.
