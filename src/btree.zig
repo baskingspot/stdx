@@ -70,6 +70,7 @@
 //! ```
 
 const std = @import("std");
+const testing = std.testing;
 
 const map = @import("btree/map.zig");
 pub const Config = map.Config;
@@ -95,5 +96,5 @@ pub const AutoContext = map.AutoContext;
 pub const BytesContext = map.BytesContext;
 
 test {
-    std.testing.refAllDecls(@This());
+    testing.refAllDecls(@This());
 }

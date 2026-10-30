@@ -15,6 +15,7 @@
 
 const std = @import("std");
 const Io = std.Io;
+const assert = std.debug.assert;
 const testing = std.testing;
 const atomic = std.atomic;
 
@@ -337,7 +338,7 @@ test "sync cell initializes once across threads" {
     const Worker = struct {
         fn run(c: *SyncCell(u32), n: *SyncCounter) void {
             const value = c.getOrInit(testing.io, n, syncInit) catch unreachable;
-            std.debug.assert(value.* == 42);
+            assert(value.* == 42);
         }
     };
     var threads: [4]std.Thread = undefined;

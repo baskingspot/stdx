@@ -6,9 +6,10 @@
 //! license are in `THIRD_PARTY.md`.
 
 const std = @import("std");
+const testing = std.testing;
 
 pub const RapidHash = @import("hash/rapidhash.zig");
 
 test {
-    std.testing.refAllDecls(@This());
+    testing.refAllDecls(@This());
 }

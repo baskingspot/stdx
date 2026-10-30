@@ -11,6 +11,7 @@
 //! task, with examples. These pages are the reference for each symbol.
 
 const std = @import("std");
+const testing = std.testing;
 const builtin = @import("builtin");
 
 pub const base32 = @import("base32.zig");
@@ -55,5 +56,5 @@ pub const pages = if (builtin.os.tag == .linux) pages_mod else void;
 /// platforms so the package builds on darwin.
 pub const slot_ring = if (builtin.os.tag == .linux) slot_ring_mod else void;
 test {
-    std.testing.refAllDecls(@This());
+    testing.refAllDecls(@This());
 }

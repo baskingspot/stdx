@@ -42,6 +42,7 @@ const std = @import("std");
 const ascii = std.ascii;
 const assert = std.debug.assert;
 const mem = std.mem;
+const print = std.debug.print;
 const testing = std.testing;
 
 /// The UTF-8 byte order mark, accepted at the start of a source and nowhere
@@ -919,7 +920,7 @@ fn within(buf: []const u8, slice: []const u8) bool {
 fn expectDoc(source: []const u8, entries: []Entry, scratch: []u8) !Doc {
     var diagnostics: Diagnostics = undefined;
     return parse(source, entries, scratch, .{ .diagnostics = &diagnostics }) catch {
-        std.debug.print("\ndotenv: {s} at line {d}, column {d}, offset {d}\n", .{
+        print("\ndotenv: {s} at line {d}, column {d}, offset {d}\n", .{
             diagnostics.message(),
             diagnostics.line,
             diagnostics.column,

@@ -7,6 +7,7 @@
 const testingx = @import("testingx");
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const stdx = @import("stdx");
 const swiss = stdx.swiss;
@@ -40,7 +41,7 @@ var large_miss_keys: [large_probe_keys]u32 = undefined;
 /// before the `b.loop()`, so the fill's allocations and time stay out of
 /// the metric; the caller deinits the map, so nothing leaks.
 fn fillLarge(
-    gpa: std.mem.Allocator,
+    gpa: Allocator,
     map: *swiss.Auto(u32, u32),
     hit_keys: *[large_probe_keys]u32,
     miss_keys: *[large_probe_keys]u32,
