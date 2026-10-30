@@ -7,6 +7,13 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `heap.Bump(.{ ... })`: a single-threaded bump arena over chunks from a
+  child allocator, with the chunk sizes fixed at comptime. `allocator()` hands
+  out an `Allocator` with no atomics, `free` is a no-op, and `deinit` releases
+  every chunk. `reset(.retain_capacity)` keeps the chunks for the next job, and
+  a request above `max_chunk` gets a chunk of its own size. The type's `State`
+  holds only the chunk list and the cursor, for a struct that stores an arena
+  and gets copied.
 - `jsonc`: read JSON with `//` and `/* */` comments and a trailing comma.
   `scrub` and `scrubInPlace` blank the comments and the comma to spaces and
   keep every byte offset, so `std.json` parses the copy and reports the

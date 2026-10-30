@@ -112,7 +112,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`enums`](api/#stdx.enums)                                   | Switch on a byte string: generate an open or closed enum from a list, or look up an existing enum.                                                                                |
 | [`fmt`](api/#stdx.fmt)                                       | Strict parsing for integers and booleans (`atoi`, `parseBool`), and comptime hex decoding.                                                                                        |
 | [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
-| [`heap`](api/#stdx.heap)                                     | `SlabAllocator` and `SizeClassPool`.                                                                                                                                              |
+| [`heap`](api/#stdx.heap)                                     | `SlabAllocator`, `SizeClassPool`, and the single-threaded `Bump` arena.                                                                                                           |
 | [`jsonc`](api/#stdx.jsonc)                                   | JSON with `//` and `/* */` comments and trailing commas. The scrub keeps every byte offset for `std.json` diagnostics.                                                            |
 | [`lru`](api/#stdx.lru)                                       | A fixed-capacity LRU cache with no allocator and no eviction callback.                                                                                                            |
 | [`mem`](api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                                          |
@@ -859,6 +859,20 @@ Use it when input that you do not control feeds a fixed-size response, such as a
 
 ```zig
 {{ load_data(path="examples/heap_slab_records.zig", format="plain") | trim_end }}
+```
+
+## Allocate in bulk
+
+`heap.Bump(.{ ... })` returns an arena type for a job's values. The chunk sizes are part of the type, so an instance carries only its allocator and its chunk list. `create` and `alloc` take memory from a chunk, `free` does nothing, and `deinit` returns every chunk. Pointers stay valid as the arena grows, and the child allocator is called only when a chunk is needed.
+
+Use it instead of `std.heap.ArenaAllocator` when one thread owns the arena and the job allocates in a loop. std's arena is thread-safe, so every allocation takes an atomic operation on the chunk cursor. `Bump` has no atomics, and it must not be shared between threads.
+
+`reset(.retain_capacity)` empties every chunk and keeps the memory for the next job. `reset(.free_all)` returns the chunks to the child allocator. A request above `max_chunk` gets a chunk of its own size.
+
+The arena's `State` type is the chunk list without the allocator, so it holds two pointers. Store it in a struct that gets copied, promote it where the allocations happen, and copy the state back before the promoted value goes out of scope. This is the `std.heap.ArenaAllocator.State` pattern.
+
+```zig
+{{ load_data(path="examples/heap_bump_values.zig", format="plain") | trim_end }}
 ```
 
 ## Fixed-size byte values

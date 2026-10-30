@@ -30,7 +30,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Timekeeping](https://baskingspot.dev/stdx/#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, RFC 3339 formatting, and a log rate limiter.
 - [Timers](https://baskingspot.dev/stdx/#timers): a caller-driven set of deadlines over `Io.Timestamp`, with callbacks, removal by handle, and period re-arm without drift.
 - [Logging transport](https://baskingspot.dev/stdx/#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
-- [Small modules](https://baskingspot.dev/stdx/#small-modules): a bounded writer, rapidhash, the heap pools, fixed-size byte values, secure random, and buffered stdio.
+- [Small modules](https://baskingspot.dev/stdx/#small-modules): a bounded writer, rapidhash, the heap pools and bump arena, fixed-size byte values, secure random, and buffered stdio.
 
 ## Install
 

@@ -24,6 +24,7 @@ pub const dotenv_diagnostic = @import("dotenv_diagnostic.zig");
 pub const dotenv_load = @import("dotenv_load.zig");
 pub const enums_classify = @import("enums_classify.zig");
 pub const hash_keyed_map = @import("hash_keyed_map.zig");
+pub const heap_bump_values = @import("heap_bump_values.zig");
 pub const heap_slab_records = @import("heap_slab_records.zig");
 pub const jsonc_config = @import("jsonc_config.zig");
 pub const jsonc_diagnostics = @import("jsonc_diagnostics.zig");
