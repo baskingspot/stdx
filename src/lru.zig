@@ -41,7 +41,7 @@ pub fn Custom(
             if (buffer_capacity < 1) @compileError("lru: buffer_capacity must be at least 1");
         }
 
-        const NodeIndex = std.math.IntFittingRange(0, buffer_capacity);
+        const NodeIndex = math.IntFittingRange(0, buffer_capacity);
         pub const Map = bounded_array_hash_map.Custom(K, NodeIndex, Context, buffer_capacity);
         pub const Index = Map.Index;
         pub const capacity = Map.capacity;

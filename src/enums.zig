@@ -198,7 +198,7 @@ fn checkTag(comptime name: []const u8) void {
     if (name.len == 0) {
         @compileError("enums: an empty name cannot be a tag");
     }
-    if (mem.indexOfScalar(u8, name, 0) != null) {
+    if (mem.findScalar(u8, name, 0) != null) {
         @compileError("enums: a name cannot contain a null byte");
     }
 }

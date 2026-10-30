@@ -61,6 +61,7 @@ pub const LeadingZeros = enum {
 
 /// Behavior knobs for `atoi`. Both fields are comptime, so every
 /// configuration is a separately compiled specialization.
+// ast-grep-ignore: public-struct-field-default -- comptime config: call sites override one knob
 pub const Options = struct {
     overflow: Overflow = .checked,
     leading_zeros: LeadingZeros = .allow,

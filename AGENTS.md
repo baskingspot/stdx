@@ -91,7 +91,13 @@ Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
   that a caller passes to a type constructor or a comptime parameter
   keeps its field defaults, because the call site overrides one knob
   and leaves the rest (`slot_ring.Mpsc(.{ .slot_size = 4096 })`). A
-  runtime options value follows the rule and takes `init`.
+  runtime options value follows the rule and takes `init`. A shared
+  ast-grep rule, `public-struct-field-default`, enforces this through
+  `baskingspot-lint`, which `just lint` runs; a sanctioned config
+  struct carries `// ast-grep-ignore: public-struct-field-default --
+why` between its doc comment and its declaration. The rules ship in
+  the baskingspot flake, and a rule of this repo's own would live in
+  `.ast-grep/rules/`.
 
 - Every operation that fails a bound in every build mode has an
   unchecked form. The checked form returns `error.NoSpaceLeft` or

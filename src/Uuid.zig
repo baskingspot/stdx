@@ -138,7 +138,7 @@ test Uuid {
 
     // Round trip: format then parse, either case.
     var buf: [36]u8 = undefined;
-    const s = try std.fmt.bufPrint(&buf, "{f}", .{c});
+    const s = try fmt.bufPrint(&buf, "{f}", .{c});
     try testing.expect(c.eql(try .parse(s)));
 
     var upper_buf: [36]u8 = undefined;
@@ -150,7 +150,7 @@ test Uuid {
         const ex: Uuid = try .parse("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
         try testing.expect(ex.version() == .v1);
         var eb: [36]u8 = undefined;
-        break :blk try std.fmt.bufPrint(&eb, "{f}", .{ex});
+        break :blk try fmt.bufPrint(&eb, "{f}", .{ex});
     });
 
     // Rejections: length, hyphen placement, non-hex digit.

@@ -182,6 +182,7 @@ pub const OnFull = enum {
 
 /// The options of `Mpsc`. Comptime throughout: each configuration
 /// compiles to its own code, per the `fmt.AtoiOptions` convention.
+// ast-grep-ignore: public-struct-field-default -- comptime config: call sites override one knob
 pub const Options = struct {
     /// Total slot size in bytes, stamp word included. Must be a
     /// multiple of the cache line: adjacent slots must not share one,
@@ -1304,13 +1305,13 @@ fn hammerMessage(id: usize, i: usize, pos: u64, len: usize, buf: []u8) []const u
 /// is a torn or stale payload: panic.
 fn expectHammerPayload(msg: []const u8, num_producers: usize, per_producer: usize) HammerId {
     if (msg.len == 0 or msg[0] != 'p') @panic("hammer payload is torn: no prefix");
-    const m = std.mem.indexOfScalarPos(u8, msg, 1, 'm') orelse
+    const m = std.mem.findScalarPos(u8, msg, 1, 'm') orelse
         @panic("hammer payload is torn: no index");
-    const l = std.mem.indexOfScalarPos(u8, msg, m + 1, 'l') orelse
+    const l = std.mem.findScalarPos(u8, msg, m + 1, 'l') orelse
         @panic("hammer payload is torn: no length");
-    const s = std.mem.indexOfScalarPos(u8, msg, l + 1, 's') orelse
+    const s = std.mem.findScalarPos(u8, msg, l + 1, 's') orelse
         @panic("hammer payload is torn: no position");
-    const bang = std.mem.indexOfScalarPos(u8, msg, s + 1, '!') orelse
+    const bang = std.mem.findScalarPos(u8, msg, s + 1, '!') orelse
         @panic("hammer payload is torn: no terminator");
     const id = std.fmt.parseInt(usize, msg[1..m], 10) catch
         @panic("hammer payload is torn: producer id");
@@ -1976,7 +1977,7 @@ test "contended claims keep payloads distinct" {
             var read_pos: u64 = 0;
             while (self.ring.waitForData(read_pos)) {
                 const msg = self.ring.read(read_pos).?;
-                const m = std.mem.indexOfScalar(u8, msg.payload, 'm') orelse
+                const m = std.mem.findScalar(u8, msg.payload, 'm') orelse
                     @panic("malformed message");
                 const id = std.fmt.parseInt(usize, msg.payload[1..m], 10) catch
                     @panic("malformed producer id");
@@ -2349,7 +2350,7 @@ test "drop_oldest: contended claims keep payloads distinct" {
         const Parsed = struct { id: usize, i: usize };
 
         fn parse(payload: []const u8) ?Parsed {
-            const m = std.mem.indexOfScalar(u8, payload, 'm') orelse return null;
+            const m = std.mem.findScalar(u8, payload, 'm') orelse return null;
             const id = std.fmt.parseInt(usize, payload[1..m], 10) catch return null;
             const i = std.fmt.parseInt(usize, payload[m + 1 ..], 10) catch return null;
             if (id >= num_producers or i >= per_producer) return null;

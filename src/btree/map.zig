@@ -61,6 +61,7 @@ const Order = math.Order;
 const stability = @import("../stability.zig");
 
 /// Compile-time knobs for a map's nodes.
+// ast-grep-ignore: public-struct-field-default -- comptime config: call sites override one knob
 pub const Config = struct {
     /// Maximum keys per node, odd and at least 3. A split leaves
     /// `(max - 1) / 2` keys on each side with the middle one promoted.
@@ -2000,7 +2001,7 @@ fn fuzzTiedWindows(_: void, smith: *testing.Smith) anyerror!void {
     const ties = struct {
         const Self = @This();
         fn compare(_: Self, a: u16, b: u16) Order {
-            return std.math.order(a, b);
+            return math.order(a, b);
         }
         /// Every window ties: the tie path decides everything.
         fn inlineKey(_: Self, _: u16, _: usize) u64 {

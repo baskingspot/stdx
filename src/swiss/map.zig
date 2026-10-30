@@ -1114,7 +1114,7 @@ test "mirror invariant" {
 }
 
 test "allocator failure" {
-    var failing: std.testing.FailingAllocator = .init(testing.allocator, .{});
+    var failing: testing.FailingAllocator = .init(testing.allocator, .{});
     const gpa = failing.allocator();
 
     var map: Auto(u32, u32) = .empty;

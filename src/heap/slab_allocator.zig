@@ -26,11 +26,13 @@ const runtime_safety = switch (builtin.mode) {
     .ReleaseFast, .ReleaseSmall => false,
 };
 
+// ast-grep-ignore: public-struct-field-default -- comptime config: call sites override one knob
 pub const SizeClass = struct {
     size: usize,
     preheat: usize = 0,
 };
 
+// ast-grep-ignore: public-struct-field-default -- comptime config: call sites override one knob
 pub const Config = struct {
     size_classes: []const SizeClass,
     alignment: Alignment = .@"1",

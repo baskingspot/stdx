@@ -107,7 +107,7 @@ pub fn Custom(
         /// Bits of storage: the smallest power of two at or above
         /// `optimal_bits`, floored at 2. Power-of-two sizing turns the
         /// probe modulo into a mask.
-        pub const bits: u64 = std.math.ceilPowerOfTwoAssert(u64, @max(optimal_bits, 2));
+        pub const bits: u64 = math.ceilPowerOfTwoAssert(u64, @max(optimal_bits, 2));
 
         /// Probes per key, floored at 1 so every key sets at least one bit.
         pub const hash_functions: u64 = @max(1, optimal_hash_functions);
@@ -115,8 +115,8 @@ pub fn Custom(
         /// A probe position or the number of probes: both bounded by
         /// comptime-known sizes, so the narrowest fitting integer is the
         /// storage. The repo's `buffer.Array` convention.
-        pub const Index = std.math.IntFittingRange(0, bits);
-        const Probe = std.math.IntFittingRange(0, hash_functions);
+        pub const Index = math.IntFittingRange(0, bits);
+        const Probe = math.IntFittingRange(0, hash_functions);
 
         /// False-positive rate at `expected_items` distinct keys,
         /// recomputed from `bits` and `hash_functions` after the

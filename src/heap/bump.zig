@@ -26,6 +26,7 @@ const testing = std.testing;
 /// `first_chunk` bytes. A later chunk doubles its predecessor, up to
 /// `max_chunk`; a request larger than that gets a chunk of its own size.
 /// Payload excludes the chunk header.
+// ast-grep-ignore: public-struct-field-default -- comptime config: call sites override one knob
 pub const Config = struct {
     first_chunk: comptime_int = 256 * 1024,
     max_chunk: comptime_int = 4 * 1024 * 1024,

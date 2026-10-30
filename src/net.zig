@@ -679,7 +679,7 @@ pub const HostPort = struct {
         if (text.len == 0) return error.EmptyHost;
 
         if (text[0] == '[') {
-            const close = mem.indexOfScalar(u8, text, ']') orelse
+            const close = mem.findScalar(u8, text, ']') orelse
                 return error.InvalidBrackets;
             const host = text[1..close];
             if (host.len == 0) return error.EmptyHost;
@@ -688,13 +688,13 @@ pub const HostPort = struct {
             return .{ .host = host, .port = try parsePort(text[close + 2 ..]) };
         }
 
-        const colon = mem.lastIndexOfScalar(u8, text, ':') orelse
+        const colon = mem.findScalarLast(u8, text, ':') orelse
             return .{ .host = text, .port = default_port };
         const host = text[0..colon];
         if (host.len == 0) return error.EmptyHost;
         // A second colon in the host means an IPv6 address without brackets,
         // where the port separator is ambiguous.
-        if (mem.indexOfScalar(u8, host, ':') != null) return error.UnbracketedIpv6;
+        if (mem.findScalar(u8, host, ':') != null) return error.UnbracketedIpv6;
         return .{ .host = host, .port = try parsePort(text[colon + 1 ..]) };
     }
 

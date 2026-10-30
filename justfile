@@ -46,10 +46,11 @@ test-release-fast:
 fuzz LIMIT="10M":
     zig build fuzz -Doptimize=ReleaseSafe --fuzz={{ LIMIT }}
 
-[doc("Lint: ziglint, Zig, Nix, Markdown and CSS, the workflows, and justfile formatting")]
+[doc("Lint: ziglint, the ast-grep rules, Zig, Nix, Markdown and CSS, the workflows, and justfile formatting")]
 [group("lint")]
 lint:
     ziglint
+    baskingspot-lint src
     zig fmt --check src docs/examples build.zig build.zig.zon
     nix fmt -- --ci
     oxfmt --check README.md AGENTS.md IDEAS.md THIRD_PARTY.md .pi/agents docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml

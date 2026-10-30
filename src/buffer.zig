@@ -560,7 +560,7 @@ pub fn Queue(comptime T: type) type {
         /// elements in the range it moved from. Use this before releasing
         /// storage that held secrets.
         pub fn secureZero(self: *Self) void {
-            std.crypto.secureZero(T, self.buffer);
+            crypto.secureZero(T, self.buffer);
             self.clear();
         }
     };
@@ -702,7 +702,7 @@ test "Queue: random operations match a model" {
             1 => {
                 const n = random.intRangeAtMost(usize, 0, @min(queue.bufferedLen(), 7));
                 queue.toss(n);
-                std.mem.copyForwards(u8, model.items[0..], model.items[n..]);
+                @memmove(model.items[0 .. model.items.len - n], model.items[n..]);
                 model.items.len -= n;
             },
             2 => queue.rebase(),
