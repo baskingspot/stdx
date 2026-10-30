@@ -16,9 +16,9 @@ const builtin = @import("builtin");
 pub const base32 = @import("base32.zig");
 pub const bit_set = @import("bit_set.zig");
 pub const bloom = @import("bloom.zig");
-pub const btree = @import("btree.zig");
 pub const bounded_array_hash_map = @import("bounded_array_hash_map.zig");
 pub const BoundedWriter = @import("BoundedWriter.zig");
+pub const btree = @import("btree.zig");
 pub const buffer = @import("buffer.zig");
 pub const dotenv = @import("dotenv.zig");
 pub const enums = @import("enums.zig");
@@ -38,13 +38,14 @@ pub const priority_queue = @import("priority_queue.zig");
 pub const random = @import("random.zig");
 pub const set = @import("set.zig");
 const slot_ring_mod = @import("slot_ring.zig");
+pub const sort = @import("sort.zig");
 pub const static_map = @import("static_map.zig");
 pub const stdio = @import("stdio.zig");
 pub const swiss = @import("swiss.zig");
 pub const time = @import("time.zig");
 pub const timers = @import("timers.zig");
-pub const wire = @import("wire.zig");
 pub const Uuid = @import("Uuid.zig");
+pub const wire = @import("wire.zig");
 
 /// Linux-only by design; the comptime branch prunes the import on other
 /// platforms so the package builds on darwin.
@@ -53,8 +54,6 @@ pub const pages = if (builtin.os.tag == .linux) pages_mod else void;
 /// Linux-only by design; the comptime branch prunes the import on other
 /// platforms so the package builds on darwin.
 pub const slot_ring = if (builtin.os.tag == .linux) slot_ring_mod else void;
-pub const sort = @import("sort.zig");
-
 test {
     std.testing.refAllDecls(@This());
 }
