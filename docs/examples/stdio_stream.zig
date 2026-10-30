@@ -11,6 +11,7 @@ test "a stream buffers until flush" {
 
     var stream: stdio.Stream = undefined;
     stream = .{
+        .buffer = undefined,
         .file_writer = .initStreaming(
             .{ .handle = fds[1], .flags = .{ .nonblocking = false } },
             std.testing.io,

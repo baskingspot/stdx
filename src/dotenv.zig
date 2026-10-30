@@ -113,7 +113,10 @@ pub const Diagnostics = struct {
 /// Options for `parse`.
 pub const ParseOptions = struct {
     /// Filled on a failed parse. Untouched when the parse succeeds.
-    diagnostics: ?*Diagnostics = null,
+    diagnostics: ?*Diagnostics,
+
+    /// A parse that reports no position.
+    pub const init: ParseOptions = .{ .diagnostics = null };
 };
 
 /// A parsed source: every entry in file order, duplicates included.
@@ -840,7 +843,7 @@ test "a successful parse leaves the caller's diagnostics untouched" {
 
     // A caller that wants no position passes no diagnostics, and still gets
     // the error.
-    try testing.expectError(error.InvalidKey, parse("A.b=1\n", &entries, &scratch, .{}));
+    try testing.expectError(error.InvalidKey, parse("A.b=1\n", &entries, &scratch, .init));
 }
 
 /// The largest source the fuzz test hands to `parse`. Its scratch is the same

@@ -518,7 +518,7 @@ pub fn Mpsc(comptime options: Options) type {
                     pos + 1,
                     .acq_rel,
                     .monotonic,
-                ) orelse return .{ .slot = slot, .pos = pos, .lap = lap };
+                ) orelse return .{ .slot = slot, .pos = pos, .lap = lap, .spent = false };
                 // Lost the race for this position: retry at the new
                 // head. No spin hint — it lowers to a full-barrier `isb`
                 // per failed attempt, measured at 35-37ns/claim against
@@ -539,7 +539,7 @@ pub fn Mpsc(comptime options: Options) type {
             /// Set by `commit`: a second commit can rewind the stamp
             /// after the consumer released the slot, wedging the ring
             /// permanently — the assert makes the misuse loud in Debug.
-            spent: bool = false,
+            spent: bool,
 
             /// A writer over the slot payload. `end` is the length to
             /// commit.

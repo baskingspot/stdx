@@ -31,25 +31,30 @@ pub const Error = error{
     UnterminatedBlockComment,
 };
 
-/// The position of a scrub failure, in the caller's source. The fields hold
-/// their defaults until a scrub fails.
+/// The position of a scrub failure, in the caller's source.
 pub const Diagnostics = struct {
     /// Byte offset of the opening `/*`.
-    offset: usize = 0,
+    offset: usize,
     /// 1-based line at `offset`.
-    line: usize = 1,
+    line: usize,
     /// 1-based column at `offset`.
-    column: usize = 1,
+    column: usize,
+
+    /// The state before any scrub runs: offset 0, line 1, column 1.
+    pub const init: Diagnostics = .{ .offset = 0, .line = 1, .column = 1 };
 };
 
 /// What the scrub accepts beyond JSON.
 pub const Options = struct {
     /// Accept `//` and `/* */` comments. When false, a comment byte reaches
     /// `std.json` unchanged and fails there.
-    comments: bool = true,
+    comments: bool,
     /// Accept a comma that follows a value and precedes `}` or `]`. When
     /// false, the comma reaches `std.json` unchanged and fails there.
-    trailing_commas: bool = true,
+    trailing_commas: bool,
+
+    /// JSON with comments and trailing commas: the format this module names.
+    pub const init: Options = .{ .comments = true, .trailing_commas = true };
 };
 
 /// An owned scrubbed copy of a source. Byte `i` of `bytes` is byte `i` of the
@@ -78,7 +83,7 @@ pub fn scrub(
     source: []const u8,
     options: Options,
 ) (Error || Allocator.Error)!Scrubbed {
-    var diagnostics: Diagnostics = .{};
+    var diagnostics: Diagnostics = .init;
     return scrubWithDiagnostics(allocator, source, options, &diagnostics);
 }
 
@@ -102,7 +107,7 @@ pub fn scrubWithDiagnostics(
 /// `error.UnterminatedBlockComment`, bytes before the opening `/*` may already
 /// be blanked.
 pub fn scrubInPlace(buffer: []u8, options: Options) Error!void {
-    var diagnostics: Diagnostics = .{};
+    var diagnostics: Diagnostics = .init;
     return scrubInPlaceWithDiagnostics(buffer, options, &diagnostics);
 }
 
@@ -112,7 +117,7 @@ pub fn scrubInPlaceWithDiagnostics(
     options: Options,
     diagnostics: *Diagnostics,
 ) Error!void {
-    diagnostics.* = .{};
+    diagnostics.* = .init;
 
     if (mem.startsWith(u8, buffer, bom)) @memset(buffer[0..bom.len], ' ');
 
@@ -325,7 +330,7 @@ test scrub {
         \\// A comment after it.
         \\/* And a block comment after it. */
     ;
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
 
     try testing.expectEqual(source.len, scrubbed.bytes.len);
@@ -349,7 +354,7 @@ test "a comment marker inside a string is not a comment" {
         \\    "quote": "a\"//b"
         \\}
     ;
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
     try testing.expectEqualStrings(source, scrubbed.bytes);
 
@@ -364,7 +369,7 @@ test "a comment marker inside a string is not a comment" {
 
 test "a comma that is not trailing stays a comma" {
     const source = "{\"a\": [1, 2, 3], \"b\": 4}";
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
     try testing.expectEqualStrings(source, scrubbed.bytes);
 }
@@ -383,7 +388,7 @@ test "a trailing comma before an object or an array close" {
         \\    ],
         \\}
     ;
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
 
     const doc = try json.parseFromSlice(json.Value, testing.allocator, scrubbed.bytes, .{});
@@ -398,7 +403,7 @@ test "a trailing comma before an object or an array close" {
 }
 
 test "a comma with no value before it stays for std.json to reject" {
-    var scrubbed = try scrub(testing.allocator, "[,]", .{});
+    var scrubbed = try scrub(testing.allocator, "[,]", .init);
     defer scrubbed.deinit();
     try testing.expectEqualStrings("[,]", scrubbed.bytes);
     try testing.expectError(
@@ -406,7 +411,7 @@ test "a comma with no value before it stays for std.json to reject" {
         json.parseFromSlice(json.Value, testing.allocator, scrubbed.bytes, .{}),
     );
 
-    var doubled = try scrub(testing.allocator, "[1,,]", .{});
+    var doubled = try scrub(testing.allocator, "[1,,]", .init);
     defer doubled.deinit();
     try testing.expectEqualStrings("[1,,]", doubled.bytes);
     try testing.expectError(
@@ -417,7 +422,7 @@ test "a comma with no value before it stays for std.json to reject" {
 
 test "a comment may contain a quote or a bracket" {
     const source = "{\"a\"/* a \" and a ] */: 1}";
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
     const doc = try json.parseFromSlice(json.Value, testing.allocator, scrubbed.bytes, .{});
     defer doc.deinit();
@@ -428,10 +433,10 @@ test "an unterminated block comment reports its position" {
     const source = "{\n  \"a\": 1,\n  /* open\n}";
     const offset = mem.find(u8, source, "/*").?;
 
-    var diagnostics: Diagnostics = .{};
+    var diagnostics: Diagnostics = .init;
     try testing.expectError(
         error.UnterminatedBlockComment,
-        scrubWithDiagnostics(testing.allocator, source, .{}, &diagnostics),
+        scrubWithDiagnostics(testing.allocator, source, .init, &diagnostics),
     );
     try testing.expectEqual(offset, diagnostics.offset);
     try testing.expectEqual(@as(usize, 3), diagnostics.line);
@@ -440,17 +445,17 @@ test "an unterminated block comment reports its position" {
 
 test "an unterminated comment in the trailing-comma scan reports its position" {
     const source = "[1, /* open";
-    var diagnostics: Diagnostics = .{};
+    var diagnostics: Diagnostics = .init;
     try testing.expectError(
         error.UnterminatedBlockComment,
-        scrubWithDiagnostics(testing.allocator, source, .{}, &diagnostics),
+        scrubWithDiagnostics(testing.allocator, source, .init, &diagnostics),
     );
     try testing.expectEqual(mem.find(u8, source, "/*").?, diagnostics.offset);
 }
 
 test "an unterminated string is left to std.json" {
     const source = "{\"a\": \"open";
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
     try testing.expectEqualStrings(source, scrubbed.bytes);
     try testing.expectError(
@@ -461,7 +466,7 @@ test "an unterminated string is left to std.json" {
 
 test "a UTF-8 BOM at offset 0 is blanked" {
     const source = "\xEF\xBB\xBF{\"a\": 1}";
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
 
     try testing.expectEqual(source.len, scrubbed.bytes.len);
@@ -473,7 +478,7 @@ test "a UTF-8 BOM at offset 0 is blanked" {
 
 test "CRLF keeps every line ending" {
     const source = "{\r\n    // a comment\r\n    \"a\": 1, // trailing\r\n}";
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
 
     try testing.expectEqual(
@@ -487,7 +492,7 @@ test "CRLF keeps every line ending" {
 
 test "a bare carriage return ends a line comment" {
     const source = "// a comment\r{\"a\": 1}";
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
     const doc = try json.parseFromSlice(json.Value, testing.allocator, scrubbed.bytes, .{});
     defer doc.deinit();
@@ -496,7 +501,10 @@ test "a bare carriage return ends a line comment" {
 
 test "comments off leaves a comment for std.json" {
     const source = "{\"a\": 1} // a comment";
-    var scrubbed = try scrub(testing.allocator, source, .{ .comments = false });
+    var scrubbed = try scrub(testing.allocator, source, .{
+        .comments = false,
+        .trailing_commas = true,
+    });
     defer scrubbed.deinit();
     try testing.expectEqualStrings(source, scrubbed.bytes);
     try testing.expectError(
@@ -507,7 +515,10 @@ test "comments off leaves a comment for std.json" {
 
 test "trailing commas off leaves the comma for std.json" {
     const source = "[1,]";
-    var scrubbed = try scrub(testing.allocator, source, .{ .trailing_commas = false });
+    var scrubbed = try scrub(testing.allocator, source, .{
+        .trailing_commas = false,
+        .comments = true,
+    });
     defer scrubbed.deinit();
     try testing.expectEqualStrings(source, scrubbed.bytes);
     try testing.expectError(
@@ -518,7 +529,7 @@ test "trailing commas off leaves the comma for std.json" {
 
 test "plain JSON is unchanged" {
     const source = "{\"a\": [1, 2, 3], \"b\": true}";
-    var with_extensions = try scrub(testing.allocator, source, .{});
+    var with_extensions = try scrub(testing.allocator, source, .init);
     defer with_extensions.deinit();
     try testing.expectEqualStrings(source, with_extensions.bytes);
 
@@ -538,7 +549,7 @@ test "every byte keeps its offset" {
         \\    comment */ "b": [1, 2,]
         \\}
     ;
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
 
     try testing.expectEqual(source.len, scrubbed.bytes.len);
@@ -558,7 +569,7 @@ test "a JSON error keeps its line and column" {
         \\    "c": 3
         \\}
     ;
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
 
     var diagnostics: json.Diagnostics = .{};
@@ -585,9 +596,9 @@ test "scrub is idempotent" {
         \\// leading
         \\{"a": [1,], /* middle */ "b": "// string"}
     ;
-    var once = try scrub(testing.allocator, source, .{});
+    var once = try scrub(testing.allocator, source, .init);
     defer once.deinit();
-    var twice = try scrub(testing.allocator, once.bytes, .{});
+    var twice = try scrub(testing.allocator, once.bytes, .init);
     defer twice.deinit();
     try testing.expectEqualStrings(once.bytes, twice.bytes);
 }
@@ -601,9 +612,9 @@ test "scrubInPlace matches scrub" {
     ;
     var buffer: [source.len]u8 = undefined;
     @memcpy(buffer[0..], source);
-    try scrubInPlace(&buffer, .{});
+    try scrubInPlace(&buffer, .init);
 
-    var scrubbed = try scrub(testing.allocator, source, .{});
+    var scrubbed = try scrub(testing.allocator, source, .init);
     defer scrubbed.deinit();
     try testing.expectEqualStrings(scrubbed.bytes, &buffer);
 }
@@ -623,7 +634,7 @@ test "parseFromSlice owns the scrubbed copy" {
         port: u16,
         tags: []const []const u8,
     };
-    var parsed = try parseFromSlice(Config, testing.allocator, source, .{}, .{});
+    var parsed = try parseFromSlice(Config, testing.allocator, source, .init, .{});
     defer parsed.deinit();
 
     try testing.expectEqualStrings("gateway", parsed.value.name);
@@ -636,11 +647,11 @@ test "parseFromSlice owns the scrubbed copy" {
 test "parseFromSlice frees the scrub on a failure" {
     try testing.expectError(
         error.SyntaxError,
-        parseFromSlice(json.Value, testing.allocator, "{\"a\": }", .{}, .{}),
+        parseFromSlice(json.Value, testing.allocator, "{\"a\": }", .init, .{}),
     );
     try testing.expectError(
         error.UnterminatedBlockComment,
-        parseFromSlice(json.Value, testing.allocator, "{\"a\": 1 /*", .{}, .{}),
+        parseFromSlice(json.Value, testing.allocator, "{\"a\": 1 /*", .init, .{}),
     );
 }
 
@@ -654,11 +665,11 @@ test "fuzz scrub never panics and keeps the layout" {
             var input: [256]u8 = undefined;
             smith.bytes(&input);
 
-            var diagnostics: Diagnostics = .{};
+            var diagnostics: Diagnostics = .init;
             var scrubbed = scrubWithDiagnostics(
                 testing.allocator,
                 &input,
-                .{},
+                .init,
                 &diagnostics,
             ) catch |err| {
                 try testing.expectEqual(error.UnterminatedBlockComment, err);
@@ -676,10 +687,10 @@ test "fuzz scrub never panics and keeps the layout" {
             }
 
             var in_place = input;
-            try scrubInPlace(&in_place, .{});
+            try scrubInPlace(&in_place, .init);
             try testing.expectEqualStrings(scrubbed.bytes, &in_place);
 
-            var again = try scrub(testing.allocator, scrubbed.bytes, .{});
+            var again = try scrub(testing.allocator, scrubbed.bytes, .init);
             defer again.deinit();
             try testing.expectEqualStrings(scrubbed.bytes, again.bytes);
         }

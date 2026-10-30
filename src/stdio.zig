@@ -30,7 +30,7 @@ const posix = std.posix;
 /// appends a newline. The first failed write latches the writer's
 /// failure mode, and later writes drop.
 pub const Stream = struct {
-    buffer: [4096]u8 = undefined,
+    buffer: [4096]u8,
     file_writer: Io.File.Writer,
 
     /// The `*Io.Writer` behind the stream, for the interfaces that take one.
@@ -59,8 +59,14 @@ pub const Stream = struct {
     }
 };
 
-var err_instance: Stream = .{ .file_writer = .initStreaming(.stderr(), io, &err_instance.buffer) };
-var out_instance: Stream = .{ .file_writer = .initStreaming(.stdout(), io, &out_instance.buffer) };
+var err_instance: Stream = .{
+    .buffer = undefined,
+    .file_writer = .initStreaming(.stderr(), io, &err_instance.buffer),
+};
+var out_instance: Stream = .{
+    .buffer = undefined,
+    .file_writer = .initStreaming(.stdout(), io, &out_instance.buffer),
+};
 
 /// The process's stderr.
 pub const err: *Stream = &err_instance;
@@ -87,6 +93,7 @@ test Stream {
 
     var stream: Stream = undefined;
     stream = .{
+        .buffer = undefined,
         .file_writer = .initStreaming(
             .{ .handle = fds[1], .flags = .{ .nonblocking = false } },
             test_io,

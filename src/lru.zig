@@ -56,9 +56,14 @@ pub fn Custom(
             value: *V,
         };
 
+        /// What one `put` displaced. `replaced` is the old value for the
+        /// same key; `evicted` is the entry the capacity bound pushed out.
         pub const PutResult = struct {
-            replaced: ?V = null,
-            evicted: ?Entry = null,
+            replaced: ?V,
+            evicted: ?Entry,
+
+            /// A put that replaced and evicted nothing.
+            pub const empty: PutResult = .{ .replaced = null, .evicted = null };
         };
 
         const none = math.maxInt(Index);
@@ -85,6 +90,19 @@ pub fn Custom(
             .next_free = 0,
         };
 
+        /// A cache with no entries and a default-initialized context, for
+        /// stateless contexts such as `Auto`'s and `String`'s. Use
+        /// `initContext` when the context carries state.
+        pub const init: Self = .{
+            .map = .init,
+            .nodes = undefined,
+            .head = none,
+            .tail = none,
+            .free_head = none,
+            .next_free = 0,
+        };
+
+        /// A cache with no entries and the given context.
         pub fn initContext(context: Context) Self {
             return .{
                 .map = .initContext(context),
@@ -127,10 +145,10 @@ pub fn Custom(
                 const old = self.nodes[index].entry.value;
                 self.nodes[index].entry.value = value;
                 self.moveToFront(index);
-                return .{ .replaced = old };
+                return .{ .replaced = old, .evicted = null };
             }
 
-            var result: PutResult = .{};
+            var result: PutResult = .empty;
             const index: Index = if (self.map.count() == capacity) evict: {
                 const tail = self.tail;
                 assert(tail != none);
@@ -278,6 +296,13 @@ pub fn Auto(comptime K: type, comptime V: type, buffer_capacity: comptime_int) t
 
 pub fn String(comptime V: type, buffer_capacity: comptime_int) type {
     return Custom([]const u8, V, StringContext, buffer_capacity);
+}
+
+test "init carries a default context" {
+    var cache: String(u32, 2) = .init;
+    try testing.expectEqual(@as(usize, 0), cache.count());
+    _ = cache.put("a", 1);
+    try testing.expectEqual(@as(?u32, 1), cache.get("a").?.*);
 }
 
 test "put, get, eviction, and replacement" {

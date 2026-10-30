@@ -79,12 +79,20 @@ Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
   parse errors through rather than collapsing them.
 - Constructors are named, never a bare `.{}`: a collection or
   value type either carries a `pub const init: Self = .{ ... }` with
-  the defaults spelled out (or `empty` when the default is empty), or
-  a `pub fn init(...)` when there are variables to set. The fields
+  the defaults spelled out (`empty`/`zero` when the default is empty
+  or all-zero; `default` where `init` is already a function), or a
+  `pub fn init(...)` when there are variables to set. The fields
   themselves stay required — no defaults — so a bare `.{}` or a
   partial literal does not compile. This is std's direction
   (`std.array_hash_map`'s `init`/`empty`, `std.PriorityQueue.empty`):
   the type system enforces the constructor, not convention.
+
+  Comptime config is the one exception: a `Config`/`Options` struct
+  that a caller passes to a type constructor or a comptime parameter
+  keeps its field defaults, because the call site overrides one knob
+  and leaves the rest (`slot_ring.Mpsc(.{ .slot_size = 4096 })`). A
+  runtime options value follows the rule and takes `init`.
+
 - Every operation that fails a bound in every build mode has an
   unchecked form. The checked form returns `error.NoSpaceLeft` or
   panics. The unchecked form asserts the same bound: it panics in

@@ -19,7 +19,7 @@ test "read a config file with comments" {
         \\    "tags": ["edge", "internal",],
         \\}
     ;
-    var config = try jsonc.parseFromSlice(Config, std.testing.allocator, source, .{}, .{});
+    var config = try jsonc.parseFromSlice(Config, std.testing.allocator, source, .init, .{});
     defer config.deinit();
 
     try std.testing.expectEqualStrings("gateway", config.value.name);

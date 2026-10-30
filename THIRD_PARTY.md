@@ -10,11 +10,11 @@ Upstream: Zig 0.16.0 `std`.
 License: MIT, "Copyright (c) Zig contributors". The full license text is
 reproduced in `LICENSE-ZIG`, per its terms.
 
-| File                  | Upstream                                                            | Adaptation                                                                                                                                                                        |
-| --------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/multi_array.zig` | `std.MultiArrayList`                                                | The `Element` tagged-union representation, the `SortContext` adapter, and the struct-of-arrays design. Storage here is embedded and comptime-shaped rather than heap-allocated.   |
-| `src/posix.zig`       | `std.Io.Threaded` (private `address4FromPosix` / `address4ToPosix`) | The `sockaddr_in` ↔ `Ip4Address` conversion: network-endian port, `@bitCast` octets.                                                                                              |
-| `src/stability.zig`   | `std.debug.SafetyLock`, Zig master after 0.16.0                     | Copied, plus a file comment. Two lines move the shared counter with `@intFromEnum` / `@enumFromInt` because 0.16 has no `@backingInt`. 0.16's own `SafetyLock` is exclusive only. |
+| File                  | Upstream                                                            | Adaptation                                                                                                                                                                                               |
+| --------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/multi_array.zig` | `std.MultiArrayList`                                                | The `Element` tagged-union representation, the `SortContext` adapter, and the struct-of-arrays design. Storage here is embedded and comptime-shaped rather than heap-allocated.                          |
+| `src/posix.zig`       | `std.Io.Threaded` (private `address4FromPosix` / `address4ToPosix`) | The `sockaddr_in` ↔ `Ip4Address` conversion: network-endian port, `@bitCast` octets.                                                                                                                     |
+| `src/stability.zig`   | `std.debug.SafetyLock`, Zig master after 0.16.0                     | Copied, plus a file comment and an `init` constant. Two lines move the shared counter with `@intFromEnum` / `@enumFromInt` because 0.16 has no `@backingInt`. 0.16's own `SafetyLock` is exclusive only. |
 
 ## rapidhash
 

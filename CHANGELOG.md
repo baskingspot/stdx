@@ -57,7 +57,26 @@ All notable changes to stdx are recorded here. The format follows
   exhaustive. `enums.stringToEnum` matches enum field names like
   `std.meta.stringToEnum`, with fixed-length loads.
 
+- `set.Custom`, `set.Auto`, and `set.String` expose `capacity`, the bound
+  every other fixed-capacity container already publishes.
+
+- `btree` and `lru` gain `init`: a value with a default-initialized
+  context, beside `empty` (undefined context) and `initContext` (caller's
+  context). `priority_queue` keeps `empty` and `initContext`, because its
+  usual context is `void`, which has no default to initialize.
+  `lru.PutResult.empty` is the result of a put that replaced and evicted
+  nothing.
+
 ### Changed
+
+- Public structs no longer accept a bare `.{}`. A value type names its
+  constructor (`init`, `empty`, `zero`, or `default`) and requires every
+  field, so `btree.Iterator`, `slot_ring.Lease`, `stdio.Stream`,
+  `time.RateLimit`, `jsonc.Options`, `jsonc.Diagnostics`,
+  `dotenv.ParseOptions`, and `lru.PutResult` lost their field defaults. A
+  struct literal must now set every field; use the constructor. Comptime
+  config structs keep their defaults: a call site overrides one knob and
+  leaves the rest.
 
 - `net.Ip4.parse` takes a fixed-window SWAR fast path for canonical dotted
   quads. On a 1M-address random corpus the fast path measured 6.8 ns per

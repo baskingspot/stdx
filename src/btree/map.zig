@@ -236,10 +236,10 @@ pub fn Custom(
         root: ?Node,
         /// Debug and ReleaseSafe only: while a borrow is outstanding, every
         /// call that can move or free an entry asserts instead.
-        pointer_stability: stability.SafetyLock = .{},
+        pointer_stability: stability.SafetyLock,
         /// Length of the prefix every key in the map shares, kept in step
         /// with the extremes.
-        shared_prefix: u16 = 0,
+        shared_prefix: u16,
         /// Smallest key in the map, the outer fence of the left spine.
         lowest: ?K,
         /// Largest key in the map, the outer fence of the right spine.
@@ -253,9 +253,24 @@ pub fn Custom(
         pub const empty: Self = .{
             .used = 0,
             .root = null,
+            .pointer_stability = .init,
+            .shared_prefix = 0,
             .lowest = null,
             .highest = null,
             .context = undefined,
+        };
+
+        /// A map with no entries and a default-initialized context, for
+        /// stateless contexts such as `Auto`'s and `String`'s. Use
+        /// `initContext` when the comparator reads the context.
+        pub const init: Self = .{
+            .used = 0,
+            .root = null,
+            .pointer_stability = .init,
+            .shared_prefix = 0,
+            .lowest = null,
+            .highest = null,
+            .context = .{},
         };
 
         /// A map with no entries and the given context.
@@ -263,6 +278,8 @@ pub fn Custom(
             return .{
                 .used = 0,
                 .root = null,
+                .pointer_stability = .init,
+                .shared_prefix = 0,
                 .lowest = null,
                 .highest = null,
                 .context = context,
@@ -459,7 +476,7 @@ pub fn Custom(
 
         /// Iterate entries in ascending key order.
         pub fn iterator(self: *const Self) Iterator {
-            var it: Iterator = .{ .depth = 0 };
+            var it: Iterator = .{ .frames = undefined, .depth = 0 };
             if (self.root) |root| it.descend(root, 0);
             return it;
         }
@@ -469,7 +486,7 @@ pub fn Custom(
         /// is not in the map starts at the next larger key. The iterator is
         /// empty when `key` is greater than the map's largest stored key.
         pub fn iteratorFrom(self: *const Self, key: K, inclusive: bool) Iterator {
-            var it: Iterator = .{ .depth = 0 };
+            var it: Iterator = .{ .frames = undefined, .depth = 0 };
             var node = self.root orelse return it;
             // A key outside the map's range does not share the prefix the
             // windows are taken at, so its search position means nothing.
@@ -1238,7 +1255,7 @@ pub fn Custom(
         /// mutation while the iterator is live is a use-after-free; bracket
         /// the walk with `lockPointers` to make that assert.
         pub const Iterator = struct {
-            frames: [max_depth]IterFrame = undefined,
+            frames: [max_depth]IterFrame,
             depth: usize,
 
             const IterFrame: type = struct { node: Node, index: usize };
@@ -1528,6 +1545,14 @@ test "empty map" {
     try testing.expectEqual(@as(usize, 0), map.count());
     try testing.expectEqual(@as(?u64, null), map.get(1));
     try testing.expect(map.first() == null);
+    try map.checkInvariants();
+}
+
+test "init carries a default context" {
+    var map: Auto(u64, u64) = .init;
+    defer map.clearAndFree(testing.allocator);
+    try testing.expect(map.isEmpty());
+    try testing.expectEqual(@as(?u64, null), map.get(1));
     try map.checkInvariants();
 }
 

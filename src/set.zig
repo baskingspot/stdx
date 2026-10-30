@@ -16,12 +16,14 @@ const map_mod = @import("bounded_array_hash_map.zig");
 /// The underlying bounded map's constructors, `Custom`/`Auto`/`String`
 /// wrapped in set vocabulary: `add`/`remove`/`contains` over a
 /// `V = void` map, plus the algebra.
-pub fn Custom(comptime K: type, comptime Context: type, capacity: comptime_int) type {
+pub fn Custom(comptime K: type, comptime Context: type, buffer_capacity: comptime_int) type {
     return struct {
         const Self = @This();
 
-        pub const Map = map_mod.Custom(K, void, Context, capacity);
+        pub const Map = map_mod.Custom(K, void, Context, buffer_capacity);
         pub const Index = Map.Index;
+        /// Maximum number of keys the set can hold.
+        pub const capacity: Index = Map.capacity;
 
         map: Map,
 
@@ -133,16 +135,17 @@ pub fn Custom(comptime K: type, comptime Context: type, capacity: comptime_int) 
     };
 }
 
-pub fn Auto(comptime K: type, capacity: comptime_int) type {
-    return Custom(K, std.hash_map.AutoContext(K), capacity);
+pub fn Auto(comptime K: type, buffer_capacity: comptime_int) type {
+    return Custom(K, std.hash_map.AutoContext(K), buffer_capacity);
 }
 
-pub fn String(comptime capacity: comptime_int) type {
-    return Custom([]const u8, std.hash_map.StringContext, capacity);
+pub fn String(comptime buffer_capacity: comptime_int) type {
+    return Custom([]const u8, std.hash_map.StringContext, buffer_capacity);
 }
 
 test "add, contains, remove, count" {
     var set: Auto(u32, 8) = .empty;
+    try testing.expectEqual(@as(usize, 8), Auto(u32, 8).capacity);
     try testing.expect(set.addAssumeCapacity(1));
     try testing.expect(set.addAssumeCapacity(2));
     // duplicate: no count change

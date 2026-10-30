@@ -4,10 +4,10 @@
 //!
 //! Vendored from `lib/std/debug.zig` on the Zig master branch (MIT, Zig
 //! contributors; see `LICENSE-ZIG` and `THIRD_PARTY.md`). The additions are
-//! this comment, and the two lines that move the counter: master writes
-//! `@backingInt`/`@fromBackingInt`, which 0.16 does not have, so they are
-//! `@intFromEnum`/`@enumFromInt` here. When the pinned toolchain ships the
-//! shared form, this file becomes `pub const SafetyLock =
+//! this comment, an `init` constant, and the two lines that move the counter:
+//! master writes `@backingInt`/`@fromBackingInt`, which 0.16 does not have, so
+//! they are `@intFromEnum`/`@enumFromInt` here. When the pinned toolchain
+//! ships the shared form, this file becomes `pub const SafetyLock =
 //! std.debug.SafetyLock;` with no change at the call sites.
 //!
 //! A container carries one as `pointer_stability`. `lockPointers` takes a
@@ -24,7 +24,10 @@ const assert = std.debug.assert;
 const math = std.math;
 
 pub const SafetyLock = struct {
-    state: State = if (runtime_safety) .unlocked else .unknown,
+    state: State,
+
+    /// A lock with nobody holding it.
+    pub const init: SafetyLock = .{ .state = if (runtime_safety) .unlocked else .unknown };
 
     pub const State = if (runtime_safety) enum(usize) {
         unlocked = 0,
@@ -83,7 +86,7 @@ pub const SafetyLock = struct {
 };
 
 test SafetyLock {
-    var safety_lock: SafetyLock = .{};
+    var safety_lock: SafetyLock = .init;
     safety_lock.assertUnlocked();
     safety_lock.lock();
     safety_lock.assertLocked();

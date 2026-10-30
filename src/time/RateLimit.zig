@@ -13,19 +13,20 @@ const assert = std.debug.assert;
 const RateLimit = @This();
 
 /// The earliest time the next line may go out.
-next_ms: u64 = 0,
+next_ms: u64,
 /// Lines held back since the last one that went out.
-suppressed: u32 = 0,
+suppressed: u32,
 
 interval_ms: u32,
 
-pub const default: RateLimit = .{ .interval_ms = 1_000 };
+/// A one-second interval, with no line sent and nothing held back yet.
+pub const default: RateLimit = .{ .next_ms = 0, .suppressed = 0, .interval_ms = 1_000 };
 
 pub fn init(interval: Io.Duration) RateLimit {
     const ms = interval.toMilliseconds();
     assert(ms >= 0);
     assert(ms < math.maxInt(u32));
-    return .{ .interval_ms = @intCast(ms) };
+    return .{ .next_ms = 0, .suppressed = 0, .interval_ms = @intCast(ms) };
 }
 
 /// Null: hold this line back. Otherwise log it, with the returned count of
