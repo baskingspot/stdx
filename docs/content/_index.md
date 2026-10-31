@@ -416,7 +416,7 @@ A `.env` file is text that a deploy step writes and a program reads. The format 
 
 `dotenv.parse` takes the source bytes, an array of entries, a scratch buffer for the escape bytes of double-quoted values, and `ParseOptions`. It returns a `Doc` value. On failure it returns one of `Error`.
 
-Set the `diagnostics` field in `ParseOptions` to a `Diagnostics` value to receive the position of a failure. A successful parse does not touch that value, and a caller that wants no position passes `.init`.
+Set the `diagnostics` field in `ParseOptions` to a `Diagnostics` value to receive the position of a failure. A successful parse does not touch that value, and a caller that wants no position passes `.{}`.
 
 A key, an unquoted value, and a quoted value without escapes are slices of the source. Only an escaped value is copied, into the scratch buffer. A source of `n` bytes never needs more than `n` bytes of scratch.
 
@@ -450,7 +450,7 @@ The copy has the same length as the source. Every byte keeps its offset, so a `s
 {{ load_data(path="examples/jsonc_config.zig", format="plain") | trim_end }}
 ```
 
-Both extensions are on by default, which is `Options.init`. Set `comments` or `trailing_commas` to false in `Options` to reject that extension. With both false, the scrub still blanks a UTF-8 BOM and changes nothing else.
+Both extensions are on by default. Set `comments` or `trailing_commas` to false in `Options` to reject that extension. With both false, the scrub still blanks a UTF-8 BOM and changes nothing else.
 
 ## Keep byte offsets
 

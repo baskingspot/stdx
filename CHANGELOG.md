@@ -72,10 +72,10 @@ All notable changes to stdx are recorded here. The format follows
 - Public structs no longer accept a bare `.{}`. A value type names its
   constructor (`init`, `empty`, `zero`, or `default`) and requires every
   field, so `btree.Iterator`, `slot_ring.Lease`, `stdio.Stream`,
-  `time.RateLimit`, `jsonc.Options`, `jsonc.Diagnostics`,
-  `dotenv.ParseOptions`, and `lru.PutResult` lost their field defaults. A
-  struct literal must now set every field; use the constructor. Comptime
-  config structs keep their defaults: a call site overrides one knob and
+  `time.RateLimit`, `jsonc.Diagnostics`, and `lru.PutResult` lost their
+  field defaults. A struct literal must now set every field; use the
+  constructor. Options bags (`jsonc.Options`, `dotenv.ParseOptions`) keep
+  their defaults, runtime or comptime: a call site overrides one knob and
   leaves the rest.
 
 - `net.Ip4.parse` takes a fixed-window SWAR fast path for canonical dotted

@@ -14,7 +14,7 @@ test "an error points at the source position" {
     ;
     var buffer: [source.len]u8 = undefined;
     @memcpy(buffer[0..], source);
-    try jsonc.scrubInPlace(&buffer, .init);
+    try jsonc.scrubInPlace(&buffer, .{});
 
     var diagnostics: std.json.Diagnostics = .{};
     var scanner = std.json.Scanner.initCompleteInput(std.testing.allocator, &buffer);
