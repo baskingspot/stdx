@@ -35,7 +35,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 ## Install
 
 ```sh
-zig fetch --save https://baskingspot.dev/stdx/v0.1.0.tar.gz
+zig fetch --save https://baskingspot.dev/stdx/v0.2.0.tar.gz
 ```
 
 Add the module to your build:
