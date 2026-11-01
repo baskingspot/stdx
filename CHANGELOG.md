@@ -5,6 +5,8 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-01
+
 ### Fixed
 
 - `BoundedWriter`: grow the buffer with the same super-linear growth as
