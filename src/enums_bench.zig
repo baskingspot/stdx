@@ -4,6 +4,7 @@
 //! byte changed (a same-length miss), and lengths no keyword has.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const mem = std.mem;
 
 const stdx = @import("stdx");
@@ -56,25 +57,25 @@ const three_names = .{ "transaction", "session", "statement" };
 
 fn eqlThree(str: []const u8) u8 {
     inline for (three) |kv| {
-        if (mem.eql(u8, str, kv[0])) return @intFromEnum(kv[1]);
+        if (mem.eql(u8, str, kv[0])) return compat.enumToInt(kv[1]);
     }
-    return @intFromEnum(Mode.unknown);
+    return compat.enumToInt(Mode.unknown);
 }
 
 const static_three = std.StaticStringMap(Mode).initComptime(three);
 
 fn staticMapThree(str: []const u8) u8 {
-    return @intFromEnum(static_three.get(str) orelse Mode.unknown);
+    return compat.enumToInt(static_three.get(str) orelse Mode.unknown);
 }
 
 const openThree = enums.Open(three_names);
 
 fn matchThree(str: []const u8) u8 {
-    return @intFromEnum(openThree.match(str));
+    return compat.enumToInt(openThree.match(str));
 }
 
 fn toEnumThree(str: []const u8) u8 {
-    return @intFromEnum(enums.stringToEnum(Mode, str) orelse Mode.unknown);
+    return compat.enumToInt(enums.stringToEnum(Mode, str) orelse Mode.unknown);
 }
 
 pub fn benchmarkEqlThree(b: *testingx.B) !void {
@@ -141,25 +142,25 @@ const sixteen_names = .{
 
 fn eqlSixteen(str: []const u8) u8 {
     inline for (sixteen) |kv| {
-        if (mem.eql(u8, str, kv[0])) return @intFromEnum(kv[1]);
+        if (mem.eql(u8, str, kv[0])) return compat.enumToInt(kv[1]);
     }
-    return @intFromEnum(Mode16.unknown);
+    return compat.enumToInt(Mode16.unknown);
 }
 
 const static_sixteen = std.StaticStringMap(Mode16).initComptime(sixteen);
 
 fn staticMapSixteen(str: []const u8) u8 {
-    return @intFromEnum(static_sixteen.get(str) orelse Mode16.unknown);
+    return compat.enumToInt(static_sixteen.get(str) orelse Mode16.unknown);
 }
 
 const openSixteen = enums.Open(sixteen_names);
 
 fn matchSixteen(str: []const u8) u8 {
-    return @intFromEnum(openSixteen.match(str));
+    return compat.enumToInt(openSixteen.match(str));
 }
 
 fn toEnumSixteen(str: []const u8) u8 {
-    return @intFromEnum(enums.stringToEnum(Mode16, str) orelse Mode16.unknown);
+    return compat.enumToInt(enums.stringToEnum(Mode16, str) orelse Mode16.unknown);
 }
 
 pub fn benchmarkEqlSixteen(b: *testingx.B) !void {

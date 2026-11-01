@@ -12,6 +12,7 @@
 //! still a UUID.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const Io = std.Io;
 const fmt = std.fmt;
 const mem = std.mem;
@@ -49,7 +50,7 @@ pub const Version = enum(u4) {
 };
 
 pub fn version(self: Uuid) Version {
-    return @enumFromInt(self.bytes[6] >> 4);
+    return compat.enumFromInt(Version, self.bytes[6] >> 4);
 }
 
 /// Generate a v4 (random) UUID. Six bits are fixed: version 4, variant 10.
@@ -171,5 +172,5 @@ test Uuid {
 
     // Unknown versions parse: a future UUID is still a UUID.
     const future: Uuid = try .parse("f81d4fae-7dec-91d0-a765-00a0c91e6bf6");
-    try testing.expectEqual(@as(u4, 9), @intFromEnum(future.version()));
+    try testing.expectEqual(@as(u4, 9), compat.enumToInt(future.version()));
 }

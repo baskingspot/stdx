@@ -647,7 +647,7 @@ test Queue {
     queue.secureZero();
     try testing.expect(queue.isEmpty());
     try testing.expectEqual(@as(usize, 8), queue.unusedCapacityLen());
-    try testing.expectEqualSlices(u8, &([_]u8{0} ** 8), &storage);
+    try testing.expectEqualSlices(u8, &[8]u8{ 0, 0, 0, 0, 0, 0, 0, 0 }, &storage);
 
     // Non-scalar elements: the cursor math is in elements, not bytes.
     const Pair = struct { key: u32, value: u8 };

@@ -20,6 +20,7 @@
 //! timer, including its own.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const testing = std.testing;
 const Io = std.Io;
 const Order = std.math.Order;
@@ -162,7 +163,7 @@ pub const Timers = struct {
     /// callback's first parameter is a record pointer, and passes
     /// nothing for `void`.
     fn wrapCallback(comptime cb: anytype) Callback {
-        const record_type = @typeInfo(@TypeOf(cb)).@"fn".params[0].type.?;
+        const record_type = compat.fnParamType(@TypeOf(cb), 0).?;
         if (record_type != void) {
             return (struct {
                 fn wrapper(timers: *Timers, timer: *Timer) Action {

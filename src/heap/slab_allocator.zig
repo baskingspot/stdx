@@ -13,6 +13,7 @@
 //! `deinit`.
 
 const std = @import("std");
+const compat = @import("../compat.zig");
 const heap = std.heap;
 const mem = std.mem;
 const Alignment = mem.Alignment;
@@ -278,8 +279,10 @@ test "runtime-safety accounting tracks pooled and fallback allocations" {
 
 test "does not retain a direct allocator field" {
     const TestSlab = SlabAllocator(.{ .size_classes = &.{.{ .size = 8 }} });
-    inline for (@typeInfo(TestSlab).@"struct".fields) |field| {
-        try testing.expect(field.type != Allocator);
+    const info = @typeInfo(TestSlab).@"struct";
+    const count = comptime compat.fieldCount(info);
+    inline for (0..count) |i| {
+        try testing.expect(comptime compat.FieldType(info, i) != Allocator);
     }
 }
 

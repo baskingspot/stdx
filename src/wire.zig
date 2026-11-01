@@ -16,6 +16,7 @@
 //! the unchecked forms so it does not branch on every field.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const assert = std.debug.assert;
 const testing = std.testing;
 const writeInt = std.mem.writeInt;
@@ -114,7 +115,10 @@ pub fn Writer(comptime endian: std.builtin.Endian) type {
                     writeInt(T, self.destination(n), value, endian);
                     self.end += n;
                 },
-                .@"enum" => |info| self.appendAssumeCapacity(info.tag_type, @intFromEnum(value)),
+                .@"enum" => |info| self.appendAssumeCapacity(
+                    info.tag_type,
+                    compat.enumToInt(value),
+                ),
                 else => @compileError("wire.Writer.append: unsupported type " ++ @typeName(T)),
             }
         }
@@ -236,11 +240,11 @@ pub fn Reader(comptime endian: std.builtin.Endian) type {
                     return value;
                 },
                 .@"enum" => |info| {
-                    if (info.is_exhaustive) @compileError(
+                    if (comptime compat.enumIsExhaustive(info)) @compileError(
                         "wire.Reader: enum " ++ @typeName(T) ++ " must be non-exhaustive, " ++
                             "so the caller validates an unknown tag",
                     );
-                    return @enumFromInt(self.assumeRead(info.tag_type));
+                    return compat.enumFromInt(T, self.assumeRead(info.tag_type));
                 },
                 else => @compileError("wire.Reader: unsupported type " ++ @typeName(T)),
             }
@@ -521,7 +525,7 @@ test Reader {
     var kind_bytes: Big = .init(&.{ 0x01, 0x02, 0x99, 0x99 });
     try testing.expectEqual(Kind.data, try kind_bytes.read(Kind));
     const unknown = try kind_bytes.read(Kind);
-    try testing.expectEqual(@as(u16, 0x9999), @intFromEnum(unknown));
+    try testing.expectEqual(@as(u16, 0x9999), compat.enumToInt(unknown));
 
     // The unchecked forms take the same path once the bound holds.
     var assumed: Big = .init(&.{ 0x01, 0x02, 0x03, 0x04 });

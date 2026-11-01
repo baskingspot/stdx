@@ -39,6 +39,7 @@
 //! fixed-length loads.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const testing = std.testing;
 const math = std.math;
 const mem = std.mem;
@@ -67,7 +68,7 @@ pub fn Open(comptime names: anytype) type {
         };
 
         /// The value `match` returns for bytes that are not a name.
-        pub const miss: Tag = @enumFromInt(names.len);
+        pub const miss: Tag = compat.enumFromInt(Tag, names.len);
 
         /// The names, in the order of the literal.
         pub const keys: []const []const u8 = keys: {
@@ -82,7 +83,7 @@ pub fn Open(comptime names: anytype) type {
 
         /// The tag for `value`, or `miss`.
         pub fn match(value: []const u8) Tag {
-            if (indexOf(keys, value)) |i| return @enumFromInt(i);
+            if (indexOf(keys, value)) |i| return compat.enumFromInt(Tag, i);
             return miss;
         }
 
@@ -142,7 +143,7 @@ pub fn Closed(comptime names: anytype, comptime fallback: []const u8) type {
 
         /// The tag for `value`, or `miss`.
         pub fn match(value: []const u8) Tag {
-            if (indexOf(keys, value)) |i| return @enumFromInt(i);
+            if (indexOf(keys, value)) |i| return compat.enumFromInt(Tag, i);
             return miss;
         }
 
@@ -157,21 +158,22 @@ pub fn Closed(comptime names: anytype, comptime fallback: []const u8) type {
 /// `std.meta.stringToEnum`, with fixed-length loads.
 pub fn stringToEnum(comptime E: type, value: []const u8) ?E {
     const Table = struct {
-        const fields = switch (@typeInfo(E)) {
-            .@"enum" => |info| info.fields,
+        const info = switch (@typeInfo(E)) {
+            .@"enum" => |enum_info| enum_info,
             else => @compileError("enums.stringToEnum: " ++ @typeName(E) ++
                 " is not an enum"),
         };
 
-        const keys: [fields.len][]const u8 = keys: {
-            var arr: [fields.len][]const u8 = undefined;
-            for (fields, 0..) |field, i| arr[i] = field.name;
+        const count = compat.fieldCount(info);
+        const keys: [count][]const u8 = keys: {
+            var arr: [count][]const u8 = undefined;
+            for (0..count) |i| arr[i] = compat.fieldName(info, i);
             break :keys arr;
         };
 
-        const values: [fields.len]E = values: {
-            var arr: [fields.len]E = undefined;
-            for (fields, 0..) |field, i| arr[i] = @field(E, field.name);
+        const values: [count]E = values: {
+            var arr: [count]E = undefined;
+            for (0..count) |i| arr[i] = @field(E, compat.fieldName(info, i));
             break :values arr;
         };
     };
@@ -311,7 +313,7 @@ test "Open: has, keys, count, miss" {
     try testing.expectEqual(@as(usize, 3), OpenModes.count);
     try testing.expectEqualStrings("session", OpenModes.keys[1]);
     try testing.expectEqual(OpenModes.miss, OpenModes.match("statements"));
-    try testing.expectEqual(@as(u8, 3), @intFromEnum(OpenModes.miss));
+    try testing.expectEqual(@as(u8, 3), compat.enumToInt(OpenModes.miss));
 }
 
 test "Closed: has, keys, count, miss" {
@@ -326,8 +328,8 @@ test "Closed: has, keys, count, miss" {
 test "tags are not limited to identifiers" {
     const Headers = Open(.{ "content-type", "content-length", "404", "with space" });
     try testing.expectEqualStrings("content-type", Headers.keys[0]);
-    try testing.expectEqual(@as(usize, 0), @intFromEnum(Headers.match("content-type")));
-    try testing.expectEqual(@as(usize, 2), @intFromEnum(Headers.match("404")));
+    try testing.expectEqual(@as(usize, 0), compat.enumToInt(Headers.match("content-type")));
+    try testing.expectEqual(@as(usize, 2), compat.enumToInt(Headers.match("404")));
     try testing.expectEqual(Headers.miss, Headers.match("Content-Type"));
 
     const hit = switch (Headers.match("with space")) {
@@ -404,7 +406,7 @@ test "every length up to 40 compares exactly" {
     });
 
     inline for (C.keys, 0..) |key, i| {
-        try testing.expectEqual(@as(usize, i), @intFromEnum(C.match(key)));
+        try testing.expectEqual(@as(usize, i), compat.enumToInt(C.match(key)));
         if (key.len >= 16) {
             var buf: [64]u8 = undefined;
             const copy = buf[0..key.len];

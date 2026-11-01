@@ -5,6 +5,11 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- stdx builds with Zig 0.16 and 0.17. `minimum_zig_version` stays `0.16.0`,
+  and CI runs the Debug, ReleaseSafe, and ReleaseFast suites on both.
+
 ## [0.2.1] - 2026-11-01
 
 ### Fixed

@@ -16,6 +16,7 @@
 //! `init`, and values are copied into the value array.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const mem = std.mem;
 const testing = std.testing;
 const math = std.math;
@@ -495,14 +496,15 @@ test "runtime keys are copied" {
 }
 
 test "long keys, null bytes, and set values" {
-    const long = "abcdefghijklmnopqrstuvwxyz" ** 12;
+    const long = comptime compat.repeatString("abcdefghijklmnopqrstuvwxyz", 12);
+    const long_x = long ++ "x";
     const m: Map(void) = .initComptime(.{
-        .{ long, {} },
+        .{ long[0..], {} },
         .{ "a\x00b", {} },
     });
-    try testing.expect(m.has(long));
+    try testing.expect(m.has(long[0..]));
     try testing.expect(m.has("a\x00b"));
-    try testing.expect(!m.has(long ++ "x"));
+    try testing.expect(!m.has(long_x));
     try testing.expectEqual(@as(?void, {}), m.getLongestPrefix(long ++ "tail"));
 }
 

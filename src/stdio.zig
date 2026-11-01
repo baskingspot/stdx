@@ -16,6 +16,7 @@
 //! newline.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const Io = std.Io;
 const io = std.Options.debug_io;
 const testing = std.testing;
@@ -122,8 +123,8 @@ test Stream {
     // drain (larger than the buffer) reports zero accepted.
     Io.Threaded.closeFd(fds[0]);
     stream.flush();
-    const big = "x" ** 8192;
-    try testing.expectEqual(@as(usize, 0), stream.write(big));
+    const big = compat.repeatString("x", 8192);
+    try testing.expectEqual(@as(usize, 0), stream.write(&big));
     stream.print("dropped", .{});
     stream.writeAll("dropped");
     stream.writeByte('d');

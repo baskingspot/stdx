@@ -1700,7 +1700,7 @@ test "a context without inline keys still orders" {
     const gpa = testing.allocator;
     const plain = struct {
         const Self = @This();
-        fn compare(_: Self, a: u64, b: u64) Order {
+        pub fn compare(_: Self, a: u64, b: u64) Order {
             return math.order(a, b);
         }
     };
@@ -1715,10 +1715,10 @@ test "everything ties: windows decide nothing" {
     const gpa = testing.allocator;
     const ties = struct {
         const Self = @This();
-        fn compare(_: Self, a: u64, b: u64) Order {
+        pub fn compare(_: Self, a: u64, b: u64) Order {
             return math.order(a, b);
         }
-        fn inlineKey(_: Self, _: u64, _: usize) u64 {
+        pub fn inlineKey(_: Self, _: u64, _: usize) u64 {
             return 0;
         }
     };
@@ -2000,11 +2000,11 @@ fn fuzzTiedWindows(_: void, smith: *testing.Smith) anyerror!void {
     const gpa = testing.allocator;
     const ties = struct {
         const Self = @This();
-        fn compare(_: Self, a: u16, b: u16) Order {
+        pub fn compare(_: Self, a: u16, b: u16) Order {
             return math.order(a, b);
         }
         /// Every window ties: the tie path decides everything.
-        fn inlineKey(_: Self, _: u16, _: usize) u64 {
+        pub fn inlineKey(_: Self, _: u16, _: usize) u64 {
             return 0;
         }
     };

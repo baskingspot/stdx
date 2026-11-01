@@ -49,7 +49,7 @@ fuzz LIMIT="10M":
 [doc("Lint: ziglint, the ast-grep rules, Zig, Nix, Markdown and CSS, the workflows, and justfile formatting")]
 [group("lint")]
 lint:
-    ziglint
+    ziglint-0-16
     baskingspot-lint src
     zig fmt --check src docs/examples build.zig build.zig.zon
     nix fmt -- --ci
@@ -66,9 +66,13 @@ fmt:
     oxfmt README.md AGENTS.md IDEAS.md THIRD_PARTY.md .pi/agents docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml
     just --fmt
 
-[doc("Everything CI runs: the unit tests, lint, and the site build")]
+[doc("The per-version gate: the Debug and release-mode test suites")]
 [group("ci")]
-ci: test test-release-safe test-release-fast lint doc
+check: test test-release-safe test-release-fast
+
+[doc("Everything CI runs: the gate, lint, and the docs build")]
+[group("ci")]
+ci: check lint doc
 
 [doc("Run benchmarks (ReleaseFast by default); args pass to the binary: just bench --benchtime=250ms --filter=Swiss")]
 [group("bench")]

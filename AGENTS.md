@@ -4,10 +4,19 @@ Working notes for AI coding agents in stdx.
 
 ## Environment
 
-Zig 0.16 only. `nix develop` provides zig, zls, ziglint, zigdoc, oxfmt,
-just, and the base tools (actionlint, zizmor, pinact, fd, gh, ripgrep,
-treefmt), plus the site tools (zola, wrangler, and `baskingspot-docs`, from
-the `docs` module). The flake is the tool contract: nothing on PATH outside the devshell.
+Zig 0.16 and 0.17. `nix develop` is the current stable, Zig 0.17, and
+`nix develop .#zig-old` is Zig 0.16. Both provide zig, zls, `ziglint-0-16`,
+zigdoc, oxfmt, just, and the base tools (actionlint, zizmor, pinact, fd, gh,
+ripgrep, treefmt), plus the site tools (zola, wrangler, and
+`baskingspot-docs`, from the `docs` module). The flake is the tool contract:
+nothing on PATH outside the devshell.
+
+Version shims live in `src/compat.zig`. Do not write `@intFromEnum`,
+`@enumFromInt`, or `**` outside it: 0.17's `zig fmt` migrates the first two,
+and 0.17 removed the third. The `// zig fmt: off` block is what keeps a 0.17
+format from breaking the 0.16 build. Lint runs with `ziglint-0-16`, which
+points ziglint at the 0.16 std so 0.17-only deprecations do not fire while
+0.16 is supported.
 
 The justfile is the command interface. Run recipes, not raw zig
 commands:
@@ -16,8 +25,10 @@ commands:
 just lint test
 ```
 
-Takes multiple targets — `just lint test` does both. `just ci` is
-the full set the test lanes run. The site build runs in the deploy job
+Takes multiple targets — `just lint test` does both. `just check` is
+the per-version gate (Debug, ReleaseSafe, and ReleaseFast); `just ci` adds
+lint and the docs build. CI runs `just ci` on the default shell and
+`just check` on `zig-old`. The site build runs in the deploy job
 on main (`just doc-deploy`, which runs `just doc` first); CI runs Linux
 only, so the darwin arms of `time`, `random`, and `swiss` are not
 executed in CI. When the change touches generic code, run the option

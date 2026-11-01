@@ -13,6 +13,7 @@
 //! runtime offset sorting disappears entirely.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const assert = std.debug.assert;
 const meta = std.meta;
 const mem = std.mem;
@@ -28,19 +29,15 @@ fn Element(comptime T: type) type {
             const Self = @This();
 
             pub const Bare = Bare: {
-                const Attrs = std.builtin.Type.UnionField.Attributes;
-                var field_names: [u.fields.len][]const u8 = undefined;
-                var field_types: [u.fields.len]type = undefined;
-                var field_attrs: [u.fields.len]Attrs = undefined;
-                for (
-                    u.fields,
-                    &field_names,
-                    &field_types,
-                    &field_attrs,
-                ) |field, *name, *Type, *attrs| {
-                    name.* = field.name;
-                    Type.* = field.type;
-                    attrs.* = .{ .@"align" = field.alignment };
+                const Attrs = compat.UnionFieldAttributes();
+                const count = compat.fieldCount(u);
+                var field_names: [count][]const u8 = undefined;
+                var field_types: [count]type = undefined;
+                var field_attrs: [count]Attrs = undefined;
+                for (0..count) |i| {
+                    field_names[i] = compat.fieldName(u, i);
+                    field_types[i] = compat.FieldType(u, i);
+                    field_attrs[i] = .{ .@"align" = compat.fieldAlign(u, i) };
                 }
                 break :Bare @Union(u.layout, null, &field_names, &field_types, &field_attrs);
             };
@@ -80,20 +77,21 @@ fn Element(comptime T: type) type {
 /// `[length]FieldType` field per element field, in an `.auto` layout struct
 /// so the compiler picks field order and padding.
 fn Storage(comptime T: type, comptime length: comptime_int) type {
-    const Attrs = std.builtin.Type.StructField.Attributes;
-    const elem_fields = meta.fields(Element(T));
-    var field_names: [elem_fields.len][]const u8 = undefined;
-    var field_types: [elem_fields.len]type = undefined;
-    var field_attrs: [elem_fields.len]Attrs = undefined;
-    for (elem_fields, &field_names, &field_types, &field_attrs) |field, *name, *Type, *attrs| {
-        if (field.is_comptime) {
+    const Attrs = compat.StructFieldAttributes();
+    const info = @typeInfo(Element(T)).@"struct";
+    const count = comptime compat.fieldCount(info);
+    var field_names: [count][]const u8 = undefined;
+    var field_types: [count]type = undefined;
+    var field_attrs: [count]Attrs = undefined;
+    for (0..count) |i| {
+        if (comptime compat.fieldIsComptime(info, i)) {
             @compileError(
                 "multi_array.Array and multi_array.Buffer do not support comptime fields",
             );
         }
-        name.* = field.name;
-        Type.* = [length]field.type;
-        attrs.* = .{};
+        field_names[i] = compat.fieldName(info, i);
+        field_types[i] = [length]compat.FieldType(info, i);
+        field_attrs[i] = .{};
     }
     return @Struct(.auto, null, &field_names, &field_types, &field_attrs);
 }
@@ -139,7 +137,8 @@ pub fn Array(comptime T: type, comptime length: comptime_int) type {
         pub const len: usize = @intCast(length);
 
         const Elem = Element(T);
-        const fields = meta.fields(Elem);
+        const elem_info = @typeInfo(Elem).@"struct";
+        const elem_field_count = compat.fieldCount(elem_info);
         pub const Field = meta.FieldEnum(Elem);
 
         storage: Storage(T, length),
@@ -166,8 +165,9 @@ pub fn Array(comptime T: type, comptime length: comptime_int) type {
         /// Gather the element at `index` back into a `T`.
         pub fn get(self: *const Self, index: usize) T {
             var result: Elem = undefined;
-            inline for (fields) |field_info| {
-                @field(result, field_info.name) = @field(self.storage, field_info.name)[index];
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                @field(result, name) = @field(self.storage, name)[index];
             }
             return switch (@typeInfo(T)) {
                 .@"struct" => result,
@@ -183,8 +183,9 @@ pub fn Array(comptime T: type, comptime length: comptime_int) type {
                 .@"union" => Elem.fromT(elem),
                 else => unreachable,
             };
-            inline for (fields) |field_info| {
-                @field(self.storage, field_info.name)[index] = @field(e, field_info.name);
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                @field(self.storage, name)[index] = @field(e, name);
             }
         }
 
@@ -195,17 +196,20 @@ pub fn Array(comptime T: type, comptime length: comptime_int) type {
                 .@"union" => Elem.fromT(value),
                 else => unreachable,
             };
-            inline for (fields) |field_info| {
-                @memset(&@field(self.storage, field_info.name), @field(e, field_info.name));
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                @memset(&@field(self.storage, name), @field(e, name));
             }
         }
 
         /// Exchange the elements at `a` and `b`.
         pub fn swap(self: *Self, a: usize, b: usize) void {
-            inline for (fields) |field_info| {
-                if (@sizeOf(field_info.type) != 0) {
-                    const arr = &@field(self.storage, field_info.name);
-                    mem.swap(field_info.type, &arr[a], &arr[b]);
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                const FieldT = comptime compat.FieldType(elem_info, field_index);
+                if (@sizeOf(FieldT) != 0) {
+                    const arr = &@field(self.storage, name);
+                    mem.swap(FieldT, &arr[a], &arr[b]);
                 }
             }
         }
@@ -270,7 +274,8 @@ pub fn Buffer(comptime T: type, comptime buffer_capacity: comptime_int) type {
         pub const capacity: Index = @intCast(buffer_capacity);
 
         const Elem = Element(T);
-        const fields = meta.fields(Elem);
+        const elem_info = @typeInfo(Elem).@"struct";
+        const elem_field_count = compat.fieldCount(elem_info);
         pub const Field = meta.FieldEnum(Elem);
 
         storage: Storage(T, capacity),
@@ -297,8 +302,9 @@ pub fn Buffer(comptime T: type, comptime buffer_capacity: comptime_int) type {
         pub fn get(self: *const Self, index: usize) T {
             assert(index < self.len);
             var result: Elem = undefined;
-            inline for (fields) |field_info| {
-                @field(result, field_info.name) = @field(self.storage, field_info.name)[index];
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                @field(result, name) = @field(self.storage, name)[index];
             }
             return switch (@typeInfo(T)) {
                 .@"struct" => result,
@@ -315,8 +321,9 @@ pub fn Buffer(comptime T: type, comptime buffer_capacity: comptime_int) type {
                 .@"union" => Elem.fromT(elem),
                 else => unreachable,
             };
-            inline for (fields) |field_info| {
-                @field(self.storage, field_info.name)[index] = @field(e, field_info.name);
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                @field(self.storage, name)[index] = @field(e, name);
             }
         }
 
@@ -392,9 +399,11 @@ pub fn Buffer(comptime T: type, comptime buffer_capacity: comptime_int) type {
             assert(index <= self.len);
             const length: usize = self.len;
             self.len += 1;
-            inline for (fields) |field_info| {
-                if (@sizeOf(field_info.type) != 0) {
-                    const arr = &@field(self.storage, field_info.name);
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                const FieldT = comptime compat.FieldType(elem_info, field_index);
+                if (@sizeOf(FieldT) != 0) {
+                    const arr = &@field(self.storage, name);
                     @memmove(arr[index + 1 .. length + 1], arr[index..length]);
                 }
             }
@@ -416,9 +425,11 @@ pub fn Buffer(comptime T: type, comptime buffer_capacity: comptime_int) type {
             assert(self.len > 0);
             assert(index < self.len);
             const last: usize = @as(usize, self.len) - 1;
-            inline for (fields) |field_info| {
-                if (@sizeOf(field_info.type) != 0) {
-                    const arr = &@field(self.storage, field_info.name);
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                const FieldT = comptime compat.FieldType(elem_info, field_index);
+                if (@sizeOf(FieldT) != 0) {
+                    const arr = &@field(self.storage, name);
                     @memmove(arr[index..last], arr[index + 1 .. last + 1]);
                 }
             }
@@ -437,10 +448,12 @@ pub fn Buffer(comptime T: type, comptime buffer_capacity: comptime_int) type {
         }
 
         fn swap(self: *Self, a: usize, b: usize) void {
-            inline for (fields) |field_info| {
-                if (@sizeOf(field_info.type) != 0) {
-                    const arr = &@field(self.storage, field_info.name);
-                    mem.swap(field_info.type, &arr[a], &arr[b]);
+            inline for (0..elem_field_count) |field_index| {
+                const name = comptime compat.fieldName(elem_info, field_index);
+                const FieldT = comptime compat.FieldType(elem_info, field_index);
+                if (@sizeOf(FieldT) != 0) {
+                    const arr = &@field(self.storage, name);
+                    mem.swap(FieldT, &arr[a], &arr[b]);
                 }
             }
         }

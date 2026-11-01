@@ -18,6 +18,7 @@
 //! safety.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 
 const runtime_safety = std.debug.runtime_safety;
 const assert = std.debug.assert;
@@ -59,14 +60,14 @@ pub const SafetyLock = struct {
     pub fn lockShared(l: *SafetyLock) void {
         if (!runtime_safety) return;
         assert(l.state != .exclusive);
-        l.state = @enumFromInt(@intFromEnum(l.state) + 1);
+        l.state = compat.enumFromInt(@TypeOf(l.state), compat.enumToInt(l.state) + 1);
         assert(l.state.isShared()); // Catch overflow to `exclusive`.
     }
 
     pub fn unlockShared(l: *SafetyLock) void {
         if (!runtime_safety) return;
         assert(l.state.isShared());
-        l.state = @enumFromInt(@intFromEnum(l.state) - 1);
+        l.state = compat.enumFromInt(@TypeOf(l.state), compat.enumToInt(l.state) - 1);
     }
 
     pub fn assertUnlocked(l: SafetyLock) void {

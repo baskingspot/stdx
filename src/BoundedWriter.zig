@@ -9,6 +9,7 @@
 //! response from a large result set without risking OOM.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const assert = std.debug.assert;
 const math = std.math;
 const mem = std.mem;
@@ -49,10 +50,7 @@ pub fn written(self: *BoundedWriter) []const u8 {
 fn drain(w: *Io.Writer, data: []const []const u8, splat: usize) Io.Writer.Error!usize {
     const self: *BoundedWriter = @fieldParentPtr("writer", w);
     const pattern = data[data.len - 1];
-    var list: ArrayList(u8) = .{
-        .items = w.buffer[0..w.end],
-        .capacity = w.buffer.len,
-    };
+    var list: ArrayList(u8) = compat.arrayList(u8, w.buffer[0..w.end], w.buffer.len);
     defer {
         w.buffer = list.allocatedSlice();
         w.end = list.items.len;
@@ -104,10 +102,7 @@ fn rebase(w: *Io.Writer, preserve: usize, minimum_len: usize) Io.Writer.Error!vo
     const total = math.add(usize, w.end, minimum_len) catch
         return error.WriteFailed;
     if (total > self.limit) return error.WriteFailed;
-    var list: ArrayList(u8) = .{
-        .items = w.buffer[0..w.end],
-        .capacity = w.buffer.len,
-    };
+    var list: ArrayList(u8) = compat.arrayList(u8, w.buffer[0..w.end], w.buffer.len);
     defer {
         w.buffer = list.allocatedSlice();
         w.end = list.items.len;
@@ -159,8 +154,8 @@ test "rejects large single write" {
     var bw: BoundedWriter = .init(testing.allocator, cap);
     defer bw.deinit();
     // A write larger than the limit should fail.
-    const big = "x" ** 128;
-    try testing.expectError(error.WriteFailed, bw.writer.writeAll(big));
+    const big = compat.repeatString("x", 128);
+    try testing.expectError(error.WriteFailed, bw.writer.writeAll(&big));
 }
 
 test "byte-at-a-time writes grow amortized" {

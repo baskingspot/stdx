@@ -5,6 +5,7 @@
 //! literals are compile errors, not runtime ones.
 
 const std = @import("std");
+const compat = @import("compat.zig");
 const testing = std.testing;
 
 const atoi_mod = @import("fmt/atoi.zig");
@@ -42,7 +43,8 @@ test "comptimeHex: repeated decodes share one budget" {
     // Callers decode many vectors in one file. Without a quota inside
     // `comptimeHex`, the shared comptime budget runs out partway through.
     inline for (0..8) |_| {
-        const bytes = comptimeHex("0123456789abcdef" ** 32);
+        const pattern = comptime compat.repeatString("0123456789abcdef", 32);
+        const bytes = comptimeHex(&pattern);
         try testing.expectEqual(@as(u8, 0xef), bytes[255]);
     }
 }
@@ -50,7 +52,8 @@ test "comptimeHex: repeated decodes share one budget" {
 test "comptimeHex: a long literal" {
     // A TLS-sized vector (a 2048-bit modulus) decodes past the default
     // comptime branch budget for `hexToBytes`.
-    const bytes = comptimeHex("0123456789abcdef" ** 32);
+    const pattern = comptime compat.repeatString("0123456789abcdef", 32);
+    const bytes = comptimeHex(&pattern);
     try testing.expectEqual(@as(usize, 256), bytes.len);
     try testing.expectEqual(@as(u8, 0x01), bytes[0]);
     try testing.expectEqual(@as(u8, 0xef), bytes[255]);
