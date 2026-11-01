@@ -5,6 +5,15 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `BoundedWriter`: grow the buffer with the same super-linear growth as
+  `ArrayList`, clamped to `limit`, instead of to the exact size of each write.
+  Byte-at-a-time writes no longer reallocate and copy the whole buffer per
+  byte.
+- `BoundedWriter`: a `writeSplat` call with a splat count of zero drops the
+  final pattern as specified and no longer copies it into the buffer first.
+
 ## [0.2.0] - 2026-10-31
 
 ### Added

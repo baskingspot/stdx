@@ -48,7 +48,6 @@ pub fn written(self: *BoundedWriter) []const u8 {
 
 fn drain(w: *Io.Writer, data: []const []const u8, splat: usize) Io.Writer.Error!usize {
     const self: *BoundedWriter = @fieldParentPtr("writer", w);
-    const gpa = self.allocator;
     const pattern = data[data.len - 1];
     var list: ArrayList(u8) = .{
         .items = w.buffer[0..w.end],
@@ -82,29 +81,22 @@ fn drain(w: *Io.Writer, data: []const []const u8, splat: usize) Io.Writer.Error!
         return error.WriteFailed;
     if (projected > self.limit) return error.WriteFailed;
 
-    // Ensure capacity for exactly the bytes we need — no over-allocation
-    // beyond the limit, so subsequent writes that would exceed the limit
-    // are forced through drain (and its limit check) rather than silently
-    // fitting in excess capacity.
-    list.ensureTotalCapacityPrecise(gpa, projected) catch
-        return error.WriteFailed;
-    for (data) |bytes| {
+    self.ensureCapacity(&list, projected) catch return error.WriteFailed;
+    const append = if (splat == 0) data[0 .. data.len - 1] else data;
+    for (append) |bytes| {
         list.appendSliceAssumeCapacity(bytes);
     }
-    if (splat == 0) {
-        list.items.len -= pattern.len;
-    } else switch (pattern.len) {
+    if (splat != 0) switch (pattern.len) {
         0 => {},
         1 => list.appendNTimesAssumeCapacity(pattern[0], splat - 1),
         else => for (0..splat - 1) |_| list.appendSliceAssumeCapacity(pattern),
-    }
+    };
     return list.items.len - start_len;
 }
 
 fn rebase(w: *Io.Writer, preserve: usize, minimum_len: usize) Io.Writer.Error!void {
     _ = preserve;
     const self: *BoundedWriter = @fieldParentPtr("writer", w);
-    const gpa = self.allocator;
     // For an accumulating writer (flush is a no-op), all buffered content
     // is preserved — the effective capacity needed is w.end + minimum_len,
     // not preserve + minimum_len.  preserve may be less than w.end when the
@@ -120,7 +112,19 @@ fn rebase(w: *Io.Writer, preserve: usize, minimum_len: usize) Io.Writer.Error!vo
         w.buffer = list.allocatedSlice();
         w.end = list.items.len;
     }
-    list.ensureTotalCapacityPrecise(gpa, total) catch return error.WriteFailed;
+    self.ensureCapacity(&list, total) catch return error.WriteFailed;
+}
+
+/// Grows the buffer to hold `needed` bytes with the same super-linear growth
+/// as `ArrayList`, clamped to `limit`.
+///
+/// Capacity stays at or below `limit`. `Io.Writer` fills unused capacity
+/// without calling `drain`, so a capacity above the limit would let a write
+/// pass the limit without the check in `drain`.
+fn ensureCapacity(self: *BoundedWriter, list: *ArrayList(u8), needed: usize) Allocator.Error!void {
+    assert(needed <= self.limit);
+    const capacity = @min(ArrayList(u8).growCapacity(needed), self.limit);
+    return list.ensureTotalCapacityPrecise(self.allocator, capacity);
 }
 
 test "writes within limit" {
@@ -157,4 +161,63 @@ test "rejects large single write" {
     // A write larger than the limit should fail.
     const big = "x" ** 128;
     try testing.expectError(error.WriteFailed, bw.writer.writeAll(big));
+}
+
+test "byte-at-a-time writes grow amortized" {
+    const limit = 128 * 1024;
+    const n = 64 * 1024;
+
+    var failing: testing.FailingAllocator = .init(testing.allocator, .{});
+    var bw: BoundedWriter = .init(failing.allocator(), limit);
+    defer bw.deinit();
+
+    for (0..n) |_| try bw.writer.writeByte('x');
+
+    try testing.expectEqual(@as(usize, n), bw.written().len);
+    try testing.expect(bw.writer.buffer.len <= limit);
+    // Exact-size growth reallocates or remaps once per byte. Amortized growth
+    // reaches 64 KiB in a dozen or so steps.
+    try testing.expect(failing.allocations + failing.resize_index < 32);
+}
+
+test "writeBytePreserve grows amortized" {
+    const limit = 128 * 1024;
+    const n = 64 * 1024;
+
+    var failing: testing.FailingAllocator = .init(testing.allocator, .{});
+    var bw: BoundedWriter = .init(failing.allocator(), limit);
+    defer bw.deinit();
+
+    for (0..n) |_| try bw.writer.writeBytePreserve(0, 'x');
+
+    try testing.expectEqual(@as(usize, n), bw.written().len);
+    try testing.expect(failing.allocations + failing.resize_index < 32);
+}
+
+test "amortized capacity respects the limit" {
+    const limit: usize = 100;
+    var bw: BoundedWriter = .init(testing.allocator, limit);
+    defer bw.deinit();
+
+    for (0..limit) |_| try bw.writer.writeByte('x');
+
+    try testing.expectEqual(limit, bw.written().len);
+    try testing.expect(bw.writer.buffer.len <= limit);
+    try testing.expectError(error.WriteFailed, bw.writer.writeByte('x'));
+}
+
+test "a zero splat drops the pattern without buffering it" {
+    const limit: usize = 4;
+    var bw: BoundedWriter = .init(testing.allocator, limit);
+    defer bw.deinit();
+
+    _ = try bw.writer.writeSplat(&.{ "ab", "cd" }, 0);
+
+    try testing.expectEqualStrings("ab", bw.written());
+    try testing.expect(bw.writer.buffer.len <= limit);
+    // The dropped pattern must not count against the limit: the remaining two
+    // bytes are still free.
+    try bw.writer.writeAll("ef");
+    try testing.expectEqualStrings("abef", bw.written());
+    try testing.expectError(error.WriteFailed, bw.writer.writeByte('x'));
 }
