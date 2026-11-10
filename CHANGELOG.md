@@ -7,6 +7,7 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `posix.OptionalFd`: an optional POSIX descriptor in four bytes. `none` stores `-1`, and `get` is explicitly inlined. The value carries no ownership.
 - `time.Duration` and `time.Timestamp`: nonnegative nanosecond values in eight bytes, with checked arithmetic and lossless conversion to the wider std values.
 - `time.OptionalDuration` and `time.OptionalTimestamp`: eight-byte optional values. `none` uses the highest `u64` value without a separate tag.
 

@@ -6,6 +6,9 @@
 //! data paths); code holding an `Io.net.Socket` should prefer the typed APIs
 //! instead.
 //!
+//! `OptionalFd` packs an absent descriptor into `-1`, avoiding the tag and
+//! padding of Zig's optional descriptor. It carries no ownership or close policy.
+//!
 //! `setsockopt`/`getsockopt` decode errno over the raw calls, mapping EINVAL
 //! to `error.InvalidOptionValue` — std's own wrappers map it to `unreachable`,
 //! which no caller setting options from configuration can survive.
@@ -15,6 +18,29 @@ const mem = std.mem;
 const posix = std.posix;
 const assert = std.debug.assert;
 const testing = std.testing;
+
+/// An optional POSIX descriptor in one four-byte word. `-1` is `.none`.
+/// Descriptor zero is a valid descriptor.
+pub const OptionalFd = struct {
+    fd: posix.fd_t,
+
+    pub const none: OptionalFd = .{ .fd = -1 };
+
+    /// Encode a descriptor, or `.none` from null. This does not duplicate the
+    /// descriptor. The supplied descriptor must be nonnegative.
+    pub fn init(fd: ?posix.fd_t) OptionalFd {
+        const descriptor = fd orelse return .none;
+        assert(descriptor >= 0);
+        return .{ .fd = descriptor };
+    }
+
+    /// Return the descriptor, or null for `.none`.
+    pub inline fn get(self: OptionalFd) ?posix.fd_t {
+        if (self.fd == -1) return null;
+        assert(self.fd >= 0);
+        return self.fd;
+    }
+};
 const Io = std.Io;
 const net = Io.net;
 
@@ -129,6 +155,17 @@ pub fn getsockopt(fd: posix.socket_t, level: i32, optname: u32) SetSockOptError!
         .OPNOTSUPP => error.OperationNotSupported,
         else => |err| posix.unexpectedErrno(err),
     };
+}
+
+test OptionalFd {
+    try testing.expectEqual(@as(usize, 4), @sizeOf(OptionalFd));
+    try testing.expectEqual(@as(usize, 4), @alignOf(OptionalFd));
+    try testing.expectEqual(@as(?posix.fd_t, null), OptionalFd.none.get());
+
+    for ([_]posix.fd_t{ 0, 1, std.math.maxInt(posix.fd_t) }) |descriptor| {
+        const stored = OptionalFd.init(descriptor);
+        try testing.expectEqual(descriptor, stored.get().?);
+    }
 }
 
 test setsockopt {
