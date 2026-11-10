@@ -13,7 +13,10 @@
 //! per iteration, making every timestamp during the tick one atomic
 //! load instead of a clock call.
 //!
-//! `writeRfc3339` turns a `Timestamp` into UTC RFC 3339 text with a
+//! `Duration`, `Timestamp`, and their optional forms pack timeouts into one
+//! 64-bit word while distinguishing elapsed time from a clock reading.
+//!
+//! `writeRfc3339` turns an `Io.Timestamp` into UTC RFC 3339 text with a
 //! comptime fractional width, for log lines and protocol headers.
 
 const std = @import("std");
@@ -27,7 +30,12 @@ const time = std.time;
 const builtin = @import("builtin");
 
 pub const CachedClock = @import("time/cached_clock.zig").CachedClock;
+pub const Duration = @import("time/Duration.zig");
+pub const Optional = @import("time/Optional.zig").Optional;
+pub const OptionalDuration = Optional(Duration);
+pub const OptionalTimestamp = Optional(Timestamp);
 pub const RateLimit = @import("time/RateLimit.zig");
+pub const Timestamp = @import("time/Timestamp.zig");
 pub const Rfc3339Error = @import("time/rfc3339.zig").Error;
 pub const Rfc3339Precision = @import("time/rfc3339.zig").Precision;
 pub const writeRfc3339 = @import("time/rfc3339.zig").write;
@@ -146,6 +154,13 @@ test WallFromAwake {
         offset.toWall(sample).nanoseconds,
         offset.toWall(mono.now()).nanoseconds,
     );
+}
+
+test "optional compact values use one word" {
+    try testing.expectEqual(@as(usize, 8), @sizeOf(OptionalDuration));
+    try testing.expectEqual(@as(usize, 8), @sizeOf(OptionalTimestamp));
+    const timeout: OptionalDuration = .none;
+    try testing.expectEqual(@as(?Duration, null), timeout.get());
 }
 
 test now {

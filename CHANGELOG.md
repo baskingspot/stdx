@@ -5,6 +5,11 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `time.Duration` and `time.Timestamp`: nonnegative nanosecond values in eight bytes, with checked arithmetic and lossless conversion to the wider std values.
+- `time.OptionalDuration` and `time.OptionalTimestamp`: eight-byte optional values. `none` uses the highest `u64` value without a separate tag.
+
 ## [0.3.0] - 2026-11-02
 
 ### Changed

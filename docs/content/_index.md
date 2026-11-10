@@ -130,7 +130,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`static_map`](api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                                                                                            |
 | [`stdio`](api/#stdx.stdio)                                   | Buffered stderr and stdout streams that never return an error.                                                                                                                    |
 | [`swiss`](api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                                                                                                  |
-| [`time`](api/#stdx.time)                                     | Clock reads without an `Io` value, a cached clock, RFC 3339 formatting, and a log rate limiter.                                                                                   |
+| [`time`](api/#stdx.time)                                     | Compact time values, clock reads without an `Io` value, a cached clock, RFC 3339 formatting, and a log rate limiter.                                                              |
 | [`timers`](api/#stdx.timers)                                 | A caller-driven set of timers over `Io.Timestamp`: arm and stop entries by handle, fire callbacks, and repeat on a period.                                                        |
 | [`Uuid`](api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                                      |
 | [`wire`](api/#stdx.wire)                                     | A forward-only writer over caller-owned bytes, with the byte order fixed at comptime. Integers, enums, slices, and backpatch slots.                                               |
@@ -679,7 +679,7 @@ These types are IPv4 only. `Ip4.parse` rejects IPv6 text, and `Prefix4.parse` re
 
 # Timekeeping
 
-The `time` module reads clocks without an `Io` value. It returns `std.Io.Timestamp` values, so the std `Duration` conversions work on the result. It runs on Linux and macOS.
+The `time` module reads clocks without an `Io` value. `time.now` returns `std.Io.Timestamp` values, so the std `Duration` conversions work on the result. It runs on Linux and macOS.
 
 ## Choose a clock
 
@@ -691,6 +691,20 @@ The `time` module reads clocks without an `Io` value. It returns `std.Io.Timesta
 | `.real`  | Timestamps that people read, or that leave the process.                               |
 
 Never send an `.awake` value to another process. It is a number with no meaning there.
+
+## Store a deadline
+
+`time.Duration` and `time.Timestamp` store nonnegative nanoseconds in one 64-bit word. Use them when a full std timestamp wastes space in a connection record. Their range is nearly 585 years. Neither value supports a signed duration. Calling `durationTo` with an earlier timestamp returns `error.OutOfRange`.
+
+`OptionalDuration` and `OptionalTimestamp` store an absent value in the highest `u64` word. They are eight bytes each. Use `.none` to declare an absent value. Call `get` to obtain a standard optional. Constructing an occupied value with the reserved word returns `error.OutOfRange`.
+
+Unit constructors distinguish nanoseconds, microseconds, milliseconds, and seconds. Arithmetic and conversion from std values reject values outside the supported range. Conversion to std values does not fail.
+
+```zig
+{{ load_data(path="examples/time_values.zig", format="plain") | trim_end }}
+```
+
+Use `.awake` for elapsed time and deadlines. The compact timestamp does not carry a clock identity. Do not mix values from two clocks.
 
 ## Measure a deadline
 
