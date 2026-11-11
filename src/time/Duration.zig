@@ -38,6 +38,26 @@ pub fn fromSeconds(value: u64) Error!Duration {
     return scaled(value, time.ns_per_s);
 }
 
+/// Construct known nanoseconds without a failing unit conversion.
+pub fn fromNanosecondsComptime(comptime value: u64) Duration {
+    return .fromNanoseconds(value);
+}
+
+/// Convert known microseconds. Overflow is a compile error.
+pub fn fromMicrosecondsComptime(comptime value: u64) Duration {
+    return scaledComptime(value, time.ns_per_us);
+}
+
+/// Convert known milliseconds. Overflow is a compile error.
+pub fn fromMillisecondsComptime(comptime value: u64) Duration {
+    return scaledComptime(value, time.ns_per_ms);
+}
+
+/// Convert known seconds. Overflow is a compile error.
+pub fn fromSecondsComptime(comptime value: u64) Duration {
+    return scaledComptime(value, time.ns_per_s);
+}
+
 /// Convert a std duration without accepting a negative elapsed time.
 pub fn fromStd(duration: Io.Duration) Error!Duration {
     const value: u64 = math.cast(u64, duration.nanoseconds) orelse return error.OutOfRange;
@@ -74,6 +94,11 @@ fn scaled(value: u64, factor: u64) Error!Duration {
     return .fromNanoseconds(math.mul(u64, value, factor) catch return error.OutOfRange);
 }
 
+fn scaledComptime(comptime value: u64, comptime factor: u64) Duration {
+    return comptime fromNanoseconds(math.mul(u64, value, factor) catch
+        @compileError("duration does not fit in u64 nanoseconds"));
+}
+
 test Duration {
     try testing.expectEqual(@as(usize, 8), @sizeOf(Duration));
     try testing.expectEqual(@as(usize, 8), @alignOf(Duration));
@@ -91,6 +116,15 @@ test "unit constructors distinguish the input units" {
     try testing.expectError(error.OutOfRange, Duration.fromSeconds(math.maxInt(u64)));
     const sum = Duration.fromNanoseconds(math.maxInt(u64)).add(.fromNanoseconds(1));
     try testing.expectError(error.OutOfRange, sum);
+}
+
+test "compile-time unit conversions return values" {
+    const microseconds: Duration = .fromMicrosecondsComptime(42);
+    try testing.expectEqual(@as(u64, 42_000), microseconds.nanoseconds);
+    const milliseconds: Duration = .fromMillisecondsComptime(42);
+    try testing.expectEqual(@as(u64, 42_000_000), milliseconds.nanoseconds);
+    const seconds: Duration = .fromSecondsComptime(42);
+    try testing.expectEqual(@as(u64, 42_000_000_000), seconds.nanoseconds);
 }
 
 test "std conversion rejects negative values and preserves the rest" {

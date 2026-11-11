@@ -30,6 +30,27 @@ pub fn Optional(comptime T: type) type {
             return .{ .nanoseconds = present.nanoseconds };
         }
 
+        /// Construct known nanoseconds. The reserved sentinel is a compile error.
+        pub fn fromNanosecondsComptime(comptime value: u64) Self {
+            return comptime init(T.fromNanoseconds(value)) catch
+                @compileError("time value is reserved for none");
+        }
+
+        /// Convert known microseconds. Overflow and the sentinel are compile errors.
+        pub fn fromMicrosecondsComptime(comptime value: u64) Self {
+            return .fromNanosecondsComptime(T.fromMicrosecondsComptime(value).nanoseconds);
+        }
+
+        /// Convert known milliseconds. Overflow and the sentinel are compile errors.
+        pub fn fromMillisecondsComptime(comptime value: u64) Self {
+            return .fromNanosecondsComptime(T.fromMillisecondsComptime(value).nanoseconds);
+        }
+
+        /// Convert known seconds. Overflow and the sentinel are compile errors.
+        pub fn fromSecondsComptime(comptime value: u64) Self {
+            return .fromNanosecondsComptime(T.fromSecondsComptime(value).nanoseconds);
+        }
+
         /// Return the stored value, or null for `none`.
         pub fn get(self: Self) ?T {
             if (self.nanoseconds == math.maxInt(u64)) return null;

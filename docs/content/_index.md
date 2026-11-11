@@ -700,6 +700,8 @@ Never send an `.awake` value to another process. It is a number with no meaning 
 
 Unit constructors distinguish nanoseconds, microseconds, milliseconds, and seconds. Arithmetic and conversion from std values reject values outside the supported range. Conversion to std values does not fail.
 
+Use the `from{unit}Comptime` constructors for known values. They return plain values and report overflow at compile time. Optional forms reject the reserved sentinel then too. These constructors follow std names such as `utf8EncodeComptime`.
+
 ```zig
 {{ load_data(path="examples/time_values.zig", format="plain") | trim_end }}
 ```

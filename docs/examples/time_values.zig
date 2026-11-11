@@ -8,8 +8,8 @@ const Request = struct {
 };
 
 test "a deadline fits in one word and expires by comparison" {
-    const start: timex.Timestamp = try .fromMilliseconds(84);
-    const duration: timex.Duration = try .fromMilliseconds(250);
+    const start: timex.Timestamp = .fromMillisecondsComptime(84);
+    const duration: timex.Duration = .fromMillisecondsComptime(250);
     const deadline = try start.add(duration);
     const request: Request = .{ .deadline = try .init(deadline) };
 

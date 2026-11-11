@@ -38,6 +38,26 @@ pub fn fromSeconds(value: u64) Error!Timestamp {
     return scaled(value, time.ns_per_s);
 }
 
+/// Construct known nanoseconds without a failing unit conversion.
+pub fn fromNanosecondsComptime(comptime value: u64) Timestamp {
+    return .fromNanoseconds(value);
+}
+
+/// Convert known microseconds. Overflow is a compile error.
+pub fn fromMicrosecondsComptime(comptime value: u64) Timestamp {
+    return scaledComptime(value, time.ns_per_us);
+}
+
+/// Convert known milliseconds. Overflow is a compile error.
+pub fn fromMillisecondsComptime(comptime value: u64) Timestamp {
+    return scaledComptime(value, time.ns_per_ms);
+}
+
+/// Convert known seconds. Overflow is a compile error.
+pub fn fromSecondsComptime(comptime value: u64) Timestamp {
+    return scaledComptime(value, time.ns_per_s);
+}
+
 /// Convert a std timestamp. Values before the clock's epoch or beyond the
 /// `u64` nanosecond range return `error.OutOfRange`.
 pub fn fromStd(timestamp: Io.Timestamp) Error!Timestamp {
@@ -83,6 +103,11 @@ fn scaled(value: u64, factor: u64) Error!Timestamp {
     return .fromNanoseconds(math.mul(u64, value, factor) catch return error.OutOfRange);
 }
 
+fn scaledComptime(comptime value: u64, comptime factor: u64) Timestamp {
+    return comptime fromNanoseconds(math.mul(u64, value, factor) catch
+        @compileError("timestamp does not fit in u64 nanoseconds"));
+}
+
 test Timestamp {
     try testing.expectEqual(@as(usize, 8), @sizeOf(Timestamp));
     try testing.expectEqual(@as(usize, 8), @alignOf(Timestamp));
@@ -101,6 +126,15 @@ test "clock values carry their unit and range" {
     try testing.expectError(error.OutOfRange, Timestamp.fromNanoseconds(math.maxInt(u64)).add(
         .fromNanoseconds(1),
     ));
+}
+
+test "compile-time unit conversions return values" {
+    const microseconds: Timestamp = .fromMicrosecondsComptime(42);
+    try testing.expectEqual(@as(u64, 42_000), microseconds.nanoseconds);
+    const milliseconds: Timestamp = .fromMillisecondsComptime(42);
+    try testing.expectEqual(@as(u64, 42_000_000), milliseconds.nanoseconds);
+    const seconds: Timestamp = .fromSecondsComptime(42);
+    try testing.expectEqual(@as(u64, 42_000_000_000), seconds.nanoseconds);
 }
 
 test "std conversion checks the supported epoch" {

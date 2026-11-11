@@ -163,6 +163,26 @@ test "optional compact values use one word" {
     try testing.expectEqual(@as(?Duration, null), timeout.get());
 }
 
+test "compile-time units are available for optional time values" {
+    const duration: OptionalDuration = .fromNanosecondsComptime(42);
+    try testing.expectEqual(@as(u64, 42), duration.get().?.nanoseconds);
+    const micros: OptionalDuration = .fromMicrosecondsComptime(2);
+    try testing.expectEqual(@as(u64, 2_000), micros.get().?.nanoseconds);
+    const millis: OptionalDuration = .fromMillisecondsComptime(2);
+    try testing.expectEqual(@as(u64, 2_000_000), millis.get().?.nanoseconds);
+    const seconds: OptionalDuration = .fromSecondsComptime(2);
+    try testing.expectEqual(@as(u64, 2_000_000_000), seconds.get().?.nanoseconds);
+
+    const timestamp: OptionalTimestamp = .fromSecondsComptime(3);
+    try testing.expectEqual(@as(u64, 3_000_000_000), timestamp.get().?.nanoseconds);
+    const instant_ns: OptionalTimestamp = .fromNanosecondsComptime(5);
+    try testing.expectEqual(@as(u64, 5), instant_ns.get().?.nanoseconds);
+    const instant_us: OptionalTimestamp = .fromMicrosecondsComptime(5);
+    try testing.expectEqual(@as(u64, 5_000), instant_us.get().?.nanoseconds);
+    const instant_ms: OptionalTimestamp = .fromMillisecondsComptime(5);
+    try testing.expectEqual(@as(u64, 5_000_000), instant_ms.get().?.nanoseconds);
+}
+
 test now {
     // Shape, not values. The magnitudes are what distinguish the clockid
     // mappings — a wall reading is decades past the epoch, a monotonic
