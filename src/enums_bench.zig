@@ -4,7 +4,16 @@
 //! byte changed (a same-length miss), and lengths no keyword has.
 
 const std = @import("std");
-const compat = @import("compat.zig");
+/// `compat.zig` belongs to the stdx module, and a source file belongs to
+/// exactly one module, so the bench carries its own copy of the one shim it
+/// needs rather than importing stdx's.
+const compat = struct {
+    // zig fmt: off
+    fn enumToInt(e: anytype) @typeInfo(@TypeOf(e)).@"enum".tag_type {
+        return @intFromEnum(e);
+    }
+    // zig fmt: on
+};
 const mem = std.mem;
 
 const stdx = @import("stdx");
