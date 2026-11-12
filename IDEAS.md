@@ -539,15 +539,42 @@ Rejected, with the measurements that rejected them:
   shipped. The validity test ends in a vector reduction and a branch,
   which is dead time per block.
 
-Open: x86-64. AVX2 needs the Muła `pshufb` reshuffle plus 16-bit
-multiples, and AVX-512 VBMI needs `vpermb`/`vpmultishiftqb`; both are
-two to three times fewer instructions per byte than NEON.
+x86-64 landed the same day, specialised by target CPU rather than by a
+CPUID probe (Matt's call: "I don't want runtime dispatching on CPUID").
+`-Dcpu` or a native build decides; there is no indirect call.
 
-A hand-written scalar loop for x86-64 was written and thrown away: it
-measured 12% faster than std on encode and 36% slower on decode, because
-std pre-shifts its four 256-entry `u32` decode tables and writes three
-bytes with one `u32` store. Rather than pay 4 KiB of tables to match,
-every non-aarch64 build hands the whole job to std's codec at comptime,
-so nothing regresses. Zig has no function-level target features, so AVX2
-means the consumer builds with `-Dcpu=x86_64_v3`, or the module ships a
-second object; decide which before adding it.
+- AVX-512 VBMI (`x86_64_v4`, icelake/server): `vpermb` + `vpmultishiftqb`
+  - `vpermb` encode 48 bytes to 64 characters in three instructions, and
+    `vpermt2b` is a 128-entry decode table in one. Six instructions per
+    decode block.
+- AVX2 (`x86_64_v3`, haswell): 24 bytes to 32 characters, one `vpshufb`
+  for the in-lane reshuffle, `vpmulhuw`/`vpmullw` to pack the fields, and
+  a 16-entry offset table for the alphabet. Decode uses Muła's nibble
+  classifier.
+- Baseline x86-64 still hands the whole job to std. A hand-written scalar
+  loop measured 12% faster than std on encode and 36% slower on decode,
+  because std pre-shifts four 256-entry `u32` tables and writes three
+  bytes with one `u32` store. 4 KiB of tables to match was not worth it.
+
+The AVX2 tables are generated at comptime from the alphabet, not copied:
+MUła's published constants are standard-alphabet-only, and aklomp's SIMD
+paths are too. The classifier clearing bits per high nibble works for any
+alphabet, and one character per alphabet (the one that shares a high
+nibble with letters: `/` for standard, `_` for url-safe) takes an
+explicit correction. The AVX-512 tables need nothing clever: `vpermt2b`
+indexes 128 entries, so the table is the character space.
+
+Verification, since this box is aarch64: qemu-user (11.1) emulates AVX2
+but not AVX-512, so `zig test -target x86_64-linux-musl -mcpu=haswell`
+run under `qemu-x86_64 -cpu Haswell` is the correctness gate for every
+x86 path that can be executed, including all four alphabets and the
+error classification. The AVX-512 kernels cannot run anywhere we have,
+so their constants and the instruction semantics are checked by a
+portable model in the test suite (one test per direction, run on
+aarch64), and the operand order was taken from LLVM's own output for the
+same intrinsics through `zig cc -S -masm=att`. Before anyone relies on
+the AVX-512 path, run the suite once on Sapphire Rapids or Icelake.
+
+Open: qemu-user is not in the devshell, so that check is a copy-pasted
+command. Putting `qemu` in the devshell and adding `just test-x86` would
+make it repeatable; it is a flake-shape change, so it waits on Matt.

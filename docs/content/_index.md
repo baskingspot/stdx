@@ -574,6 +574,8 @@ The writer writes fixed-width integers and enums, byte slices, and slots. It doe
 
 `base64` encodes and decodes RFC 4648. std has a codec for the same format. This one keeps the same four alphabets and moves a vector per instruction where std moves a byte: on aarch64 the 3-in/4-out byte interleave is an addressing mode, and the alphabet is one table permute per 16 characters.
 
+The kernel follows the build target. A build for aarch64 uses NEON. A build for x86-64 uses AVX2 when the target CPU has it, and AVX-512 VBMI when the target has that, which means `-Dcpu=x86_64_v3` or newer, or a native build. A build for the x86-64 baseline falls back to `std.base64`. There is no CPUID probe and no indirect call, so the binary carries one kernel and the target decides which.
+
 The codec is a comptime value: `standard`, `standard_no_pad`, `url_safe`, and `url_safe_no_pad`. Each one carries its alphabet and its pad character into the type, so a lookup table the kernel indexes is a constant in the binary. Pass it as the first argument, or call it through the constant.
 
 Both directions write into storage the caller owns and return the slice they wrote. `encode` needs `encodedLen(n)` bytes. `decode` needs `decodedLen(source)` bytes and writes its own length back, because padding changes it.
