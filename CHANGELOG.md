@@ -5,6 +5,8 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-12
+
 ### Added
 
 - `posix.OptionalFd`: an optional POSIX descriptor in four bytes. `none` stores `-1`, and `get` is explicitly inlined. The value carries no ownership.
