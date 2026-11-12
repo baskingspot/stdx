@@ -506,3 +506,48 @@ containers. Status after the std-overlap audit:
   insertion-order iteration; `V = void` covers the set. Differential
   anchors run identical op sequences against std's and assert
   equivalence after every step.
+
+## Codecs
+
+### base64 — SHIPPED (2026-11-12)
+
+std has it and it is scalar: a `u128` read, 16 shifted table lookups per
+12 bytes. The shipped module keeps std's four RFC 4648 codecs as comptime
+values and adds aarch64 kernels built out of `ld3`/`st4` (the 3-in/4-out
+interleave as an addressing mode), a 64-byte `tbl` alphabet permute, and
+on decode a saturating subtract into a second `tbx` table split at
+character 63.
+
+Measured on neoverse_v3, 64 KiB, against `std.base64`: encode 4284 ns
+vs 33530 (7.8x), decode 7740 ns vs 25798 (3.3x). memcpy of the same
+64 KiB is 687 ns, so encode runs at 16% of a memory copy and decode at
+9%.
+
+Rejected, with the measurements that rejected them:
+
+- 16-entry offset table for the encode translation (`uqsub`, `cmgt`,
+  `sub`, `tbl1`, `add`) instead of the 64-byte permute: 12.1 GB/s
+  against 15.6. A four-register `tbl` is cheaper than five ordinary ops
+  on this core.
+- Unrolling the encode loop by 2 or 4: no change. It has no reducing
+  branch to amortize.
+- A 12-byte-window encoder (plain `ldr` at 12-byte strides, two constant
+  `tbl1` gathers, per-lane variable shifts) that avoids `ld3` and `st4`
+  entirely: more instructions than it saves. `ld3` and `st4` are cheap in
+  throughput even though they are slow by latency.
+- Unrolling the decode loop by 4 did help, 8.25 us to 7.74 us, and
+  shipped. The validity test ends in a vector reduction and a branch,
+  which is dead time per block.
+
+Open: x86-64. AVX2 needs the Muła `pshufb` reshuffle plus 16-bit
+multiples, and AVX-512 VBMI needs `vpermb`/`vpmultishiftqb`; both are
+two to three times fewer instructions per byte than NEON.
+
+A hand-written scalar loop for x86-64 was written and thrown away: it
+measured 12% faster than std on encode and 36% slower on decode, because
+std pre-shifts its four 256-entry `u32` decode tables and writes three
+bytes with one `u32` store. Rather than pay 4 KiB of tables to match,
+every non-aarch64 build hands the whole job to std's codec at comptime,
+so nothing regresses. Zig has no function-level target features, so AVX2
+means the consumer builds with `-Dcpu=x86_64_v3`, or the module ships a
+second object; decide which before adding it.

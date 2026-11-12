@@ -6,6 +6,7 @@
 const testingx = @import("testingx");
 
 const base32 = @import("base32_bench.zig");
+const base64 = @import("base64_bench.zig");
 const bit_set = @import("bit_set_bench.zig");
 const bloom = @import("bloom_bench.zig");
 const btree = @import("btree_bench.zig");
@@ -32,6 +33,7 @@ const wire = @import("wire_bench.zig");
 
 pub fn benchmarkMain(b: *testingx.B) !void {
     try b.addMod(base32);
+    try b.addMod(base64);
     try b.addMod(bit_set);
     try b.addMod(bloom);
     try b.addMod(btree);

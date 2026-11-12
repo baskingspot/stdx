@@ -15,6 +15,7 @@ const testing = std.testing;
 const builtin = @import("builtin");
 
 pub const base32 = @import("base32.zig");
+pub const base64 = @import("base64.zig");
 pub const bit_set = @import("bit_set.zig");
 pub const bloom = @import("bloom.zig");
 pub const bounded_array_hash_map = @import("bounded_array_hash_map.zig");

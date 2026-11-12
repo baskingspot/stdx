@@ -86,6 +86,54 @@ adaptations: `std.mem.readInt` windows, `@ctz`/`@clz`, the `ParseError`
 boundary, and a leading-zero rejection that upstream does not perform. The
 SWAR validation, segment folds, and constants are upstream's.
 
+## libbase64
+
+Upstream: https://github.com/aklomp/base64 (`lib/arch/neon64/enc_loop.c`,
+`enc_reshuffle.c`, `dec_loop.c`, master, commit `1ac2f0e`).
+License: BSD-2-Clause, Copyright (c) 2005-2007 Nick Galbreath, 2015-2018
+Wojciech Muła, 2016-2017 Matthieu Darbois, 2013-2022 Alfred Klomp — terms
+reproduced below.
+
+`src/base64.zig` reimplements their aarch64 NEON codecs. The instruction
+sequence of the block kernels is theirs: `ld3` deinterleave, the shift/insert
+reshuffle, a 64-byte `tbl` alphabet translation, `st4` on encode; `ld4`, a
+saturating subtract into a second 64-byte `tbx` table, the shift-or pack, and
+`st3` on decode, with the split at character 63 that makes one combined value
+above 63 mean invalid. Zig adaptations: the tables are generated at comptime
+from the alphabet, the tables and the structure loads are pinned to fixed
+registers because Zig has no `tbl`/`ld3` builtins, the block loops return the
+byte count they consumed so one scalar tail serves every codec, and the
+padding and trailing-bit checks are Zig's own.
+
+Copyright (c) 2005-2007, Nick Galbreath
+Copyright (c) 2015-2018, Wojciech Muła
+Copyright (c) 2016-2017, Matthieu Darbois
+Copyright (c) 2013-2022, Alfred Klomp
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+- Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ## Design references
 
 These are designs stdx implemented on its own. No code was copied, so no

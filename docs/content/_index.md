@@ -19,6 +19,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Sort](#sort): `sort.radix` is a stable integer radix sort, and `sort.nth`/`sort.select` find the k-th element without sorting the rest.
 - [Cache the recent](#cache-the-recent): `lru.String` and `lru.Auto` keep a fixed number of recent entries and evict the tail.
 - [Binary encoding](#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, with the byte order fixed at comptime and a slot for a length or checksum written later.
+- [Base64](#base64): the RFC 4648 codec at comptime: the four alphabets, exact lengths before the call, and a decode that is the validation. The kernels move a vector per instruction.
 - [Base32](#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
 - [UUIDs](#uuids): `Uuid` generates version 4 and version 7 values, formats them, and parses the canonical text form.
@@ -102,6 +103,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | Module                                                       | Use it for                                                                                                                                                                        |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`base32`](api/#stdx.base32)                                 | Crockford base32 codec for fixed-shape machine tokens: lowercase-only `encode` and `decode`, where the decode is the validation.                                                  |
+| [`base64`](api/#stdx.base64)                                 | RFC 4648 base64: four alphabets, `encode` and `decode` over caller-owned bytes, and vector kernels on aarch64.                                                                    |
 | [`bit_set`](api/#stdx.bit_set)                               | Fixed-capacity bitsets. `Scratch` resets without clearing the dirty backing words.                                                                                                |
 | [`bloom`](api/#stdx.bloom)                                   | Bloom filters with a fixed capacity.                                                                                                                                              |
 | [`bounded_array_hash_map`](api/#stdx.bounded_array_hash_map) | An insertion-ordered hash map with a fixed capacity and no allocator.                                                                                                             |
@@ -567,6 +569,22 @@ Every fallible method has two forms. The checked form returns `error.NoSpaceLeft
 ## Know the limits
 
 The writer writes fixed-width integers and enums, byte slices, and slots. It does not write varints, bit-packed fields, or a different byte order per field. A protocol that needs those writes the field with `std.mem` or its own codec.
+
+# Base64
+
+`base64` encodes and decodes RFC 4648. std has a codec for the same format. This one keeps the same four alphabets and moves a vector per instruction where std moves a byte: on aarch64 the 3-in/4-out byte interleave is an addressing mode, and the alphabet is one table permute per 16 characters.
+
+The codec is a comptime value: `standard`, `standard_no_pad`, `url_safe`, and `url_safe_no_pad`. Each one carries its alphabet and its pad character into the type, so a lookup table the kernel indexes is a constant in the binary. Pass it as the first argument, or call it through the constant.
+
+Both directions write into storage the caller owns and return the slice they wrote. `encode` needs `encodedLen(n)` bytes. `decode` needs `decodedLen(source)` bytes and writes its own length back, because padding changes it.
+
+A decode that returns bytes has validated them. A byte outside the alphabet is `error.InvalidCharacter`. A length that cannot be base64, a pad character in the wrong place, and a nonzero unused low bit in a partial group are all `error.InvalidPadding`. A destination that is too small is `error.NoSpaceLeft`.
+
+The codec does not skip whitespace or decode a stream. A format that wraps its base64 across lines unwraps it first.
+
+```zig
+{{ load_data(path="examples/base64_codec.zig", format="plain") | trim_end }}
+```
 
 # Base32
 
