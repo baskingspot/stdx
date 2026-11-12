@@ -3,7 +3,7 @@
 base_url = "https://baskingspot.dev/stdx"
 theme = "baskingspot"
 title = "stdx"
-description = "Extensions to the Zig 0.16 standard library: fixed-capacity containers, strict parsers, IPv4 types, and the primitives std lacks."
+description = "Extensions to the Zig 0.16 and 0.17 standard libraries: fixed-capacity containers, strict parsers, IPv4 types, and the primitives std lacks."
 
 # Zola emits these by default. The site is small and the API viewer owns search.
 generate_feeds = false
