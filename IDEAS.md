@@ -575,6 +575,26 @@ aarch64), and the operand order was taken from LLVM's own output for the
 same intrinsics through `zig cc -S -masm=att`. Before anyone relies on
 the AVX-512 path, run the suite once on Sapphire Rapids or Icelake.
 
+The one thing that gate could not reach was AVX-512, until CI answered
+it: the first CI run on the x86 path failed inside `encodeBlocksAvx512`,
+which is only compiled if the target CPU has VBMI. The `ubuntu-26.04`
+pool handed out AVX-512 hardware on the first try, so CI is the machine
+we were going to go looking for.
+
+The failure was not the CPU. Zig's self-hosted x86-64 backend is the
+default for a Debug build, and it rejects any vector register in inline
+assembly, 256-bit included:
+
+    zig build-obj -O Debug -target x86_64-linux -mcpu=icelake_server   -> invalid constraint: '=v'
+    zig build-obj -O Debug -fllvm ...                                  -> fine
+
+`builtin.zig_backend` is `stage2_x86_64` in that build and `stage2_llvm`
+in every other. So the x86 kernels are selected only under LLVM, and our
+build passes `use_llvm = true` on the test steps, which puts `-fllvm` on
+the command line and keeps the kernels in the Debug lane. A consumer who
+builds stdx in Debug on x86-64 without that flag gets std's codec; the
+alternative was a compile error they could not read.
+
 Open: qemu-user is not in the devshell, so that check is a copy-pasted
 command. Putting `qemu` in the devshell and adding `just test-x86` would
 make it repeatable; it is a flake-shape change, so it waits on Matt.

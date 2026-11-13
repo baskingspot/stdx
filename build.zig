@@ -25,9 +25,12 @@ pub fn build(b: *std.Build) void {
     else
         null;
 
+    // LLVM, so the Debug suite exercises the same vector kernels the release
+    // builds get. The self-hosted x86-64 backend cannot assemble them.
     const mod_tests = b.addTest(.{
         .root_module = mod,
         .test_runner = test_runner,
+        .use_llvm = true,
     });
     const run_mod_tests = b.addRunArtifact(mod_tests);
     // Only the module suite takes runner flags: a filter that matches none of
@@ -48,13 +51,14 @@ pub fn build(b: *std.Build) void {
     const example_tests = b.addTest(.{
         .root_module = examples_mod,
         .test_runner = test_runner,
+        .use_llvm = true,
     });
     const run_example_tests = b.addRunArtifact(example_tests);
     test_step.dependOn(&run_example_tests.step);
 
     // Fuzzing needs the built-in runner: testingx's main rejects fuzz mode
     // because the fuzzer speaks a private protocol. `just fuzz` drives this.
-    const fuzz_tests = b.addTest(.{ .root_module = mod });
+    const fuzz_tests = b.addTest(.{ .root_module = mod, .use_llvm = true });
     const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
     run_fuzz_tests.has_side_effects = true;
     const fuzz_step = b.step("fuzz", "Fuzz the module (built-in test runner)");

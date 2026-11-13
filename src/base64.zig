@@ -22,6 +22,11 @@
 //! no indirect call, so a build for the x86-64 baseline has no acceleration
 //! and a build for `x86_64_v3` has it compiled in.
 //!
+//! An x86-64 Debug build takes Zig's self-hosted backend by default, which
+//! cannot assemble a vector register operand, so those builds get std's
+//! codec too. Set `use_llvm = true` on the build step to keep the kernels
+//! in a Debug build.
+//!
 //! Streaming, whitespace tolerance, and the `IgnoreDecoder` shape are not
 //! here. A caller that has to skip newlines has a format problem, not a
 //! codec problem.
@@ -304,10 +309,16 @@ const invalid: u8 = 0xFF;
 
 const Isa = enum { scalar, neon, avx2, avx512_vbmi };
 
+/// Zig's self-hosted x86-64 backend, which is what a Debug build gets by
+/// default, rejects vector registers in inline assembly. The x86 kernels are
+/// therefore only selected when LLVM compiles the module; everything else
+/// falls back to std's codec. `use_llvm = true` on a build step forces it.
+const llvm_backend = builtin.zig_backend == .stage2_llvm;
+
 const isa: Isa = blk: {
     const arch = builtin.cpu.arch;
     if (arch == .aarch64) break :blk .neon;
-    if (arch == .x86_64) {
+    if (arch == .x86_64 and llvm_backend) {
         const features = builtin.cpu.features;
         // VBMI is what the AVX-512 kernels need: `vpermb` for both
         // directions and `vpermt2b` for the 128-entry decode table.
@@ -1207,4 +1218,23 @@ fn modelAvx512Decode(chars: [64]u8) ![48]u8 {
     var out: [48]u8 = undefined;
     for (0..48) |k| out[k] = groups[compact[k]];
     return out;
+}
+
+test "the kernel follows the target" {
+    const select = struct {
+        fn expected(
+            comptime arch: std.Target.Cpu.Arch,
+            comptime features: std.Target.Cpu.Feature.Set,
+        ) Isa {
+            if (arch == .aarch64) return .neon;
+            if (arch == .x86_64 and builtin.zig_backend == .stage2_llvm) {
+                const vbmi: [4]std.Target.x86.Feature =
+                    .{ .avx512f, .avx512bw, .avx512vl, .avx512vbmi };
+                if (std.Target.x86.featureSetHasAll(features, vbmi)) return .avx512_vbmi;
+                if (std.Target.x86.featureSetHas(features, .avx2)) return .avx2;
+            }
+            return .scalar;
+        }
+    };
+    try testing.expectEqual(select.expected(builtin.cpu.arch, builtin.cpu.features), isa);
 }
