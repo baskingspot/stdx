@@ -115,6 +115,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`fmt`](api/#stdx.fmt)                                       | Strict parsing for integers and booleans (`atoi`, `parseBool`), and comptime hex decoding.                                                                                        |
 | [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
 | [`heap`](api/#stdx.heap)                                     | `SlabAllocator`, `SizeClassPool`, and the single-threaded `Bump` arena.                                                                                                           |
+| [`intern`](api/#stdx.intern)                                 | A string pool with stable `u32` ids. Names are copied into chunks, so an intern allocates only when a chunk fills.                                                                |
 | [`jsonc`](api/#stdx.jsonc)                                   | JSON with `//` and `/* */` comments and trailing commas. The scrub keeps every byte offset for `std.json` diagnostics.                                                            |
 | [`lru`](api/#stdx.lru)                                       | A fixed-capacity LRU cache with no allocator and no eviction callback.                                                                                                            |
 | [`mem`](api/#stdx.mem)                                       | Fixed-size byte values and memory scans.                                                                                                                                          |
@@ -401,6 +402,8 @@ An empty or malformed string returns `error.InvalidCharacter`. A number too larg
 ```
 
 `.overflow = .unchecked` skips the overflow check. The caller promises that the value fits. A value that does not fit is a safety-checked panic in Debug and ReleaseSafe, and undefined behavior in ReleaseFast. `fmt.atoiUnchecked` is the shorthand.
+
+Three more knobs pick the sign and zero grammar. `.leading_zeros = .reject` refuses a `0` with digits after it. `.plus_sign = .reject` refuses a leading `+`, which only a signed type would otherwise accept. `.negative_zero = .reject` refuses `-0`, and any longer run of zeros behind a minus sign. The defaults allow all three, matching `std.fmt.parseInt`.
 
 ## Parse a boolean
 
@@ -860,6 +863,18 @@ Linux only. The `.eventfd` and `.futex` flavors wrap Linux syscalls, and the mod
 # Small modules
 
 These modules are small enough that the contract fits in a paragraph. The [module list](#modules) has the one-line summary, and the [API reference](api/) has every symbol.
+
+## Assign ids to strings
+
+`intern.Pool` keeps one copy of each distinct string and hands out a dense `u32` id. Compare ids for the rest of the run instead of comparing bytes, and print the text through `get`.
+
+`intern(gpa, bytes)` copies the bytes into chunk storage and returns the id, or the existing id when the bytes are already present. One allocation serves many names: the copy goes into the tail of the current chunk, and a name longer than a chunk gets a chunk of its own. `lookup(bytes)` finds an id without inserting, and `count` reports the number of distinct strings.
+
+The pool is unmanaged, so `intern` and `deinit` take the allocator. Ids stay valid until `deinit`, there is no deletion, and the pool is not thread-safe.
+
+```zig
+{{ load_data(path="examples/intern_pool.zig", format="plain") | trim_end }}
+```
 
 ## Bound a response
 
