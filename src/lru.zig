@@ -4,10 +4,10 @@
 //! entries with no allocator. `get` moves a hit to the front; `put` evicts the
 //! least-recently-used entry when a new key arrives at capacity.
 //!
-//! The index is a `bounded_array_hash_map` from key to node slot. The nodes
-//! live in one array and form an intrusive doubly linked list with integer
-//! links, not pointers. `get` only relinks, so a hit is constant time and no
-//! entry data moves.
+//! The index is a `bounded_array_hash_map` from key to node handle. The nodes
+//! live in one `slot.Array`, whose intrusive doubly linked list orders them from
+//! most to least recently used; the links are `slot.Handle`s, not pointers.
+//! `get` only relinks, so a hit is constant time and no entry data moves.
 //!
 //! A value pointer from `get` or `peek` keeps its address for the cache's
 //! lifetime. Once its entry is removed, a later `put` can reuse the node, so
@@ -26,6 +26,7 @@ const AutoContext = std.hash_map.AutoContext;
 const StringContext = std.hash_map.StringContext;
 
 const bounded_array_hash_map = @import("bounded_array_hash_map.zig");
+const slot = @import("slot.zig");
 
 /// A bounded LRU with `Custom`'s hash context.
 pub fn Custom(
@@ -66,52 +67,27 @@ pub fn Custom(
             pub const empty: PutResult = .{ .replaced = null, .evicted = null };
         };
 
-        const none = math.maxInt(Index);
-
         const Node = struct {
             entry: Entry,
             prev: Index,
             next: Index,
         };
+        const NodePool = slot.Pool(Node, "prev", "next");
+        const Nodes = slot.Array(Node, "prev", "next", buffer_capacity);
 
         map: Map,
-        nodes: [buffer_capacity]Node,
-        head: Index,
-        tail: Index,
-        free_head: Index,
-        next_free: Index,
-
-        pub const empty: Self = .{
-            .map = .empty,
-            .nodes = undefined,
-            .head = none,
-            .tail = none,
-            .free_head = none,
-            .next_free = 0,
-        };
+        nodes: Nodes,
 
         /// A cache with no entries and a default-initialized context, for
         /// stateless contexts such as `Auto`'s and `String`'s. Use
         /// `initContext` when the context carries state.
-        pub const init: Self = .{
-            .map = .init,
-            .nodes = undefined,
-            .head = none,
-            .tail = none,
-            .free_head = none,
-            .next_free = 0,
-        };
+        pub const init: Self = .{ .map = .init, .nodes = .empty };
+
+        pub const empty: Self = .{ .map = .empty, .nodes = .empty };
 
         /// A cache with no entries and the given context.
         pub fn initContext(context: Context) Self {
-            return .{
-                .map = .initContext(context),
-                .nodes = undefined,
-                .head = none,
-                .tail = none,
-                .free_head = none,
-                .next_free = 0,
-            };
+            return .{ .map = .initContext(context), .nodes = .empty };
         }
 
         /// Number of cached entries.
@@ -126,101 +102,89 @@ pub fn Custom(
 
         /// The value for `key`, moved to the most-recently-used position.
         pub fn get(self: *Self, key: K) ?*V {
-            const index = self.map.get(key) orelse return null;
-            self.moveToFront(index);
-            return &self.nodes[index].entry.value;
+            const handle = self.map.get(key) orelse return null;
+            self.nodes.moveToFront(handle);
+            return &self.nodes.get(handle).entry.value;
         }
 
         /// The value for `key`, without changing recency.
         pub fn peek(self: *Self, key: K) ?*V {
-            const index = self.map.get(key) orelse return null;
-            return &self.nodes[index].entry.value;
+            const handle = self.map.get(key) orelse return null;
+            return &self.nodes.get(handle).entry.value;
         }
 
         /// Insert or update `key`. An update moves the entry to the front and
         /// returns the old value in `replaced`. A new key at capacity evicts
         /// the tail and returns it in `evicted`.
         pub fn put(self: *Self, key: K, value: V) PutResult {
-            if (self.map.get(key)) |index| {
-                const old = self.nodes[index].entry.value;
-                self.nodes[index].entry.value = value;
-                self.moveToFront(index);
+            if (self.map.get(key)) |handle| {
+                const node = self.nodes.get(handle);
+                const old = node.entry.value;
+                node.entry.value = value;
+                self.nodes.moveToFront(handle);
                 return .{ .replaced = old, .evicted = null };
             }
 
             var result: PutResult = .empty;
-            const index: Index = if (self.map.count() == capacity) evict: {
-                const tail = self.tail;
-                assert(tail != none);
-                const entry = self.nodes[tail].entry;
-                assert(self.map.swapRemove(entry.key));
-                self.unlink(tail);
-                result.evicted = entry;
-                break :evict tail;
-            } else self.allocNode();
+            const handle: Index = if (self.map.count() == capacity) evict: {
+                // The back of the list is the least recently used. Popping it
+                // frees its handle, and the acquire below takes it back.
+                const evicted = self.nodes.popBack().?;
+                assert(self.map.swapRemove(evicted.entry.key));
+                result.evicted = evicted.entry;
+                break :evict self.nodes.acquireFrontAssumeCapacity();
+            } else self.nodes.acquireFrontAssumeCapacity();
 
-            const slot = self.map.getOrPutAssumeCapacity(key);
-            assert(!slot.found_existing);
-            slot.value_ptr.* = index;
-            self.nodes[index] = .{
-                .entry = .{ .key = key, .value = value },
-                .prev = none,
-                .next = none,
-            };
-            self.linkFront(index);
+            const entered = self.map.getOrPutAssumeCapacity(key);
+            assert(!entered.found_existing);
+            entered.value_ptr.* = handle;
+            self.nodes.get(handle).entry = .{ .key = key, .value = value };
             return result;
         }
 
         /// Remove `key` and return its value.
         pub fn remove(self: *Self, key: K) ?V {
-            const index = self.map.get(key) orelse return null;
-            const value = self.nodes[index].entry.value;
+            const handle = self.map.get(key) orelse return null;
+            const value = self.nodes.get(handle).entry.value;
             assert(self.map.swapRemove(key));
-            self.unlink(index);
-            self.freeNode(index);
+            self.nodes.release(handle);
             return value;
         }
 
         /// Remove and return the least-recently-used entry.
         pub fn popLru(self: *Self) ?Entry {
-            if (self.tail == none) return null;
-            return self.popIndex(self.tail);
+            const node = self.nodes.popBack() orelse return null;
+            assert(self.map.swapRemove(node.entry.key));
+            return node.entry;
         }
 
         /// Remove and return the most-recently-used entry.
         pub fn popMru(self: *Self) ?Entry {
-            if (self.head == none) return null;
-            return self.popIndex(self.head);
+            const node = self.nodes.popFront() orelse return null;
+            assert(self.map.swapRemove(node.entry.key));
+            return node.entry;
         }
 
         /// Drop every entry, keeping the storage. The values are not returned;
         /// drain with the iterator first when `V` owns resources.
         pub fn clear(self: *Self) void {
             self.map.clear();
-            self.head = none;
-            self.tail = none;
-            self.free_head = none;
-            self.next_free = 0;
+            self.nodes = .empty;
         }
 
         pub const Iterator = struct {
-            cache: *Self,
-            index: Index,
+            inner: NodePool.Iterator,
 
             /// The next entry from most to least recently used, or null.
             pub fn next(self: *Iterator) ?Item {
-                if (self.index == none) return null;
-                const index = self.index;
-                self.index = self.cache.nodes[index].next;
-                return .{
-                    .key = self.cache.nodes[index].entry.key,
-                    .value = &self.cache.nodes[index].entry.value,
-                };
+                const walked = self.inner.next() orelse return null;
+                const node = walked.entry;
+                return .{ .key = node.entry.key, .value = &node.entry.value };
             }
 
             /// Restart at the most-recently-used entry.
             pub fn reset(self: *Iterator) void {
-                self.index = self.cache.head;
+                self.inner.reset();
             }
         };
 
@@ -228,64 +192,7 @@ pub fn Custom(
         /// during iteration only through the returned value pointers: `get`,
         /// `put`, `remove`, and `clear` invalidate the iterator.
         pub fn iterator(self: *Self) Iterator {
-            return .{ .cache = self, .index = self.head };
-        }
-
-        fn popIndex(self: *Self, index: Index) Entry {
-            const entry = self.nodes[index].entry;
-            assert(self.map.swapRemove(entry.key));
-            self.unlink(index);
-            self.freeNode(index);
-            return entry;
-        }
-
-        fn allocNode(self: *Self) Index {
-            if (self.free_head != none) {
-                const index = self.free_head;
-                self.free_head = self.nodes[index].next;
-                return index;
-            }
-            assert(self.next_free < capacity);
-            const index = self.next_free;
-            self.next_free += 1;
-            return index;
-        }
-
-        fn freeNode(self: *Self, index: Index) void {
-            self.nodes[index].next = self.free_head;
-            self.free_head = index;
-        }
-
-        fn linkFront(self: *Self, index: Index) void {
-            self.nodes[index].prev = none;
-            self.nodes[index].next = self.head;
-            if (self.head == none) {
-                self.tail = index;
-            } else {
-                self.nodes[self.head].prev = index;
-            }
-            self.head = index;
-        }
-
-        fn unlink(self: *Self, index: Index) void {
-            const prev = self.nodes[index].prev;
-            const next = self.nodes[index].next;
-            if (prev == none) {
-                self.head = next;
-            } else {
-                self.nodes[prev].next = next;
-            }
-            if (next == none) {
-                self.tail = prev;
-            } else {
-                self.nodes[next].prev = prev;
-            }
-        }
-
-        fn moveToFront(self: *Self, index: Index) void {
-            if (self.head == index) return;
-            self.unlink(index);
-            self.linkFront(index);
+            return .{ .inner = self.nodes.iterator() };
         }
     };
 }
