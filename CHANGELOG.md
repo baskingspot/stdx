@@ -5,6 +5,8 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
 ### Added
 
 - `base64`: RFC 4648 encoding and decoding, with a comptime codec (`standard`, `standard_no_pad`, `url_safe`, `url_safe_no_pad`) over caller-owned bytes. `decode` validates padding and the unused trailing bits. The kernel is picked from the target CPU at compile time: NEON on aarch64, AVX2 on `x86_64_v3`, AVX-512 VBMI on `x86_64_v4`. A build for the x86-64 baseline falls back to `std.base64`. No CPUID probe and no run-time dispatch: build with the target you want.
