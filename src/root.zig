@@ -40,6 +40,7 @@ pub const prefix_map = @import("prefix_map.zig");
 pub const priority_queue = @import("priority_queue.zig");
 pub const random = @import("random.zig");
 pub const set = @import("set.zig");
+pub const slot = @import("slot.zig");
 const slot_ring_mod = @import("slot_ring.zig");
 pub const sort = @import("sort.zig");
 pub const static_map = @import("static_map.zig");
