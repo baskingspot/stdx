@@ -45,6 +45,7 @@ pub const parsing_bool = @import("parsing_bool.zig");
 pub const prefix_map_routes = @import("prefix_map_routes.zig");
 pub const parsing_leading_zeros = @import("parsing_leading_zeros.zig");
 pub const random_token = @import("random_token.zig");
+pub const slot_pool = @import("slot_pool.zig");
 // slot_ring is Linux only, so its example is too: elsewhere the module is
 // `void`. The import is lazy, so the file is not analyzed off Linux.
 const slot_ring_logging_example = @import("slot_ring_logging.zig");

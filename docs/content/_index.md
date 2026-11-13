@@ -128,6 +128,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`priority_queue`](api/#stdx.priority_queue)                 | A priority queue with a fixed capacity.                                                                                                                                           |
 | [`random`](api/#stdx.random)                                 | Secure random bytes without an `Io` value.                                                                                                                                        |
 | [`set`](api/#stdx.set)                                       | A bounded set with set algebra.                                                                                                                                                   |
+| [`slot`](api/#stdx.slot)                                     | A fixed-capacity pool over caller-owned entries, with intrusive links and acquisition-order iteration.                                                                            |
 | [`slot_ring`](api/#stdx.slot_ring)                           | A bounded MPSC ring for log lines: producers never block, and one consumer drains. Linux only.                                                                                    |
 | [`sort`](api/#stdx.sort)                                     | A stable integer radix sort, and selection of the k-th element.                                                                                                                   |
 | [`static_map`](api/#stdx.static_map)                         | Lookup tables that the compiler builds from a literal.                                                                                                                            |
@@ -140,7 +141,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 
 # Choosing a container
 
-Most stdx containers have a fixed capacity. The capacity is part of the type, the storage is inside the value, and no allocator is involved. One container, `swiss`, grows at runtime and uses an allocator.
+Most stdx containers have a fixed capacity. The capacity is part of the type, the storage is inside the value, and no allocator is involved. One container, `swiss`, grows at runtime and uses an allocator. `slot.Pool` takes its entries as a slice, so its capacity is runtime while its storage stays the caller's.
 
 Find the need in the table. Then read the section for that type in [Fixed-capacity containers](#fixed-capacity-containers).
 
@@ -924,6 +925,20 @@ The arena's `State` type is the chunk list without the allocator, so it holds tw
 
 ```zig
 {{ load_data(path="examples/heap_bump_values.zig", format="plain") | trim_end }}
+```
+
+## Pool entries with intrusive links
+
+`slot.Pool(Entry, "prev", "next")` holds a fixed set of entries that come and go, with O(1) acquire and release. The two link fields live inside the entry, named at comptime, so a walk of the live entries reads only the entries it visits, not every slot in the table.
+
+`init(&entries)` takes the whole storage, so capacity is the slice length: a `[N]Entry` array for a fixed size, an allocated slice for a runtime one. `acquire` returns a handle, or `error.NoSpaceLeft` when every entry is live. `release` takes the handle back. The handle is the entry's index, so a caller recovers the index by keeping the handle and never by pointer arithmetic. `get` returns the entry, and `isLive` answers whether a handle is live.
+
+`iterator` walks the live entries in acquisition order. `next` advances before the body runs, so the body may release the entry it was handed. Releasing any other entry during the walk is not supported.
+
+The pool writes only the two link fields. An acquired entry still holds what the previous occupant left, so initialize every field you read. A handle released twice trips an assert in a safe build.
+
+```zig
+{{ load_data(path="examples/slot_pool.zig", format="plain") | trim_end }}
 ```
 
 ## Fixed-size byte values
