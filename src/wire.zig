@@ -7,7 +7,8 @@
 //! known only after the body, and `reserve` hands back the bytes to fill later.
 //!
 //! `Reader(.big)` and `Reader(.little)` are the inverse. They read the same
-//! widths and hand back zero-copy slices of the bytes they were given.
+//! widths and hand back zero-copy slices of the bytes they were given: a run of
+//! `n` bytes, or the bytes before a delimiter.
 //!
 //! Every fallible method has an unchecked form. The checked form returns an
 //! error; the unchecked form asserts the same bound, so it panics in Debug and
@@ -175,10 +176,13 @@ pub fn Writer(comptime endian: std.builtin.Endian) type {
 /// `Reader(.little)` are different types and each fixed-width load compiles to
 /// its own code. The byte slices and skips are order-agnostic.
 ///
-/// The `read`, `readSlice`, and `skip` forms return `error.UnexpectedEof` when
-/// the request exceeds the unread bytes. The `assume` forms assert the same
-/// bound instead. Bounds are checked as `n > remaining().len`, never
-/// `end + n`, which would wrap in ReleaseFast.
+/// The `read`, `readSlice`, `readUntil`, and `skip` forms return
+/// `error.UnexpectedEof` when the request exceeds the unread bytes. The
+/// `assume` forms assert the same bound instead. Bounds are checked as
+/// `n > remaining().len`, never `end + n`, which would wrap in ReleaseFast.
+///
+/// A failed read never moves the cursor, so a framer can restore its start and
+/// retry once more bytes arrive.
 pub fn Reader(comptime endian: std.builtin.Endian) type {
     return struct {
         const Self = @This();
@@ -263,6 +267,37 @@ pub fn Reader(comptime endian: std.builtin.Endian) type {
             const bytes = self.buffer[self.end..][0..n];
             self.end += n;
             return bytes;
+        }
+
+        /// Read the bytes before `delimiter`, then consume the delimiter. The
+        /// returned slice is a zero-copy view and excludes the delimiter.
+        ///
+        /// This is the lengthless field: a C string ends at a NUL, a line at a
+        /// newline. The delimiter is a parameter, not a fixed `0`, so the rule
+        /// "a field with no terminator is `error.UnexpectedEof`" lives in one
+        /// place rather than in every protocol decoder.
+        ///
+        /// Returns `error.UnexpectedEof` when `delimiter` is not in the unread
+        /// bytes. The cursor does not move in that case, and the delimiter is
+        /// consumed only on success.
+        pub fn readUntil(self: *Self, delimiter: u8) error{UnexpectedEof}![]const u8 {
+            const index = std.mem.findScalar(u8, self.remaining(), delimiter);
+            if (index == null) return error.UnexpectedEof;
+            return self.assumeReadUntilIndex(index.?);
+        }
+
+        /// `readUntil` without the error return. Asserts `delimiter` is in the
+        /// unread bytes.
+        pub fn assumeReadUntil(self: *Self, delimiter: u8) []const u8 {
+            const index = std.mem.findScalar(u8, self.remaining(), delimiter);
+            assert(index != null);
+            return self.assumeReadUntilIndex(index.?);
+        }
+
+        fn assumeReadUntilIndex(self: *Self, index: usize) []const u8 {
+            const field = self.assumeReadSlice(index);
+            self.assumeSkip(1);
+            return field;
         }
 
         /// Skip `n` bytes. Returns `error.UnexpectedEof` when the skip does not
@@ -513,6 +548,47 @@ test Reader {
     try testing.expectEqual(@as(usize, 0), reader.remaining().len);
     try testing.expectEqualSlices(u8, &bytes, reader.consumed());
 
+    // A delimited field is the bytes before the delimiter, and the delimiter
+    // is consumed with it.
+    var delimited: Big = .init("id\x00age\x00");
+    try testing.expectEqualStrings("id", try delimited.readUntil(0));
+    try testing.expectEqualStrings("age", try delimited.readUntil(0));
+    try testing.expectEqual(@as(usize, 0), delimited.remaining().len);
+
+    // The delimiter is a parameter, so another protocol uses the same read.
+    var line: Big = .init("hello world\r\nrest");
+    try testing.expectEqualStrings("hello world\r", try line.readUntil('\n'));
+    try testing.expectEqualSlices(u8, "rest", line.remaining());
+
+    // A delimiter at the cursor is an empty field, not a skip.
+    var empty_field: Big = .init("\x00\x00x");
+    try testing.expectEqualStrings("", try empty_field.readUntil(0));
+    try testing.expectEqualStrings("", try empty_field.readUntil(0));
+    try testing.expectEqualSlices(u8, "x", empty_field.remaining());
+
+    // A delimiter in the last byte is still found.
+    var last_byte: Big = .init("x\x00");
+    try testing.expectEqualStrings("x", try last_byte.readUntil(0));
+    try testing.expectEqual(@as(usize, 0), last_byte.remaining().len);
+
+    // A missing delimiter is an error, and the cursor does not move.
+    var unterminated: Big = .init("no terminator");
+    const before_failure = unterminated.end;
+    try testing.expectError(error.UnexpectedEof, unterminated.readUntil(0));
+    try testing.expectEqual(before_failure, unterminated.end);
+    try testing.expectEqualSlices(u8, "no terminator", unterminated.remaining());
+
+    // A delimited field leaves the cursor at the next typed field.
+    var mixed: Big = .init("ab\x00\x00\x02");
+    try testing.expectEqualStrings("ab", try mixed.readUntil(0));
+    try testing.expectEqual(@as(u16, 0x0002), try mixed.read(u16));
+
+    // The unchecked form takes the same path once the delimiter is known to
+    // be present.
+    var assumed_until: Big = .init("ab,c");
+    try testing.expectEqualStrings("ab", assumed_until.assumeReadUntil(','));
+    try testing.expectEqual(@as(u8, 'c'), try assumed_until.read(u8));
+
     // The little-endian type reverses each fixed-width value.
     var le: Little = .init(&.{ 0x02, 0x01, 0x05, 0x04, 0x03, 0xfe, 0xff });
     try testing.expectEqual(@as(u16, 0x0102), try le.read(u16));
@@ -553,6 +629,7 @@ test Reader {
     try testing.expectEqual(@as(u8, 0x01), try exact.read(u8));
     try testing.expectError(error.UnexpectedEof, exact.read(u8));
     try testing.expectError(error.UnexpectedEof, exact.readSlice(1));
+    try testing.expectError(error.UnexpectedEof, exact.readUntil('x'));
     try testing.expectError(error.UnexpectedEof, exact.skip(1));
     try testing.expectError(error.UnexpectedEof, exact.read(u16));
 
@@ -561,4 +638,5 @@ test Reader {
     try testing.expectEqual(@as(usize, 0), empty_reader.capacity());
     try testing.expectEqual(@as(usize, 0), empty_reader.remaining().len);
     try testing.expectError(error.UnexpectedEof, empty_reader.read(u8));
+    try testing.expectError(error.UnexpectedEof, empty_reader.readUntil(0));
 }
