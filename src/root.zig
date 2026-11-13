@@ -27,6 +27,7 @@ pub const enums = @import("enums.zig");
 pub const fmt = @import("fmt.zig");
 pub const hash = @import("hash.zig");
 pub const heap = @import("heap.zig");
+pub const intern = @import("intern.zig");
 pub const jsonc = @import("jsonc.zig");
 pub const lru = @import("lru.zig");
 pub const mem = @import("mem.zig");

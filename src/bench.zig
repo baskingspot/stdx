@@ -16,6 +16,7 @@ const enums = @import("enums_bench.zig");
 const fmt = @import("fmt_bench.zig");
 const hash = @import("hash/bench.zig");
 const heap = @import("heap_bench.zig");
+const intern = @import("intern_bench.zig");
 const lru = @import("lru_bench.zig");
 const mem = @import("mem_bench.zig");
 const multi_array = @import("multi_array_bench.zig");
@@ -43,6 +44,7 @@ pub fn benchmarkMain(b: *testingx.B) !void {
     try b.addMod(fmt);
     try b.addMod(hash);
     try b.addMod(heap);
+    try b.addMod(intern);
     try b.addMod(lru);
     try b.addMod(mem);
     try b.addMod(multi_array);
