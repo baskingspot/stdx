@@ -3,11 +3,11 @@
 //!
 //! `atoi` accepts an optional sign (for signed `T` only), then decimal
 //! digits; the whole string must be the number. No underscores, no base
-//! prefixes, no `base` parameter. `Options` selects overflow and leading-zero
-//! behavior at comptime, so each configuration compiles to its own
-//! specialization with no runtime option dispatch: `atoiWith` takes the
-//! options explicitly, while `atoi` and `atoiUnchecked` bake in the common
-//! configurations.
+//! prefixes, no `base` parameter. `Options` selects overflow, leading-zero,
+//! sign, and negative-zero behavior at comptime, so each configuration
+//! compiles to its own specialization with no runtime option dispatch:
+//! `atoiWith` takes the options explicitly, while `atoi` and `atoiUnchecked`
+//! bake in the common configurations.
 //!
 //! The hot path uses SWAR digit processing, transcribed from fast_float's
 //! `ascii_number.h` (credit @aqrit). Types too narrow to ever hold the
@@ -59,12 +59,36 @@ pub const LeadingZeros = enum {
     reject,
 };
 
-/// Behavior knobs for `atoi`. Both fields are comptime, so every
+/// Whether `atoi` accepts a leading `+`.
+///
+/// An unsigned `T` rejects `+` either way; the digit loop has no sign case.
+pub const PlusSign = enum {
+    /// `"+42"` parses as 42, matching `std.fmt.parseInt`.
+    allow,
+    /// A leading `+` is `error.InvalidCharacter`. This is the JSON and
+    /// bencode grammar, where only `-` may precede the digits.
+    reject,
+};
+
+/// Whether `atoi` accepts a minus sign on a zero magnitude.
+pub const NegativeZero = enum {
+    /// `"-0"` parses as 0, matching `std.fmt.parseInt`.
+    allow,
+    /// `"-0"` is `error.InvalidCharacter`, and so is any longer string of
+    /// zeros behind a minus sign: the sign carries no information. `"0"`
+    /// stays valid. This is the bencode grammar, where a canonical integer
+    /// has no negative zero.
+    reject,
+};
+
+/// Behavior knobs for `atoi`. Every field is comptime, so each
 /// configuration is a separately compiled specialization.
 // ast-grep-ignore: public-struct-field-default -- comptime config: call sites override one knob
 pub const Options = struct {
     overflow: Overflow = .checked,
     leading_zeros: LeadingZeros = .allow,
+    plus_sign: PlusSign = .allow,
+    negative_zero: NegativeZero = .allow,
 };
 
 // ---------------------------------------------------------------------------
@@ -190,8 +214,8 @@ fn finish(
 ///
 /// Every byte of `buf` must belong to the number (`"1234x"` is an error, not
 /// `1234`). A signed `T` accepts an optional leading `+` or `-` and parses
-/// `-0` as `0`; an unsigned `T` accepts digits only, like
-/// `std.fmt.parseUnsigned`. `atoi` never skips whitespace.
+/// `-0` as `0`, unless `Options` rejects either form; an unsigned `T` accepts
+/// digits only, like `std.fmt.parseUnsigned`. `atoi` never skips whitespace.
 ///
 /// With `.{ .overflow = .unchecked }` the caller asserts the value fits `T`;
 /// see `Overflow.unchecked` for the exact contract.
@@ -219,7 +243,10 @@ pub fn atoiWith(
     var digits = buf;
     if (int_info.signedness == .signed) {
         switch (buf[0]) {
-            '+' => digits = buf[1..],
+            '+' => {
+                if (options.plus_sign == .reject) return error.InvalidCharacter;
+                digits = buf[1..];
+            },
             '-' => {
                 negative = true;
                 digits = buf[1..];
@@ -237,6 +264,12 @@ pub fn atoiWith(
     // count; the overflow validation below depends on this (fast_float strips
     // them for the same reason). "000" reduces to "", which parses as 0.
     digits = mem.trimStart(u8, digits, "0");
+
+    // An empty tail after the trim means every digit was a zero, so the
+    // magnitude is zero and the sign is the only thing `-0` says.
+    if (options.negative_zero == .reject and negative and digits.len == 0) {
+        return error.InvalidCharacter;
+    }
 
     if (comptime int_info.bits <= 64) {
         const magnitude = try accumulate64(
@@ -362,6 +395,72 @@ test "atoi leading zeros" {
     try testing.expectError(error.InvalidCharacter, atoiWith(u32, "00", strict));
     try testing.expectError(error.InvalidCharacter, atoiWith(i32, "-042", strict));
     try testing.expectError(error.InvalidCharacter, atoiWith(i64, "+007", strict));
+}
+
+/// Assert that `buf` parses to `expected`, or is `error.InvalidCharacter` when
+/// `expected` is null.
+fn expectParsed(
+    comptime T: type,
+    buf: []const u8,
+    comptime expected: ?T,
+    comptime options: Options,
+) !void {
+    if (expected) |value| {
+        try testing.expectEqual(value, try atoiWith(T, buf, options));
+    } else {
+        try testing.expectError(error.InvalidCharacter, atoiWith(T, buf, options));
+    }
+}
+
+test "atoi sign and negative-zero options" {
+    // Every combination of the three grammar knobs, against every sign form.
+    inline for (.{ .allow, .reject }) |plus_sign| {
+        inline for (.{ .allow, .reject }) |negative_zero| {
+            inline for (.{ .allow, .reject }) |leading_zeros| {
+                const options: Options = .{
+                    .plus_sign = plus_sign,
+                    .negative_zero = negative_zero,
+                    .leading_zeros = leading_zeros,
+                };
+                const plus_ok = plus_sign == .allow;
+                const minus_zero_ok = negative_zero == .allow;
+                const zeros_ok = leading_zeros == .allow;
+
+                try expectParsed(i32, "+0", if (plus_ok) 0 else null, options);
+                try expectParsed(i32, "+1", if (plus_ok) 1 else null, options);
+                try expectParsed(i32, "-0", if (minus_zero_ok) 0 else null, options);
+                try expectParsed(i32, "-1", -1, options);
+                try expectParsed(i32, "0", 0, options);
+                try expectParsed(i32, "00", if (zeros_ok) 0 else null, options);
+
+                // The sign rules reach every all-zero magnitude, not just
+                // the one-digit form, so no knob combination rescues `-00`.
+                try expectParsed(i32, "-00", if (minus_zero_ok and zeros_ok) 0 else null, options);
+
+                // A bare sign is not a number under any combination.
+                try expectParsed(i32, "+", null, options);
+                try expectParsed(i32, "-", null, options);
+
+                // An unsigned T has no sign case at all.
+                try expectParsed(u32, "+1", null, options);
+                try expectParsed(u32, "-0", null, options);
+            }
+        }
+    }
+
+    // The strict configuration a grammar like bencode needs: no leading
+    // zeros, no plus, no negative zero.
+    const strict: Options = .{
+        .leading_zeros = .reject,
+        .plus_sign = .reject,
+        .negative_zero = .reject,
+    };
+    try testing.expectEqual(0, try atoiWith(i64, "0", strict));
+    try testing.expectEqual(-1, try atoiWith(i64, "-1", strict));
+    try testing.expectEqual(42, try atoiWith(i64, "42", strict));
+    try testing.expectError(error.InvalidCharacter, atoiWith(i64, "+42", strict));
+    try testing.expectError(error.InvalidCharacter, atoiWith(i64, "-0", strict));
+    try testing.expectError(error.InvalidCharacter, atoiWith(i64, "042", strict));
 }
 
 test atoiUnchecked {
