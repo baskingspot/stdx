@@ -931,7 +931,11 @@ The arena's `State` type is the chunk list without the allocator, so it holds tw
 
 `slot.Pool(Entry, "prev", "next")` holds a fixed set of entries that come and go, with O(1) acquire and release. The two link fields live inside the entry, named at comptime, so a walk of the live entries reads only the entries it visits, not every slot in the table.
 
-`init(&entries)` takes the whole storage, so capacity is the slice length: a `[N]Entry` array for a fixed size, an allocated slice for a runtime one. `acquire` returns a handle, or `error.NoSpaceLeft` when every entry is live. `release` takes the handle back. The handle is the entry's index, so a caller recovers the index by keeping the handle and never by pointer arithmetic. `get` returns the entry, and `isLive` answers whether a handle is live.
+Two constructors share one implementation. `Pool(Entry, "prev", "next")` takes a slice at `init`, so its capacity is known at runtime: an allocated connection table, for example. `Array(Entry, "prev", "next", n)` owns an `[n]Entry` and is the form to put in a struct that is copied or returned, because a `Pool` holds a slice into storage it does not own.
+
+The link fields carry the handle type. `u32` is the usual choice, and a narrow type such as `std.math.IntFittingRange` packs a small table.
+
+`acquire` returns a handle and links the entry at the back of the list, or returns `error.NoSpaceLeft` when every entry is live. `acquireFront` links it at the front instead, which is what a recency-ordered cache wants. `release` takes the handle back. The handle is the entry's index, so a caller recovers the index by keeping the handle and never by pointer arithmetic. `get` returns the entry, and `isLive` answers whether a handle is live. `moveToFront` reorders a live entry, and `popFront` and `popBack` remove an end; `lru` is built on the first two.
 
 `iterator` walks the live entries in acquisition order. `next` advances before the body runs, so the body may release the entry it was handed. Releasing any other entry during the walk is not supported.
 
