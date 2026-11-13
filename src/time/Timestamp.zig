@@ -5,14 +5,20 @@
 //! This type identifies a point on a clock; it does not support a negative
 //! elapsed time. Use `durationTo` for a later reading and `compare` for either
 //! ordering. Wall-clock formatting retains `Io.Timestamp` in RFC 3339 helpers.
+//!
+//! `now` reads a clock straight into this type, for a caller that wants the
+//! compact value and not the wide one.
 
 const std = @import("std");
 const Io = std.Io;
 const math = std.math;
 const time = std.time;
 const testing = std.testing;
+const assert = std.debug.assert;
 
 const Duration = @import("Duration.zig");
+// The stdx time module, for the clock read. `time` is `std.time` here.
+const timex = @import("../time.zig");
 
 const Timestamp = @This();
 
@@ -68,6 +74,41 @@ pub fn fromStd(timestamp: Io.Timestamp) Error!Timestamp {
 /// Widen the reading for std. Every value fits std's `i96`.
 pub fn toStd(self: Timestamp) Io.Timestamp {
     return .fromNanoseconds(self.nanoseconds);
+}
+
+/// Read `clock` directly into a compact timestamp.
+///
+/// One clock read and no error union, so a struct field takes a decl literal:
+/// `started: Timestamp = .now(.awake)`. Every `Io.Clock` counts up from an epoch
+/// that puts the reading inside `u64` nanoseconds: `.awake` and `.boot` from
+/// boot, `.real` from 1970, and the CPU clocks from zero. A safe build asserts
+/// that range instead of hiding a `catch unreachable` at every call site.
+pub fn now(clock: Io.Clock) Timestamp {
+    const reading = timex.now(clock).nanoseconds;
+    assert(reading >= 0);
+    assert(reading <= math.maxInt(u64));
+    return .fromNanoseconds(@intCast(reading));
+}
+
+/// The time from this timestamp to a fresh reading of `clock`.
+///
+/// The clock is a comptime parameter. Only the monotonic clocks can answer
+/// without an error return: `.awake`, `.boot`, `.cpu_process`, and
+/// `.cpu_thread` never step backwards, so the duration is never negative.
+/// `.real` can step back, so `elapsed(.real)` is a compile error; take two wall
+/// samples and use `durationTo`, which reports the step as `error.OutOfRange`.
+///
+/// The clock must be the one this timestamp came from. A `Timestamp` from
+/// another clock can compare later than the reading and trips the assert in a
+/// safe build.
+pub fn elapsed(self: Timestamp, comptime clock: Io.Clock) Duration {
+    if (clock == .real) @compileError(
+        "Timestamp.elapsed cannot use .real: wall time can step backwards, " ++
+            "so use durationTo with two wall samples",
+    );
+    const later = now(clock);
+    assert(later.nanoseconds >= self.nanoseconds);
+    return Duration.fromNanoseconds(later.nanoseconds - self.nanoseconds);
 }
 
 pub fn toMicroseconds(self: Timestamp) u64 {
@@ -145,4 +186,28 @@ test "std conversion checks the supported epoch" {
         const converted: Timestamp = try .fromStd(.fromNanoseconds(nanoseconds));
         try testing.expectEqual(nanoseconds, converted.toStd().nanoseconds);
     }
+}
+
+test "now reads a clock into the compact word" {
+    // Every clock maps the same way as `time.now`, and the compact value
+    // agrees with the wide conversion to within one read's jitter.
+    for ([_]Io.Clock{ .awake, .real, .boot, .cpu_process, .cpu_thread }) |clock| {
+        const compact = Timestamp.now(clock);
+        const wide = try Timestamp.fromStd(timex.now(clock));
+        const delta = if (compact.nanoseconds >= wide.nanoseconds)
+            compact.nanoseconds - wide.nanoseconds
+        else
+            wide.nanoseconds - compact.nanoseconds;
+        try testing.expect(delta < time.ns_per_s);
+    }
+
+    // A monotonic clock never goes backwards between reads.
+    const first = Timestamp.now(.awake);
+    const second = Timestamp.now(.awake);
+    try testing.expect(second.nanoseconds >= first.nanoseconds);
+
+    // `now` returns the type itself, so a field takes a decl literal; that is
+    // what the error union on `fromStd` used to block.
+    const started: Timestamp = .now(.awake);
+    try testing.expect(started.elapsed(.awake).nanoseconds < time.ns_per_s);
 }
