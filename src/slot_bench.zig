@@ -13,8 +13,8 @@ const capacity = 1024;
 const live = 16;
 
 const Entry = struct {
-    prev: slot.Handle,
-    next: slot.Handle,
+    prev: u32,
+    next: u32,
     /// Only the scan baseline reads it; the list finds liveness structurally.
     live: bool,
     value: u64,
