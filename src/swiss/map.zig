@@ -18,10 +18,9 @@
 //! more than 7/8 load and at least one bucket stays empty. An insertion that
 //! would exceed that load allocates a table at double the bucket count and
 //! reinserts every live entry through the normal probe; the fresh table is
-//! all-empty, so growth is also where tombstones disappear. Growth clears
-//! tombstones; churn without growth accumulates tombstones and lengthens
-//! probe paths; no in-place compaction is shipped — a future trigger for that
-//! is a documented gap.
+//! all-empty, so growth is also where tombstones disappear. Churn without
+//! growth accumulates tombstones and lengthens probe paths, so `rehash`
+//! rebuilds the table at its current bucket count on demand.
 //!
 //! Removal always writes a tombstone (Abseil's rule): groups align to each
 //! probe's own position, so writing `empty` could break another key's probe
@@ -250,14 +249,31 @@ pub fn Custom(comptime Context: type, comptime K: type, comptime V: type) type {
         /// disappear.
         fn grow(self: *Self, gpa: Allocator) Allocator.Error!void {
             const new_buckets = if (self.bucket_count == 0) 8 else self.bucket_count * 2;
-            try self.rehash(gpa, new_buckets);
+            try self.resize(gpa, new_buckets);
+        }
+
+        /// Rebuild the table at its current bucket count, clearing every
+        /// tombstone.
+        ///
+        /// Churn — removals with no growth — leaves tombstones behind, and
+        /// each one lengthens the probe path of a key that crosses it. Call
+        /// this when a long-lived map holds few live entries after many
+        /// removals. Capacity and bucket count do not change, so a map at its
+        /// load limit cannot grow here.
+        ///
+        /// Pointers into the table — from `getPtr`, `getOrPut`, or an iterator
+        /// — are invalidated, and bucket order changes. An empty map is
+        /// untouched.
+        pub fn rehash(self: *Self, gpa: Allocator) Allocator.Error!void {
+            if (self.bucket_count == 0) return;
+            try self.resize(gpa, self.bucket_count);
         }
 
         /// Allocate a table of `new_buckets` buckets, move every live entry
         /// into it through the normal probe, and free the old arrays. The
         /// fresh table starts all-empty, so no control byte of the old table
         /// carries over and every tombstone is gone.
-        fn rehash(self: *Self, gpa: Allocator, new_buckets: usize) Allocator.Error!void {
+        fn resize(self: *Self, gpa: Allocator, new_buckets: usize) Allocator.Error!void {
             assert(new_buckets >= 8);
             assert(std.math.isPowerOfTwo(new_buckets));
 
@@ -399,7 +415,7 @@ pub fn Custom(comptime Context: type, comptime K: type, comptime V: type) type {
             expected: usize,
         ) Allocator.Error!void {
             if (self.capacity() >= expected) return;
-            try self.rehash(gpa, capacityToBuckets(expected));
+            try self.resize(gpa, capacityToBuckets(expected));
         }
 
         /// Release the storage and invalidate the map.
@@ -867,6 +883,50 @@ test "churn at capacity" {
         try testing.expectEqual(@as(?u32, null), map.get(base - 56));
         base = fresh;
     }
+}
+
+/// Count control bytes equal to `tag` in the live table. Tests only.
+fn countCtrl(map: anytype, tag: u8) usize {
+    var total: usize = 0;
+    for (map.ctrl[0..map.bucket_count]) |ctrl| {
+        if (ctrl == tag) total += 1;
+    }
+    return total;
+}
+
+test "rehash clears tombstones at the current capacity" {
+    var map: Auto(u32, u32) = .empty;
+    defer map.deinit(testing.allocator);
+
+    // Fill, then remove most of it: a low live count, many tombstones, and no
+    // growth to clear them.
+    for (0..56) |key| try map.put(testing.allocator, @intCast(key), @intCast(key));
+    const buckets = map.bucket_count;
+    const capacity = map.capacity();
+    for (0..48) |key| try testing.expect(map.remove(@intCast(key)));
+
+    try testing.expectEqual(@as(usize, 8), map.count());
+    try testing.expectEqual(@as(usize, 48), countCtrl(&map, swiss.deleted));
+
+    try map.rehash(testing.allocator);
+
+    // Every tombstone is gone, the storage is the same size, and the live
+    // entries are all still there.
+    try testing.expectEqual(@as(usize, 0), countCtrl(&map, swiss.deleted));
+    try testing.expectEqual(buckets, map.bucket_count);
+    try testing.expectEqual(capacity, map.capacity());
+    try testing.expectEqual(@as(usize, 8), map.count());
+    for (48..56) |key| {
+        try testing.expectEqual(@as(?u32, @intCast(key)), map.get(@intCast(key)));
+    }
+    for (0..48) |key| try testing.expectEqual(@as(?u32, null), map.get(@intCast(key)));
+
+    // An empty map has nothing to rebuild and allocates nothing.
+    var empty: Auto(u32, u32) = .empty;
+    defer empty.deinit(testing.allocator);
+    try empty.rehash(testing.allocator);
+    try testing.expectEqual(@as(usize, 0), empty.bucket_count);
+    try testing.expectEqual(@as(usize, 0), empty.count());
 }
 
 test "overwrite at capacity" {
