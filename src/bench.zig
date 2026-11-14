@@ -30,6 +30,7 @@ const sort = @import("sort_bench.zig");
 const static_map = @import("static_map_bench.zig");
 const swiss = @import("swiss/bench.zig");
 const time = @import("time_bench.zig");
+const uri = @import("uri_bench.zig");
 const uuid = @import("Uuid_bench.zig");
 const wire = @import("wire_bench.zig");
 
@@ -59,6 +60,7 @@ pub fn benchmarkMain(b: *testingx.B) !void {
     try b.addMod(static_map);
     try b.addMod(swiss);
     try b.addMod(time);
+    try b.addMod(uri);
     try b.addMod(uuid);
     try b.addMod(wire);
 }
