@@ -134,6 +134,16 @@ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+## web-platform-tests
+
+Upstream: https://github.com/web-platform-tests/wpt (`url/resources/urltestdata.json`, commit `065d99ab`, 2026-11-12).
+License: BSD-3-Clause, "Copyright © web-platform-tests contributors"; the
+full text is in `test/urltestdata.LICENSE`.
+
+`test/urltestdata.json` is vendored verbatim as the conformance corpus for
+`src/uri.zig`, and copied for no other purpose. It is not in `paths` in
+`build.zig.zon`, so it does not ship in the package.
+
 ## Design references
 
 These are designs stdx implemented on its own. No code was copied, so no

@@ -40,6 +40,23 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run stdx tests");
     test_step.dependOn(&run_mod_tests.step);
 
+    // The WHATWG URL corpus. It is not part of the package module: a
+    // consumer never runs it, and the corpus is 227 KB of vendored data.
+    // `test/` is outside `paths` in build.zig.zon for the same reason.
+    const wpt_mod = b.createModule(.{
+        .root_source_file = b.path("test/uri_wpt.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "stdx", .module = mod }},
+    });
+    const wpt_tests = b.addTest(.{
+        .root_module = wpt_mod,
+        .test_runner = test_runner,
+        .use_llvm = true,
+    });
+    const run_wpt_tests = b.addRunArtifact(wpt_tests);
+    test_step.dependOn(&run_wpt_tests.step);
+
     // The guide's examples (docs/examples) are real programs against the
     // public module, tested with everything else.
     const examples_mod = b.createModule(.{

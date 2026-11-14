@@ -50,8 +50,8 @@ fuzz LIMIT="10M":
 [group("lint")]
 lint:
     ziglint-0-16
-    baskingspot-lint src
-    zig fmt --check src docs/examples build.zig build.zig.zon
+    baskingspot-lint src test
+    zig fmt --check src test docs/examples build.zig build.zig.zon
     nix fmt -- --ci
     oxfmt --check README.md AGENTS.md IDEAS.md THIRD_PARTY.md .pi/agents docs/VOICE.md docs/content docs/static .github wrangler.jsonc .oxfmtrc.jsonc docs/config.toml
     actionlint
