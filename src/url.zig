@@ -42,6 +42,9 @@
 const std = @import("std");
 const testing = std.testing;
 const Io = std.Io;
+const mem = std.mem;
+const enums = std.enums;
+const ascii = std.ascii;
 
 pub const ParseError = error{
     /// The text before the first `:` is not a scheme.
@@ -84,18 +87,18 @@ pub const Url = struct {
 const EncodeSet = enum { c0, fragment, query, special_query, path, userinfo };
 
 fn isSpecial(scheme: []const u8) bool {
-    return std.mem.eql(u8, scheme, "http") or
-        std.mem.eql(u8, scheme, "https") or
-        std.mem.eql(u8, scheme, "ws") or
-        std.mem.eql(u8, scheme, "wss") or
-        std.mem.eql(u8, scheme, "ftp") or
-        std.mem.eql(u8, scheme, "file");
+    return mem.eql(u8, scheme, "http") or
+        mem.eql(u8, scheme, "https") or
+        mem.eql(u8, scheme, "ws") or
+        mem.eql(u8, scheme, "wss") or
+        mem.eql(u8, scheme, "ftp") or
+        mem.eql(u8, scheme, "file");
 }
 
 fn defaultPort(scheme: []const u8) ?u16 {
-    if (std.mem.eql(u8, scheme, "http") or std.mem.eql(u8, scheme, "ws")) return 80;
-    if (std.mem.eql(u8, scheme, "https") or std.mem.eql(u8, scheme, "wss")) return 443;
-    if (std.mem.eql(u8, scheme, "ftp")) return 21;
+    if (mem.eql(u8, scheme, "http") or mem.eql(u8, scheme, "ws")) return 80;
+    if (mem.eql(u8, scheme, "https") or mem.eql(u8, scheme, "wss")) return 443;
+    if (mem.eql(u8, scheme, "ftp")) return 21;
     return null;
 }
 
@@ -148,8 +151,8 @@ fn needsEncodeScalar(comptime set: EncodeSet, c: u8) bool {
 /// byte table is one load.
 const encode_tables = blk: {
     @setEvalBranchQuota(10000);
-    var t: [std.enums.values(EncodeSet).len][256]bool = undefined;
-    for (std.enums.values(EncodeSet)) |set| {
+    var t: [enums.values(EncodeSet).len][256]bool = undefined;
+    for (enums.values(EncodeSet)) |set| {
         for (0..256) |c| t[@backingInt(set)][c] = needsEncodeScalar(set, @intCast(c));
     }
     break :blk t;
@@ -205,7 +208,10 @@ const Writer = struct {
     }
 };
 
-const Span = struct { start: usize, len: usize };
+const Span = struct {
+    start: usize,
+    len: usize,
+};
 
 pub fn parse(input: []const u8, out_buf: []u8) ParseError!Url {
     var w: Writer = .{ .buf = out_buf };
@@ -220,10 +226,10 @@ pub fn parse(input: []const u8, out_buf: []u8) ParseError!Url {
 
     // Scheme.
     var i: usize = 0;
-    if (text.len == 0 or !std.ascii.isAlphabetic(text[0])) return error.MissingScheme;
+    if (text.len == 0 or !ascii.isAlphabetic(text[0])) return error.MissingScheme;
     while (i < text.len and text[i] != ':') : (i += 1) {
         const c = text[i];
-        if (!(std.ascii.isAlphanumeric(c) or c == '+' or c == '-' or c == '.')) {
+        if (!(ascii.isAlphanumeric(c) or c == '+' or c == '-' or c == '.')) {
             return error.MissingScheme;
         }
     }
@@ -234,7 +240,7 @@ pub fn parse(input: []const u8, out_buf: []u8) ParseError!Url {
     i += 1;
 
     const special = isSpecial(scheme);
-    const file = std.mem.eql(u8, scheme, "file");
+    const file = mem.eql(u8, scheme, "file");
 
     var has_authority = false;
     if (i + 1 < text.len and text[i] == '/' and text[i + 1] == '/') {
@@ -260,7 +266,7 @@ pub fn parse(input: []const u8, out_buf: []u8) ParseError!Url {
 
         var host_start = i;
         var at_sign_seen = false;
-        if (std.mem.findLast(u8, text[i..auth_end], "@")) |at| {
+        if (mem.findLast(u8, text[i..auth_end], "@")) |at| {
             at_sign_seen = true;
             const before = w.len;
             try writeUserinfo(&w, text[i .. i + at]);
@@ -271,14 +277,14 @@ pub fn parse(input: []const u8, out_buf: []u8) ParseError!Url {
         var host_end = auth_end;
         var port_start: ?usize = null;
         if (host_start < auth_end and text[host_start] == '[') {
-            const close = std.mem.findScalar(u8, text[host_start..auth_end], ']') orelse
+            const close = mem.findScalar(u8, text[host_start..auth_end], ']') orelse
                 return error.InvalidIpv6;
             host_end = host_start + close + 1;
             if (host_end < auth_end) {
                 if (text[host_end] != ':') return error.InvalidIpv6;
                 port_start = host_end + 1;
             }
-        } else if (std.mem.findScalar(u8, text[host_start..auth_end], ':')) |colon| {
+        } else if (mem.findScalar(u8, text[host_start..auth_end], ':')) |colon| {
             host_end = host_start + colon;
             port_start = host_end + 1;
         }
@@ -306,7 +312,7 @@ pub fn parse(input: []const u8, out_buf: []u8) ParseError!Url {
     }
 
     const path_start = i;
-    i = std.mem.findAnyPos(u8, text, path_start, "?#") orelse text.len;
+    i = mem.findAnyPos(u8, text, path_start, "?#") orelse text.len;
     const raw_path = text[path_start..i];
 
     var path: []const u8 = "";
@@ -334,7 +340,7 @@ pub fn parse(input: []const u8, out_buf: []u8) ParseError!Url {
     if (i < text.len and text[i] == '?') {
         i += 1;
         const qstart = i;
-        i = std.mem.findAnyPos(u8, text, qstart, "#") orelse text.len;
+        i = mem.findAnyPos(u8, text, qstart, "#") orelse text.len;
         try w.byte('?');
         const span = if (special)
             try w.encoded(text[qstart..i], .special_query)
@@ -381,7 +387,7 @@ fn parsePort(text: []const u8) ParseError!?u16 {
     var digits: usize = 0;
     for (text) |c| {
         if (isTabOrNewline(c)) continue;
-        if (!std.ascii.isDigit(c)) return error.InvalidPort;
+        if (!ascii.isDigit(c)) return error.InvalidPort;
         value = value * 10 + (c - '0');
         if (value > 0xffff) return error.InvalidPort;
         digits += 1;
@@ -455,15 +461,15 @@ fn endsInANumber(host: []const u8) bool {
     if (parts_end > 0 and host[parts_end - 1] == '.') parts_end -= 1;
     if (parts_end == 0) return false;
     var last_start: usize = 0;
-    if (std.mem.findScalarLast(u8, host[0..parts_end], '.')) |dot| last_start = dot + 1;
+    if (mem.findScalarLast(u8, host[0..parts_end], '.')) |dot| last_start = dot + 1;
     const last = host[last_start..parts_end];
     if (last.len == 0) return false;
     if (last.len >= 2 and last[0] == '0' and (last[1] == 'x' or last[1] == 'X')) {
         if (last.len == 2) return true;
-        for (last[2..]) |c| if (!std.ascii.isHex(c)) return false;
+        for (last[2..]) |c| if (!ascii.isHex(c)) return false;
         return true;
     }
-    for (last) |c| if (!std.ascii.isDigit(c)) return false;
+    for (last) |c| if (!ascii.isDigit(c)) return false;
     return true;
 }
 
@@ -491,7 +497,7 @@ fn parseIpv4Number(part: []const u8) ParseError!u32 {
 fn parseIpv4(host: []const u8) ParseError![4]u8 {
     var parts: [8][]const u8 = undefined;
     var n: usize = 0;
-    var it = std.mem.splitScalar(u8, host, '.');
+    var it = mem.splitScalar(u8, host, '.');
     while (it.next()) |part| {
         if (n == parts.len) return error.InvalidIpv4;
         parts[n] = part;
@@ -559,7 +565,7 @@ pub fn parseIpv6(text: []const u8) ParseError![16]u8 {
         }
         var value: u16 = 0;
         var digits: usize = 0;
-        while (digits < 4 and i < text.len and std.ascii.isHex(text[i])) : (digits += 1) {
+        while (digits < 4 and i < text.len and ascii.isHex(text[i])) : (digits += 1) {
             value = value * 16 + @as(u16, std.fmt.charToDigit(text[i], 16) catch unreachable);
             i += 1;
         }
@@ -606,13 +612,13 @@ pub fn parseIpv6(text: []const u8) ParseError![16]u8 {
 fn parseEmbeddedIpv4(text: []const u8) ParseError![4]u8 {
     var out: [4]u8 = undefined;
     var n: usize = 0;
-    var it = std.mem.splitScalar(u8, text, '.');
+    var it = mem.splitScalar(u8, text, '.');
     while (it.next()) |part| {
         if (n == 4 or part.len == 0) return error.InvalidIpv6;
         if (part.len > 1 and part[0] == '0') return error.InvalidIpv6;
         var v: u16 = 0;
         for (part) |c| {
-            if (!std.ascii.isDigit(c)) return error.InvalidIpv6;
+            if (!ascii.isDigit(c)) return error.InvalidIpv6;
             v = v * 10 + (c - '0');
             if (v > 255) return error.InvalidIpv6;
         }
@@ -669,7 +675,7 @@ pub fn formatIpv6(bytes: [16]u8, buf: *[48]u8) []const u8 {
 }
 
 fn hasDotSegment(raw: []const u8) bool {
-    var it = std.mem.splitScalar(u8, raw, '/');
+    var it = mem.splitScalar(u8, raw, '/');
     while (it.next()) |seg| {
         if (isSingleDot(seg) or isDoubleDot(seg)) return true;
     }
@@ -716,7 +722,7 @@ fn writePath(w: *Writer, raw: []const u8, special: bool) ParseError!Span {
 fn isSingleDot(seg: []const u8) bool {
     return switch (seg.len) {
         1 => seg[0] == '.',
-        3 => std.ascii.eqlIgnoreCase(seg, "%2e"),
+        3 => ascii.eqlIgnoreCase(seg, "%2e"),
         else => false,
     };
 }
@@ -731,7 +737,7 @@ fn isDoubleDot(seg: []const u8) bool {
                 if (seg[i] == '.') {
                     dots += 1;
                     i += 1;
-                } else if (std.ascii.eqlIgnoreCase(seg[i..][0..@min(3, seg.len - i)], "%2e")) {
+                } else if (ascii.eqlIgnoreCase(seg[i..][0..@min(3, seg.len - i)], "%2e")) {
                     dots += 1;
                     i += 3;
                 } else break :blk false;
@@ -746,8 +752,8 @@ fn isDoubleDot(seg: []const u8) bool {
 /// the same buffer `path` came from, so output never outruns input.
 pub fn removeDotSegments(buf: []u8, len: usize) []const u8 {
     const path = buf[0..len];
-    if (std.mem.findScalar(u8, path, '.') == null and
-        std.mem.findScalar(u8, path, '%') == null) return path;
+    if (mem.findScalar(u8, path, '.') == null and
+        mem.findScalar(u8, path, '%') == null) return path;
 
     var out_len: usize = 0;
     var i: usize = 0;

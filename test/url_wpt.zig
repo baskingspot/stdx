@@ -13,7 +13,11 @@
 
 const std = @import("std");
 const testing = std.testing;
+const ascii = std.ascii;
+const mem = std.mem;
+const json = std.json;
 const print = std.debug.print;
+
 const url = @import("stdx").url;
 
 const corpus = @embedFile("urltestdata.json");
@@ -39,10 +43,10 @@ const expected: Counts = .{
 /// A scheme has to start with an ASCII letter and hold only scheme
 /// characters up to the first `:`.
 fn hasScheme(text: []const u8) bool {
-    if (text.len == 0 or !std.ascii.isAlphabetic(text[0])) return false;
+    if (text.len == 0 or !ascii.isAlphabetic(text[0])) return false;
     for (text, 0..) |c, i| {
         if (c == ':') return i > 0;
-        if (!(std.ascii.isAlphanumeric(c) or c == '+' or c == '-' or c == '.')) return false;
+        if (!(ascii.isAlphanumeric(c) or c == '+' or c == '-' or c == '.')) return false;
     }
     return false;
 }
@@ -52,14 +56,14 @@ fn hasScheme(text: []const u8) bool {
 /// not `parse`.
 fn needsBase(input: []const u8, base: ?[]const u8) bool {
     const b = base orelse return false;
-    const colon = std.mem.findScalar(u8, input, ':') orelse return false;
-    const bcolon = std.mem.findScalar(u8, b, ':') orelse return false;
-    if (!std.ascii.eqlIgnoreCase(input[0..colon], b[0..bcolon])) return false;
-    return !std.mem.startsWith(u8, input[colon + 1 ..], "//");
+    const colon = mem.findScalar(u8, input, ':') orelse return false;
+    const bcolon = mem.findScalar(u8, b, ':') orelse return false;
+    if (!ascii.eqlIgnoreCase(input[0..colon], b[0..bcolon])) return false;
+    return !mem.startsWith(u8, input[colon + 1 ..], "//");
 }
 
 test "WHATWG url corpus" {
-    const doc = try std.json.parseFromSlice(std.json.Value, testing.allocator, corpus, .{});
+    const doc = try json.parseFromSlice(json.Value, testing.allocator, corpus, .{});
     defer doc.deinit();
 
     var counts: Counts = .{ .ok = 0, .bad = 0, .idna = 0, .relative = 0 };
@@ -98,7 +102,7 @@ test "WHATWG url corpus" {
             }
             continue;
         };
-        if (!failure and std.mem.eql(u8, got.bytes, want)) {
+        if (!failure and mem.eql(u8, got.bytes, want)) {
             counts.ok += 1;
         } else {
             counts.bad += 1;
