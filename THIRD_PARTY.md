@@ -141,7 +141,7 @@ License: BSD-3-Clause, "Copyright © web-platform-tests contributors"; the
 full text is in `test/urltestdata.LICENSE`.
 
 `test/urltestdata.json` is vendored verbatim as the conformance corpus for
-`src/uri.zig`, and copied for no other purpose. It is not in `paths` in
+`src/url.zig`, and copied for no other purpose. It is not in `paths` in
 `build.zig.zon`, so it does not ship in the package.
 
 ## Design references

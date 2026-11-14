@@ -1,4 +1,4 @@
-//! The WHATWG URL conformance corpus, run against `stdx.uri`.
+//! The WHATWG URL conformance corpus, run against `stdx.url`.
 //!
 //! `urltestdata.json` is the URL Standard's own test corpus, vendored from
 //! web-platform-tests at commit `065d99ab` (2026-11-12), BSD-3-Clause; the
@@ -14,7 +14,7 @@
 const std = @import("std");
 const testing = std.testing;
 const print = std.debug.print;
-const uri = @import("stdx").uri;
+const url = @import("stdx").url;
 
 const corpus = @embedFile("urltestdata.json");
 
@@ -87,7 +87,7 @@ test "WHATWG url corpus" {
             counts.relative += 1;
             continue;
         }
-        const got = uri.parse(input, &buf) catch |err| {
+        const got = url.parse(input, &buf) catch |err| {
             if (failure) {
                 counts.ok += 1;
             } else if (err == error.IdnaUnsupported) {

@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
     // consumer never runs it, and the corpus is 227 KB of vendored data.
     // `test/` is outside `paths` in build.zig.zon for the same reason.
     const wpt_mod = b.createModule(.{
-        .root_source_file = b.path("test/uri_wpt.zig"),
+        .root_source_file = b.path("test/url_wpt.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{.{ .name = "stdx", .module = mod }},

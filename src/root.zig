@@ -48,7 +48,7 @@ pub const stdio = @import("stdio.zig");
 pub const swiss = @import("swiss.zig");
 pub const time = @import("time.zig");
 pub const timers = @import("timers.zig");
-pub const uri = @import("uri.zig");
+pub const url = @import("url.zig");
 pub const Uuid = @import("Uuid.zig");
 pub const wire = @import("wire.zig");
 

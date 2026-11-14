@@ -6,7 +6,7 @@ the model?
 
 Short answer: `std.Uri` is not a worse version of ada; it is a different
 contract, deliberately. The contract it does not implement is worth having,
-and a port of ada's algorithm is cheap — the prototype in `src/uri.zig` is
+and a port of ada's algorithm is cheap — the prototype in `src/url.zig` is
 677 lines of code. The parts worth stealing are smaller than the parser, and
 the part that makes full conformance expensive is IDNA, not the state
 machine.
@@ -95,7 +95,7 @@ contract.
 
 ## The prototype
 
-`src/uri.zig` implements the algorithm from scratch, following the spec that
+`src/url.zig` implements the algorithm from scratch, following the spec that
 ada implements: one pass over the input, writing the serialization into the
 caller's buffer and returning spans into it. It is 677 lines of code,
 including the IPv4 number parser, the IPv6 parser and serializer, the six
@@ -122,7 +122,7 @@ Corpus B: 10 realistic URLs. Both corpora are the same for all three parsers.
 | parser                  | A, ns/URL | B, ns/URL | allocates per URL |
 | ----------------------- | --------: | --------: | ----------------- |
 | `std.Uri.parse`         |      19.1 |      33.0 | no                |
-| prototype `uri.parse`   |      58.4 |     100.5 | no                |
+| prototype `url.parse`   |      58.4 |     100.5 | no                |
 | ada C API (`ada_parse`) |     122.5 |     114.5 | yes, and frees    |
 
 So the WHATWG contract costs about **3x** `std.Uri` on the same input, and the
@@ -173,7 +173,7 @@ logic. That is the scope cliff.
 
 ## Recommendation
 
-1. Build it, as `stdx.uri`, not as a port of ada. The state machine is spec
+1. Build it, as `stdx.url`, not as a port of ada. The state machine is spec
    text, so a from-scratch implementation carries no license obligation; the
    prototype is that. Ada's code is MIT/Apache-2.0 and could be copied, but
    then `THIRD_PARTY.md` grows for no gain over the spec.
@@ -184,7 +184,7 @@ logic. That is the scope cliff.
 3. Treat IDNA as a caller-supplied hook now. `parse` can take a
    `domainToAscii` function pointer (or a comptime parameter), with
    `error.IdnaUnsupported` as the default. If UTS #46 ever ships, it ships in
-   `utf`, where the Unicode tables already live, and `stdx.uri` stays a
+   `utf`, where the Unicode tables already live, and `stdx.url` stays a
    parser.
 4. Do not ship without base resolution. 203 of the 904 corpus cases are
    relative references, and most URLs a program sees are hrefs from a
@@ -192,8 +192,8 @@ logic. That is the scope cliff.
 5. Expect 3x `std.Uri` and say so in the README. A caller who only needs the
    components, and trusts the input, should keep `std.Uri`.
 
-The smallest version that is worth having: `uri.parse` (absolute) plus
-`uri.resolve` (base), IDNA off by default, the two `net` primitives in the
+The smallest version that is worth having: `url.parse` (absolute) plus
+`url.resolve` (base), IDNA off by default, the two `net` primitives in the
 same change. That is roughly 900 lines plus tests, one conformance corpus
 (wpt `urltestdata.json`), and no generated tables.
 
@@ -211,19 +211,19 @@ same change. That is roughly 900 lines plus tests, one conformance corpus
 ## Reproducing
 
 The conformance numbers above come from this probe. It runs the corpus
-against `src/uri.zig` and prints the four counts.
+against `src/url.zig` and prints the four counts.
 
 ```
 mkdir -p /tmp/url-wpt && cd /tmp/url-wpt
 curl -sSLO https://raw.githubusercontent.com/web-platform-tests/wpt/master/url/resources/urltestdata.json
-cp ~/code/baskingspot/stdx/src/uri.zig .
+cp ~/code/baskingspot/stdx/src/url.zig .
 # save the probe below as wpt.zig
 zig build-exe wpt.zig -O ReleaseSafe && ./wpt
 ```
 
 ```zig
 const std = @import("std");
-const uri = @import("uri.zig");
+const url = @import("url.zig");
 
 fn hasScheme(s: []const u8) bool {
     if (s.len == 0 or !std.ascii.isAlphabetic(s[0])) return false;
@@ -270,7 +270,7 @@ pub fn main() !void {
             skipped += 1;
             continue;
         }
-        const got = uri.parse(input, &buf) catch |e| {
+        const got = url.parse(input, &buf) catch |e| {
             if (failure) ok += 1 else if (e == error.IdnaUnsupported) {
                 idna += 1;
             } else {
@@ -292,7 +292,7 @@ pub fn main() !void {
 ```
 
 For the `std.Uri` side, the same loop with `std.Uri.parse` in place of
-`uri.parse` and `std.Uri.resolveInPlace` for the cases with a base; that is
+`url.parse` and `std.Uri.resolveInPlace` for the cases with a base; that is
 the harness that produced the 287 / 364 / 19 / 228 row. The ada side is
 `ada_parse` and `ada_get_href` from `ada_c.h` over the same corpus, which
 returns the expected href for all 904.

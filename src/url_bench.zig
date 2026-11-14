@@ -2,7 +2,7 @@
 //! buffer, over a corpus shaped like ordinary web URLs.
 
 const stdx = @import("stdx");
-const uri = stdx.uri;
+const url = stdx.url;
 const testingx = @import("testingx");
 
 const corpus = [_][]const u8{
@@ -18,15 +18,15 @@ const corpus = [_][]const u8{
     "https://EXAMPLE.com:443/Path/With/Mixed/Case",
 };
 
-pub fn benchmarkUriParse(b: *testingx.B) !void {
+pub fn benchmarkUrlParse(b: *testingx.B) !void {
     var sink: usize = 0;
     defer b.keepAlive(sink);
     const hidden = b.blackBox(&corpus);
     var buf: [8192]u8 = undefined;
     while (try b.loop()) {
         for (hidden) |text| {
-            const url = uri.parse(text, &buf) catch continue;
-            sink +%= url.bytes.len;
+            const parsed = url.parse(text, &buf) catch continue;
+            sink +%= parsed.bytes.len;
         }
     }
 }
