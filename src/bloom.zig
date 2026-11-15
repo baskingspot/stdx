@@ -1,6 +1,6 @@
 //! Fixed-capacity Bloom filters: `contains` never misses an added key, and
 //! it reports an absent key as present at a bounded rate. The storage is a
-//! `std.StaticBitSet` embedded in the value, so a filter is a flat value
+//! `std.bit_set.Static` embedded in the value, so a filter is a flat value
 //! with no allocator, no initialization failure, and no failure mode on
 //! `add`.
 //!
@@ -137,7 +137,7 @@ pub fn Custom(
         const HashContext = Context;
 
         /// Membership bits, indexed by the masked probe positions.
-        bit_set: std.StaticBitSet(bits),
+        bit_set: std.bit_set.Static(bits),
         /// Number of `add` calls since the last `init` or `clear`.
         added: u64,
 
@@ -181,11 +181,11 @@ pub fn Custom(
             return true;
         }
 
-        /// Whether bit `index` is set. `ArrayBitSet.isSet` takes the set by
+        /// Whether bit `index` is set. `bit_set.Array.isSet` takes the set by
         /// value, and the compiler materializes that copy even in
         /// ReleaseFast: a 2 MiB filter then copies 2 MiB per probe (290us
         /// per `contains`, measured). Read the word the same way
-        /// `ArrayBitSet.isSet` reads it. An `IntegerBitSet` fits in a
+        /// `bit_set.Array.isSet` reads it. A `bit_set.Integer` fits in a
         /// register, so the std call stays for that arm.
         fn isBitSet(self: *const Self, index: Index) bool {
             if (comptime bits <= @bitSizeOf(u64)) return self.bit_set.isSet(@intCast(index));

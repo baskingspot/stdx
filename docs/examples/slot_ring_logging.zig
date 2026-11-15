@@ -47,7 +47,7 @@ test "a full ring drops the newest lines and the drain stays in order" {
     // are refused.
     for (0..6) |i| {
         var buf: [16]u8 = undefined;
-        log.write(try std.fmt.bufPrint(&buf, "line {d}", .{i}));
+        log.write(try std.mem.print(&buf, "line {d}", .{i}));
     }
     try std.testing.expectEqual(4, ring.head());
     try std.testing.expectEqual(2, log.dropped);

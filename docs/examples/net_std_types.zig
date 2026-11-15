@@ -31,5 +31,5 @@ test "fromSlice needs exactly four bytes" {
 test "an address formats with {f}" {
     const ip: Ip4 = .parseComptime("10.1.2.3");
     var text: [15]u8 = undefined;
-    try std.testing.expectEqualStrings("10.1.2.3", try std.fmt.bufPrint(&text, "{f}", .{ip}));
+    try std.testing.expectEqualStrings("10.1.2.3", try std.mem.print(&text, "{f}", .{ip}));
 }

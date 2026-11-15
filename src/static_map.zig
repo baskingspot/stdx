@@ -14,7 +14,6 @@
 //! not a silent overwrite.
 
 const std = @import("std");
-const compat = @import("compat.zig");
 const testing = std.testing;
 
 const map_mod = @import("bounded_array_hash_map.zig");
@@ -105,9 +104,9 @@ fn hashesPaddingBits(comptime T: type) bool {
         .vector => |info| hashesPaddingBits(info.child),
         .@"struct" => |info| blk: {
             if (info.layout == .@"packed") break :blk @bitSizeOf(T) % 8 != 0;
-            const count = comptime compat.fieldCount(info);
+            const count = comptime info.field_names.len;
             inline for (0..count) |i| {
-                if (hashesPaddingBits(comptime compat.FieldType(info, i))) break :blk true;
+                if (hashesPaddingBits(comptime info.field_types[i])) break :blk true;
             }
             break :blk false;
         },
@@ -115,9 +114,9 @@ fn hashesPaddingBits(comptime T: type) bool {
             if (info.tag_type) |Tag| {
                 if (hashesPaddingBits(Tag)) break :blk true;
             }
-            const count = comptime compat.fieldCount(info);
+            const count = comptime info.field_names.len;
             inline for (0..count) |i| {
-                if (hashesPaddingBits(comptime compat.FieldType(info, i))) break :blk true;
+                if (hashesPaddingBits(comptime info.field_types[i])) break :blk true;
             }
             break :blk false;
         },

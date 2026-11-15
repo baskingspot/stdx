@@ -12,13 +12,10 @@
     inputs@{ flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       # imports and inputsFrom below mirror each other, including the
-      # toolchain version. Both versions build; the default is the current
-      # stable, and `zig-old` is the previous one for the CI compatibility
-      # lane and for local checks.
+      # toolchain version.
       imports = with inputs.baskingspot.flakeModules; [
         base
         docs
-        zig."0.16"
         zig."0.17"
       ];
 
@@ -33,7 +30,7 @@
           # perf for the benchmark passes: hardware counters on the hot paths.
           # Linux only; darwin has nothing equivalent.
           project = lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.perf ] ++ [
-            config.packages."ziglint-0-16"
+            config.packages."ziglint-0-17"
           ];
         in
         {
@@ -42,15 +39,6 @@
               config.devShells.base
               config.devShells.docs
               config.devShells."zig-0-17"
-            ];
-            packages = project;
-          };
-
-          devShells.zig-old = pkgs.mkShell {
-            inputsFrom = [
-              config.devShells.base
-              config.devShells.docs
-              config.devShells."zig-0-16"
             ];
             packages = project;
           };

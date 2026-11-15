@@ -5,10 +5,10 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const testing = std.testing;
-const ArrayBitSet = std.bit_set.ArrayBitSet;
+const Array = std.bit_set.Array;
 
 const word_bits = @bitSizeOf(usize);
-const Word = std.bit_set.IntegerBitSet(word_bits);
+const Word = std.bit_set.Integer(word_bits);
 
 /// A fixed-capacity set of indices over dirty words.
 ///
@@ -28,8 +28,8 @@ pub fn Scratch(comptime capacity: usize) type {
     const words = (capacity - 1) / word_bits + 1;
     return struct {
         const Self = @This();
-        const Bits = ArrayBitSet(usize, capacity);
-        const Initialized = ArrayBitSet(usize, words);
+        const Bits = Array(usize, capacity);
+        const Initialized = Array(usize, words);
 
         bits: Bits,
         initialized: Initialized,
@@ -72,9 +72,9 @@ pub fn Scratch(comptime capacity: usize) type {
 
 /// One bit from a backing array.
 ///
-/// `ArrayBitSet.isSet` takes `Self` by value, so a call copies the
+/// `Array.isSet` takes `Self` by value, so a call copies the
 /// whole mask array. For a 64 KiB set that is an 8 KiB copy per
-/// lookup. A single-word `IntegerBitSet` reads the one mask instead.
+/// lookup. A single-word `Integer` reads the one mask instead.
 inline fn wordIsSet(masks: []const usize, index: usize) bool {
     const word: Word = .{ .mask = masks[index / word_bits] };
     return word.isSet(index % word_bits);

@@ -16,7 +16,7 @@ var prepared = false;
 fn prepare() void {
     if (prepared) return;
     for (0..n) |i| {
-        const key = std.fmt.bufPrint(&key_buf[i], "api/v{d}/item{d}/", .{
+        const key = std.mem.print(&key_buf[i], "api/v{d}/item{d}/", .{
             i % 40,
             i,
         }) catch unreachable;

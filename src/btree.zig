@@ -2,9 +2,9 @@
 //! with inline keys and per-node prefix stripping so a lookup reads a few
 //! cache lines instead of one per key compared.
 //!
-//! Zig 0.16 has no ordered map with owned nodes: `std.Treap` takes a node
-//! per element from the caller, and the hash maps do not order. This module
-//! is the sorted-iteration and range container the standard library lacks.
+//! `std` has no ordered map with owned nodes: `std.Treap` takes a node per
+//! element from the caller, and the hash maps do not order. This module is the
+//! sorted-iteration and range container the standard library lacks.
 //!
 //! The design is Xiangpeng Hao's, from "bbtree: fastest ordered map"
 //! (<https://bbtree.xiangpeng.systems/post/>) and the Rust implementation at

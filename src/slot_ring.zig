@@ -1599,7 +1599,7 @@ test "wrap reuses slots across laps" {
         for (0..4) |i| {
             const msg = ring.read(base + i) orelse return error.NotCommitted;
             var expect_buf: [16]u8 = undefined;
-            const expect = try std.fmt.bufPrint(&expect_buf, "r{d}s{d}", .{ round, i });
+            const expect = try std.mem.print(&expect_buf, "r{d}s{d}", .{ round, i });
             try testing.expectEqualStrings(expect, msg.payload);
             msg.release();
         }
@@ -3083,7 +3083,7 @@ test "eventfd: disarmed commits land in the ring without a poke" {
 
     for (0..3) |i| {
         var expect_buf: [8]u8 = undefined;
-        const expect = try std.fmt.bufPrint(&expect_buf, "m{d}", .{i});
+        const expect = try std.mem.print(&expect_buf, "m{d}", .{i});
         const msg = try expectRead(&ring, i);
         try testing.expectEqualStrings(expect, msg.payload);
         msg.release();

@@ -1,5 +1,5 @@
 //! The btree module's benchmarks: lookups, build, churn and scan against the
-//! alternatives Zig 0.16 and stdx leave.
+//! alternatives `std` and stdx leave.
 //!
 //! Zig has no ordered map in `std` — `std.Treap` takes a caller-allocated
 //! node per element and chases pointers down the tree. The baselines are the
@@ -76,14 +76,14 @@ fn fillStringProbes() !void {
     var offset: usize = 0;
     for (0..string_count) |i| {
         const number = keyAt(i) % string_number_space;
-        const key = try std.fmt.bufPrint(string_storage[offset..], item_format, .{number});
+        const key = try mem.print(string_storage[offset..], item_format, .{number});
         offset += 48;
         string_keys[i] = key;
         if (i % stride == 0 and i / stride < probe_count) {
             const slot = i / stride;
             string_hit_keys[slot] = key;
             const near = (number + 1) % string_number_space;
-            const miss = try std.fmt.bufPrint(&string_miss_storage[slot], item_format, .{near});
+            const miss = try mem.print(&string_miss_storage[slot], item_format, .{near});
             string_miss_keys[slot] = miss;
         }
     }

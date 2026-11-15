@@ -1,14 +1,12 @@
-//! The shared form of `std.debug.SafetyLock`, which Zig 0.17 ships and 0.16
-//! does not: 0.16's lock is exclusive, so two independent read-only borrowers
-//! of one container trip over each other.
+//! The shared form of `std.debug.SafetyLock`: an exclusive lock makes two
+//! independent read-only borrowers of one container trip over each other.
 //!
 //! Vendored from `lib/std/debug.zig` on the Zig master branch (MIT, Zig
 //! contributors; see `LICENSE-ZIG` and `THIRD_PARTY.md`). The additions are
-//! this comment, an `init` constant, and the two lines that move the counter:
-//! master writes `@backingInt`/`@fromBackingInt`, which 0.16 does not have, so
-//! they are `@intFromEnum`/`@enumFromInt` here. When the pinned toolchain
-//! ships the shared form, this file becomes `pub const SafetyLock =
-//! std.debug.SafetyLock;` with no change at the call sites.
+//! this comment and an `init` constant. `std.debug.SafetyLock` has the same
+//! shape, so `pub const SafetyLock = std.debug.SafetyLock;` would compile with
+//! no change at the call sites; that swaps the type behind `btree`'s
+//! `pointer_stability`, so it is a separate decision.
 //!
 //! A container carries one as `pointer_stability`. `lockPointers` takes a
 //! shared borrow, every call that relocates or frees an entry calls
@@ -18,7 +16,6 @@
 //! safety.
 
 const std = @import("std");
-const compat = @import("compat.zig");
 
 const runtime_safety = std.debug.runtime_safety;
 const assert = std.debug.assert;
@@ -60,14 +57,14 @@ pub const SafetyLock = struct {
     pub fn lockShared(l: *SafetyLock) void {
         if (!runtime_safety) return;
         assert(l.state != .exclusive);
-        l.state = compat.enumFromInt(@TypeOf(l.state), compat.enumToInt(l.state) + 1);
+        l.state = @fromBackingInt(@backingInt(l.state) + 1);
         assert(l.state.isShared()); // Catch overflow to `exclusive`.
     }
 
     pub fn unlockShared(l: *SafetyLock) void {
         if (!runtime_safety) return;
         assert(l.state.isShared());
-        l.state = compat.enumFromInt(@TypeOf(l.state), compat.enumToInt(l.state) - 1);
+        l.state = @fromBackingInt(@backingInt(l.state) - 1);
     }
 
     pub fn assertUnlocked(l: SafetyLock) void {

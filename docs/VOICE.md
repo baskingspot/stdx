@@ -29,7 +29,7 @@ of `AGENTS.md`.
 
 The same sentence appears in five places. Change all five together.
 
-> Extensions to the Zig 0.16 standard library: fixed-capacity containers, strict parsers, IPv4
+> Extensions to the Zig 0.17 standard library: fixed-capacity containers, strict parsers, IPv4
 > types, and the primitives std lacks.
 
 - `README.md`, under the logo
@@ -49,7 +49,7 @@ strict parsing became three chapters.
 - Every claim is true on this toolchain. Read the pinned std source before you write what std does
   or lacks. Run a scratch test before you state behavior you only read. Reading missed two bugs:
   `set.unite` never returned `true`, and `static_map` could not find narrow keys.
-- stdx builds with Zig 0.16 only. Never write "or newer". `.minimum_zig_version` in
+- stdx builds with Zig 0.17. Never write "or newer". `.minimum_zig_version` in
   `build.zig.zon` is a Zig field name and means nothing more.
 - Never name a downstream project. Examples are generic programs that show how stdx is used.
 - Do not state status or recency in mechanism docs: no "now", "currently", "recently". Readiness

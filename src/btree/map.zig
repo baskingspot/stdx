@@ -1682,7 +1682,7 @@ test "string keys with a long shared prefix" {
     var storage: [512][48]u8 = undefined;
     var lens: [512]usize = undefined;
     for (0..512) |i| {
-        const key = try std.fmt.bufPrint(&storage[i], "srv/2026/10/25/requests/item-{d:0>6}", .{i});
+        const key = try mem.print(&storage[i], "srv/2026/10/25/requests/item-{d:0>6}", .{i});
         lens[i] = key.len;
         try map.put(gpa, key, @intCast(i));
     }

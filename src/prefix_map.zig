@@ -16,7 +16,6 @@
 //! `init`, and values are copied into the value array.
 
 const std = @import("std");
-const compat = @import("compat.zig");
 const mem = std.mem;
 const testing = std.testing;
 const math = std.math;
@@ -496,7 +495,11 @@ test "runtime keys are copied" {
 }
 
 test "long keys, null bytes, and set values" {
-    const long = comptime compat.repeatString("abcdefghijklmnopqrstuvwxyz", 12);
+    const long = comptime blk: {
+        var out: [26 * 12]u8 = undefined;
+        for (0..12) |i| out[i * 26 ..][0..26].* = "abcdefghijklmnopqrstuvwxyz".*;
+        break :blk out;
+    };
     const long_x = long ++ "x";
     const m: Map(void) = .initComptime(.{
         .{ long[0..], {} },
@@ -513,7 +516,7 @@ test "matches a linear scan over many keys" {
     var key_buf: [n][32]u8 = undefined;
     var kvs: [n]struct { []const u8, u16 } = undefined;
     for (0..n) |i| {
-        const key = try std.fmt.bufPrint(&key_buf[i], "api/v{d}/item{d}/", .{ i % 40, i });
+        const key = try mem.print(&key_buf[i], "api/v{d}/item{d}/", .{ i % 40, i });
         kvs[i] = .{ key, @intCast(i) };
     }
 

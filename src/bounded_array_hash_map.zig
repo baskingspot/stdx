@@ -10,7 +10,6 @@
 //! removed entry's position.
 
 const std = @import("std");
-const compat = @import("compat.zig");
 const assert = std.debug.assert;
 const testing = std.testing;
 const StringContext = std.hash_map.StringContext;
@@ -252,7 +251,7 @@ pub fn Custom(
                 .pointer => |ptr| ptr.child,
                 else => C,
             };
-            return compat.fnParamCount(@TypeOf(Struct.eql)) == 4;
+            return @typeInfo(@TypeOf(Struct.eql)).@"fn".param_types.len == 4;
         }
 
         fn constrainIndex(index: usize) usize {

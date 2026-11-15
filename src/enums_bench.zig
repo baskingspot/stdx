@@ -4,16 +4,6 @@
 //! byte changed (a same-length miss), and lengths no keyword has.
 
 const std = @import("std");
-/// `compat.zig` belongs to the stdx module, and a source file belongs to
-/// exactly one module, so the bench carries its own copy of the one shim it
-/// needs rather than importing stdx's.
-const compat = struct {
-    // zig fmt: off
-    fn enumToInt(e: anytype) @typeInfo(@TypeOf(e)).@"enum".tag_type {
-        return @intFromEnum(e);
-    }
-    // zig fmt: on
-};
 const mem = std.mem;
 
 const stdx = @import("stdx");
@@ -66,25 +56,25 @@ const three_names = .{ "transaction", "session", "statement" };
 
 fn eqlThree(str: []const u8) u8 {
     inline for (three) |kv| {
-        if (mem.eql(u8, str, kv[0])) return compat.enumToInt(kv[1]);
+        if (mem.eql(u8, str, kv[0])) return @backingInt(kv[1]);
     }
-    return compat.enumToInt(Mode.unknown);
+    return @backingInt(Mode.unknown);
 }
 
 const static_three = std.StaticStringMap(Mode).initComptime(three);
 
 fn staticMapThree(str: []const u8) u8 {
-    return compat.enumToInt(static_three.get(str) orelse Mode.unknown);
+    return @backingInt(static_three.get(str) orelse Mode.unknown);
 }
 
 const openThree = enums.Open(three_names);
 
 fn matchThree(str: []const u8) u8 {
-    return compat.enumToInt(openThree.match(str));
+    return @backingInt(openThree.match(str));
 }
 
 fn toEnumThree(str: []const u8) u8 {
-    return compat.enumToInt(enums.stringToEnum(Mode, str) orelse Mode.unknown);
+    return @backingInt(enums.stringToEnum(Mode, str) orelse Mode.unknown);
 }
 
 pub fn benchmarkEqlThree(b: *testingx.B) !void {
@@ -151,25 +141,25 @@ const sixteen_names = .{
 
 fn eqlSixteen(str: []const u8) u8 {
     inline for (sixteen) |kv| {
-        if (mem.eql(u8, str, kv[0])) return compat.enumToInt(kv[1]);
+        if (mem.eql(u8, str, kv[0])) return @backingInt(kv[1]);
     }
-    return compat.enumToInt(Mode16.unknown);
+    return @backingInt(Mode16.unknown);
 }
 
 const static_sixteen = std.StaticStringMap(Mode16).initComptime(sixteen);
 
 fn staticMapSixteen(str: []const u8) u8 {
-    return compat.enumToInt(static_sixteen.get(str) orelse Mode16.unknown);
+    return @backingInt(static_sixteen.get(str) orelse Mode16.unknown);
 }
 
 const openSixteen = enums.Open(sixteen_names);
 
 fn matchSixteen(str: []const u8) u8 {
-    return compat.enumToInt(openSixteen.match(str));
+    return @backingInt(openSixteen.match(str));
 }
 
 fn toEnumSixteen(str: []const u8) u8 {
-    return compat.enumToInt(enums.stringToEnum(Mode16, str) orelse Mode16.unknown);
+    return @backingInt(enums.stringToEnum(Mode16, str) orelse Mode16.unknown);
 }
 
 pub fn benchmarkEqlSixteen(b: *testingx.B) !void {

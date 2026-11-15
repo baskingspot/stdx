@@ -2,7 +2,7 @@
     .name = .stdx,
     .version = "0.5.0",
     .fingerprint = 0x5479474f829ec509, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         // The test runner and the bench engine. Lazy: only the root build
         // uses it, and build.zig returns early for a consumer.

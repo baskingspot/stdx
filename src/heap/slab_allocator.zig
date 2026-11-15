@@ -4,8 +4,8 @@
 //! fall back to the allocator passed to `alloc`; the same allocator must be
 //! passed to `free` for fallback allocations and to `deinit`.
 //!
-//! Built on 0.16's unmanaged memory pools: no allocator is retained, so the
-//! gpa is passed to `init`, `alloc`, and `deinit`.
+//! Built on the unmanaged memory pools: no allocator is retained, so the gpa
+//! is passed to `init`, `alloc`, and `deinit`.
 //!
 //! This type is not thread-safe. `alloc` and `free` require the same nonzero
 //! allocation size, and `free` requires the original pointer returned by
@@ -13,7 +13,6 @@
 //! `deinit`.
 
 const std = @import("std");
-const compat = @import("../compat.zig");
 const heap = std.heap;
 const mem = std.mem;
 const Alignment = mem.Alignment;
@@ -280,9 +279,9 @@ test "runtime-safety accounting tracks pooled and fallback allocations" {
 test "does not retain a direct allocator field" {
     const TestSlab = SlabAllocator(.{ .size_classes = &.{.{ .size = 8 }} });
     const info = @typeInfo(TestSlab).@"struct";
-    const count = comptime compat.fieldCount(info);
+    const count = comptime info.field_names.len;
     inline for (0..count) |i| {
-        try testing.expect(comptime compat.FieldType(info, i) != Allocator);
+        try testing.expect(comptime info.field_types[i] != Allocator);
     }
 }
 

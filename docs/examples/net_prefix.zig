@@ -54,6 +54,6 @@ test "a prefix is parsed as strictly as an address" {
 test "a prefix formats with {f}" {
     const subnet: Prefix4 = .parseComptime("10.1.0.0/20");
     var text: [18]u8 = undefined;
-    const formatted = try std.fmt.bufPrint(&text, "{f}", .{subnet});
+    const formatted = try std.mem.print(&text, "{f}", .{subnet});
     try std.testing.expectEqualStrings("10.1.0.0/20", formatted);
 }

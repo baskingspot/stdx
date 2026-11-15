@@ -14,7 +14,7 @@ test "a resizable map takes the allocator per call" {
     // 1,000 keys is far past any fixed capacity. The map grows.
     var key_buffer: [16]u8 = undefined;
     for (0..1000) |i| {
-        const key = try std.fmt.bufPrint(&key_buffer, "key-{d}", .{i});
+        const key = try std.mem.print(&key_buffer, "key-{d}", .{i});
         // The map keeps the key slice, not a copy. A stack buffer would
         // dangle, so give the map keys that outlive it.
         const owned = try gpa.dupe(u8, key);

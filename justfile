@@ -41,7 +41,7 @@ test-release-safe:
 test-release-fast:
     zig build test -Doptimize=ReleaseFast --summary all
 
-[doc("Run the fuzzer with an iteration budget, for example `just fuzz 50M`. Uses the built-in test runner, which testingx does not replace in fuzz mode. ReleaseSafe forces the LLVM backend, dodging the 0.16.0 self-hosted-backend bug in Debug fuzz mode (ziglang/zig#30655)")]
+[doc("Run the fuzzer with an iteration budget, for example `just fuzz 50M`. Uses the built-in test runner, which testingx does not replace in fuzz mode. ReleaseSafe for the throughput: one run covers more inputs than a Debug build in the same wall time")]
 [group("test")]
 fuzz LIMIT="10M":
     zig build fuzz -Doptimize=ReleaseSafe --fuzz={{ LIMIT }}
@@ -49,7 +49,7 @@ fuzz LIMIT="10M":
 [doc("Lint: ziglint, the ast-grep rules, Zig, Nix, Markdown and CSS, the workflows, and justfile formatting")]
 [group("lint")]
 lint:
-    ziglint-0-16
+    ziglint-0-17
     baskingspot-lint src
     zig fmt --check src docs/examples build.zig build.zig.zon
     nix fmt -- --ci

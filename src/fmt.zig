@@ -5,7 +5,6 @@
 //! literals are compile errors, not runtime ones.
 
 const std = @import("std");
-const compat = @import("compat.zig");
 const testing = std.testing;
 
 const atoi_mod = @import("fmt/atoi.zig");
@@ -39,12 +38,18 @@ test comptimeHex {
     try testing.expectEqualSlices(u8, &.{0xab}, &comptimeHex("ab"));
 }
 
+/// The hex body of a 2048-bit vector: `0123456789abcdef` written 32 times.
+const long_hex = blk: {
+    var out: [512]u8 = undefined;
+    for (0..32) |i| out[i * 16 ..][0..16].* = "0123456789abcdef".*;
+    break :blk out;
+};
+
 test "comptimeHex: repeated decodes share one budget" {
     // Callers decode many vectors in one file. Without a quota inside
     // `comptimeHex`, the shared comptime budget runs out partway through.
     inline for (0..8) |_| {
-        const pattern = comptime compat.repeatString("0123456789abcdef", 32);
-        const bytes = comptimeHex(&pattern);
+        const bytes = comptimeHex(&long_hex);
         try testing.expectEqual(@as(u8, 0xef), bytes[255]);
     }
 }
@@ -52,8 +57,7 @@ test "comptimeHex: repeated decodes share one budget" {
 test "comptimeHex: a long literal" {
     // A TLS-sized vector (a 2048-bit modulus) decodes past the default
     // comptime branch budget for `hexToBytes`.
-    const pattern = comptime compat.repeatString("0123456789abcdef", 32);
-    const bytes = comptimeHex(&pattern);
+    const bytes = comptimeHex(&long_hex);
     try testing.expectEqual(@as(usize, 256), bytes.len);
     try testing.expectEqual(@as(u8, 0x01), bytes[0]);
     try testing.expectEqual(@as(u8, 0xef), bytes[255]);

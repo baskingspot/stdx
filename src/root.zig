@@ -1,4 +1,4 @@
-//! Extensions to the Zig 0.16 standard library: fixed-capacity containers,
+//! Extensions to the Zig 0.17 standard library: fixed-capacity containers,
 //! strict parsers, IPv4 types, and the primitives std lacks.
 //!
 //! A module that extends a std namespace takes its name (`mem`, `fmt`, `net`,

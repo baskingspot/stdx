@@ -153,7 +153,7 @@ Accumulated memory. Update it when you find a rule or a recurring drift class th
 
 ## Intentional non-issues (do not flag)
 
-- `build.zig.zon` `.minimum_zig_version = "0.16.0"`. The field name is Zig's.
+- `build.zig.zon` `.minimum_zig_version = "0.17.0"`. The field name is Zig's.
 - `docs/examples/root.zig` uses `refAllDecls`, not an itemized list. That is the repo rule.
 - Tests in `src/` assert behavior. Comments that explain why a test pins a value are fine.
 

@@ -1,8 +1,8 @@
 //! POSIX extensions to `std.posix`.
 //!
 //! Socket address queries by fd, returning a typed `net.Ip4Address`. std's
-//! `posix.getpeername` fills a caller-supplied `sockaddr`, and std 0.16 has
-//! no `posix.getsockname`. For callers that own raw socket handles (io_uring
+//! `posix.getpeername` fills a caller-supplied `sockaddr`, and `std` has no
+//! `posix.getsockname`. For callers that own raw socket handles (io_uring
 //! data paths); code holding an `Io.net.Socket` should prefer the typed APIs
 //! instead.
 //!
@@ -63,8 +63,8 @@ pub fn getpeername(fd: posix.socket_t) GetSockNameError!net.Ip4Address {
 /// ephemeral) port, which is how a caller recovers the real port after
 /// binding to port 0.
 ///
-/// std wraps `getpeername` but not `getsockname` in 0.16, so this decodes
-/// errno over the raw call.
+/// std wraps `getpeername` but not `getsockname`, so this decodes errno over
+/// the raw call.
 pub fn getsockname(fd: posix.socket_t) GetSockNameError!net.Ip4Address {
     var in: posix.sockaddr.in = undefined;
     var len: posix.socklen_t = @sizeOf(posix.sockaddr.in);

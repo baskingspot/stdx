@@ -39,7 +39,6 @@
 //! fixed-length loads.
 
 const std = @import("std");
-const compat = @import("compat.zig");
 const testing = std.testing;
 const math = std.math;
 const mem = std.mem;
@@ -68,7 +67,7 @@ pub fn Open(comptime names: anytype) type {
         };
 
         /// The value `match` returns for bytes that are not a name.
-        pub const miss: Tag = compat.enumFromInt(Tag, names.len);
+        pub const miss: Tag = @fromBackingInt(@intCast(names.len));
 
         /// The names, in the order of the literal.
         pub const keys: []const []const u8 = keys: {
@@ -83,7 +82,7 @@ pub fn Open(comptime names: anytype) type {
 
         /// The tag for `value`, or `miss`.
         pub fn match(value: []const u8) Tag {
-            if (indexOf(keys, value)) |i| return compat.enumFromInt(Tag, i);
+            if (indexOf(keys, value)) |i| return @fromBackingInt(@intCast(i));
             return miss;
         }
 
@@ -143,7 +142,7 @@ pub fn Closed(comptime names: anytype, comptime fallback: []const u8) type {
 
         /// The tag for `value`, or `miss`.
         pub fn match(value: []const u8) Tag {
-            if (indexOf(keys, value)) |i| return compat.enumFromInt(Tag, i);
+            if (indexOf(keys, value)) |i| return @fromBackingInt(@intCast(i));
             return miss;
         }
 
@@ -164,16 +163,16 @@ pub fn stringToEnum(comptime E: type, value: []const u8) ?E {
                 " is not an enum"),
         };
 
-        const count = compat.fieldCount(info);
+        const count = info.field_names.len;
         const keys: [count][]const u8 = keys: {
             var arr: [count][]const u8 = undefined;
-            for (0..count) |i| arr[i] = compat.fieldName(info, i);
+            for (0..count) |i| arr[i] = info.field_names[i];
             break :keys arr;
         };
 
         const values: [count]E = values: {
             var arr: [count]E = undefined;
-            for (0..count) |i| arr[i] = @field(E, compat.fieldName(info, i));
+            for (0..count) |i| arr[i] = @field(E, info.field_names[i]);
             break :values arr;
         };
     };
@@ -313,7 +312,7 @@ test "Open: has, keys, count, miss" {
     try testing.expectEqual(@as(usize, 3), OpenModes.count);
     try testing.expectEqualStrings("session", OpenModes.keys[1]);
     try testing.expectEqual(OpenModes.miss, OpenModes.match("statements"));
-    try testing.expectEqual(@as(u8, 3), compat.enumToInt(OpenModes.miss));
+    try testing.expectEqual(@as(u8, 3), @backingInt(OpenModes.miss));
 }
 
 test "Closed: has, keys, count, miss" {
@@ -328,8 +327,8 @@ test "Closed: has, keys, count, miss" {
 test "tags are not limited to identifiers" {
     const Headers = Open(.{ "content-type", "content-length", "404", "with space" });
     try testing.expectEqualStrings("content-type", Headers.keys[0]);
-    try testing.expectEqual(@as(usize, 0), compat.enumToInt(Headers.match("content-type")));
-    try testing.expectEqual(@as(usize, 2), compat.enumToInt(Headers.match("404")));
+    try testing.expectEqual(@as(usize, 0), @backingInt(Headers.match("content-type")));
+    try testing.expectEqual(@as(usize, 2), @backingInt(Headers.match("404")));
     try testing.expectEqual(Headers.miss, Headers.match("Content-Type"));
 
     const hit = switch (Headers.match("with space")) {
@@ -406,7 +405,7 @@ test "every length up to 40 compares exactly" {
     });
 
     inline for (C.keys, 0..) |key, i| {
-        try testing.expectEqual(@as(usize, i), compat.enumToInt(C.match(key)));
+        try testing.expectEqual(@as(usize, i), @backingInt(C.match(key)));
         if (key.len >= 16) {
             var buf: [64]u8 = undefined;
             const copy = buf[0..key.len];

@@ -35,7 +35,7 @@ pub fn build(b: *std.Build) void {
     const run_mod_tests = b.addRunArtifact(mod_tests);
     // Only the module suite takes runner flags: a filter that matches none of
     // the examples' tests would fail that binary.
-    passthruArgs(b, run_mod_tests);
+    run_mod_tests.addPassthruArgs();
 
     const test_step = b.step("test", "Run stdx tests");
     test_step.dependOn(&run_mod_tests.step);
@@ -72,19 +72,9 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "stdx", .module = mod }},
             .target = target,
         });
-        passthruArgs(b, run_bench);
+        run_bench.addPassthruArgs();
 
         const bench_step = b.step("bench", "Run stdx benchmarks");
         bench_step.dependOn(&run_bench.step);
-    }
-}
-
-/// `b.args` (removed in Zig 0.17) and `Run.addPassthruArgs` are the same
-/// feature on either side of the split. Probe the build API, not the version.
-fn passthruArgs(b: *std.Build, run: *std.Build.Step.Run) void {
-    if (comptime @hasDecl(std.Build.Step.Run, "addPassthruArgs")) {
-        run.addPassthruArgs();
-    } else if (b.args) |args| {
-        run.addArgs(args);
     }
 }

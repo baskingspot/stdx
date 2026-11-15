@@ -274,7 +274,7 @@ test Ip4 {
     try testing.expectEqual(@as(u16, 5432), with_port.port);
 
     var buf: [32]u8 = undefined;
-    const formatted = try std.fmt.bufPrint(&buf, "{f}", .{addr});
+    const formatted = try mem.print(&buf, "{f}", .{addr});
     try testing.expectEqualStrings("10.1.2.3", formatted);
 }
 
@@ -322,14 +322,14 @@ test "Ip4.parse fast path matches std" {
     var v: u16 = 0;
     while (v <= 255) : (v += 1) {
         var buf: [32]u8 = undefined;
-        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "{d}.0.0.0", .{v}));
-        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "0.{d}.0.0", .{v}));
-        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "0.0.{d}.0", .{v}));
-        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "0.0.0.{d}", .{v}));
-        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "{d}.255.0.1", .{v}));
-        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "255.{d}.255.0", .{v}));
-        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "0.255.{d}.255", .{v}));
-        try expectIp4MatchesStd(try std.fmt.bufPrint(&buf, "255.0.255.{d}", .{v}));
+        try expectIp4MatchesStd(try mem.print(&buf, "{d}.0.0.0", .{v}));
+        try expectIp4MatchesStd(try mem.print(&buf, "0.{d}.0.0", .{v}));
+        try expectIp4MatchesStd(try mem.print(&buf, "0.0.{d}.0", .{v}));
+        try expectIp4MatchesStd(try mem.print(&buf, "0.0.0.{d}", .{v}));
+        try expectIp4MatchesStd(try mem.print(&buf, "{d}.255.0.1", .{v}));
+        try expectIp4MatchesStd(try mem.print(&buf, "255.{d}.255.0", .{v}));
+        try expectIp4MatchesStd(try mem.print(&buf, "0.255.{d}.255", .{v}));
+        try expectIp4MatchesStd(try mem.print(&buf, "255.0.255.{d}", .{v}));
     }
 
     // Valid quads across the length space, each byte mutated to the values
@@ -344,7 +344,7 @@ test "Ip4.parse fast path matches std" {
                 var d: u16 = 0;
                 while (d <= 255) : (d += 51) {
                     var buf: [32]u8 = undefined;
-                    const text = try std.fmt.bufPrint(&buf, "{d}.{d}.{d}.{d}", .{ a, b, c, d });
+                    const text = try mem.print(&buf, "{d}.{d}.{d}.{d}", .{ a, b, c, d });
                     try expectIp4MatchesStd(text);
                     var copy: [32]u8 = undefined;
                     @memcpy(copy[0..text.len], text);
@@ -736,7 +736,7 @@ test Ip4Endpoint {
     try testing.expectEqual(@as(u16, 7777), parsed.withPort(7777).port);
 
     var buf: [32]u8 = undefined;
-    const formatted = try std.fmt.bufPrint(&buf, "{f}", .{loopback});
+    const formatted = try mem.print(&buf, "{f}", .{loopback});
     try testing.expectEqualStrings("127.0.0.1:5432", formatted);
 }
 

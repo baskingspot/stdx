@@ -12,7 +12,6 @@
 //! still a UUID.
 
 const std = @import("std");
-const compat = @import("compat.zig");
 const Io = std.Io;
 const fmt = std.fmt;
 const mem = std.mem;
@@ -50,7 +49,7 @@ pub const Version = enum(u4) {
 };
 
 pub fn version(self: Uuid) Version {
-    return compat.enumFromInt(Version, self.bytes[6] >> 4);
+    return @fromBackingInt(@intCast(self.bytes[6] >> 4));
 }
 
 /// Generate a v4 (random) UUID. Six bits are fixed: version 4, variant 10.
@@ -139,7 +138,7 @@ test Uuid {
 
     // Round trip: format then parse, either case.
     var buf: [36]u8 = undefined;
-    const s = try fmt.bufPrint(&buf, "{f}", .{c});
+    const s = try mem.print(&buf, "{f}", .{c});
     try testing.expect(c.eql(try .parse(s)));
 
     var upper_buf: [36]u8 = undefined;
@@ -151,7 +150,7 @@ test Uuid {
         const ex: Uuid = try .parse("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
         try testing.expect(ex.version() == .v1);
         var eb: [36]u8 = undefined;
-        break :blk try fmt.bufPrint(&eb, "{f}", .{ex});
+        break :blk try mem.print(&eb, "{f}", .{ex});
     });
 
     // Rejections: length, hyphen placement, non-hex digit.
@@ -172,5 +171,5 @@ test Uuid {
 
     // Unknown versions parse: a future UUID is still a UUID.
     const future: Uuid = try .parse("f81d4fae-7dec-91d0-a765-00a0c91e6bf6");
-    try testing.expectEqual(@as(u4, 9), compat.enumToInt(future.version()));
+    try testing.expectEqual(@as(u4, 9), @backingInt(future.version()));
 }
