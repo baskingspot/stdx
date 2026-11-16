@@ -2,7 +2,7 @@
 title = "stdx"
 +++
 
-Extensions to the Zig 0.17 standard libraries: fixed-capacity containers, strict parsers, IPv4 types, and the primitives std lacks.
+Extensions to the Zig 0.17 standard library: fixed-capacity containers, strict parsers, IPv4 types, and the primitives std lacks.
 
 The same helpers kept showing up copy-pasted across projects: strict number parsing, IPv4 and CIDR handling, fixed-capacity buffers, a bounded writer, a slab allocator. stdx is where they live. Each module is tested on its own, and the package has no dependencies.
 
