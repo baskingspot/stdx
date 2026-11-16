@@ -398,7 +398,7 @@ semantics.
 Verified shape:
 
 - Class ladder generated at init, runtime not comptime: `chunk =
-base × factor^i` (base ~64, factor ~1.25) up to page/2, then
+  base × factor^i` (base ~64, factor ~1.25) up to page/2, then
   single-chunk pages; oversize → honest `error.OutOfMemory`. Kills
   the comptime-tier granularity complaint against heap.SlabAllocator.
 - Per-page free lists threaded through free chunks; per-page live

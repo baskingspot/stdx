@@ -62,7 +62,7 @@ it.
 ## Conventions
 
 - Commit messages: one line, `area: summary`, like `time: rework in
-Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
+  Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
   A short body only when the why genuinely needs it.
 
 - Tests attach to symbols (`test atoi { ... }`); a type with many
@@ -102,7 +102,7 @@ Io.Timestamp values`. No essays, no narrative, no "rides along" notes.
   ast-grep rule, `public-struct-field-default`, enforces this through
   `baskingspot-lint`, which `just lint` runs; a sanctioned config
   struct carries `// ast-grep-ignore: public-struct-field-default --
-why` between its doc comment and its declaration. The rules ship in
+  why` between its doc comment and its declaration. The rules ship in
   the baskingspot flake, and a rule of this repo's own would live in
   `.ast-grep/rules/`.
 
@@ -139,7 +139,7 @@ organized by task, not by module.
   fence. Never paste a code block into a page that the compiler has not
   seen. Name files `<module>_<topic>.zig`.
 - Examples write bindings the way an adopter should: `const timex =
-stdx.time;`, `const fmtx = stdx.fmt;`. The `x` suffix only when std's
+  stdx.time;`, `const fmtx = stdx.fmt;`. The `x` suffix only when std's
   namesake is usually in scope; `buffer`, `stdio`, `net` stay bare.
   Inside `src/` module bindings never take a suffix.
 - Example imports: a file that uses one stdx module writes
