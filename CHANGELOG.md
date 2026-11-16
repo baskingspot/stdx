@@ -5,6 +5,8 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-16
+
 ### Changed
 
 - stdx builds with Zig 0.17. `minimum_zig_version` is `0.17.0`, and the 0.16
