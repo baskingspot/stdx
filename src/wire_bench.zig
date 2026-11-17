@@ -1,4 +1,5 @@
-//! The wire module's benchmarks: the forward big-endian write and read paths.
+//! The wire module's benchmarks: the forward big-endian write and read paths,
+//! and the LEB128 varint pair.
 
 const testingx = @import("testingx");
 
@@ -21,6 +22,40 @@ pub fn benchmarkWireWrite(b: *testingx.B) !void {
         sink +%= writer.buffered().len + writer.constBuffered()[0];
     }
     b.keepAlive(&writer);
+}
+
+pub fn benchmarkWireLeb128Write(b: *testingx.B) !void {
+    var storage: [64]u8 = undefined;
+    var writer: wire.Writer(.big) = .init(&storage);
+    var sink: usize = 0;
+    defer b.keepAlive(sink);
+    var i: u32 = 0;
+    while (try b.loop()) : (i +%= 1) {
+        writer.clear();
+        writer.appendLeb128AssumeCapacity(u32, i % 0x2000);
+        writer.appendLeb128AssumeCapacity(i32, -@as(i32, @intCast(i % 0x2000)));
+        sink +%= writer.constBuffered().len;
+    }
+    b.keepAlive(&writer);
+}
+
+pub fn benchmarkWireLeb128Read(b: *testingx.B) !void {
+    // Two values that span one and two encoding bytes.
+    var storage: [8]u8 = undefined;
+    var seed: wire.Writer(.big) = .init(&storage);
+    seed.appendLeb128AssumeCapacity(u32, 0x1fff);
+    seed.appendLeb128AssumeCapacity(i32, -0x1fff);
+    const input_len = seed.constBuffered().len;
+
+    var sink: i64 = 0;
+    defer b.keepAlive(sink);
+    while (try b.loop()) {
+        const input = b.blackBox(&storage)[0..input_len];
+        var reader: wire.Reader(.big) = .init(input);
+        sink +%= try reader.readLeb128(u32);
+        sink +%= try reader.readLeb128(i32);
+        sink +%= @as(i64, @intCast(reader.remaining().len));
+    }
 }
 
 pub fn benchmarkWireRead(b: *testingx.B) !void {

@@ -18,7 +18,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Initialize once](#initialize-once): `once.Cell` and `once.Lazy` set a value at most once. The `Sync` variants share it across threads.
 - [Sort](#sort): `sort.radix` is a stable integer radix sort, and `sort.nth`/`sort.select` find the k-th element without sorting the rest.
 - [Cache the recent](#cache-the-recent): `lru.String` and `lru.Auto` keep a fixed number of recent entries and evict the tail.
-- [Binary encoding](#binary-encoding): `wire.Writer` writes integers, enums, and slices into caller-owned bytes, with the byte order fixed at comptime and a slot for a length or checksum written later.
+- [Binary encoding](#binary-encoding): `wire.Writer` writes integers, enums, slices, and varints into caller-owned bytes, with the byte order fixed at comptime and a slot for a length or checksum written later; `wire.Reader` reads them back and can peek without consuming.
 - [Base64](#base64): the RFC 4648 codec at comptime: the four alphabets, exact lengths before the call, and a decode that is the validation. The kernels move a vector per instruction.
 - [Base32](#base32): a Crockford base32 codec for fixed-shape machine tokens. The decode itself is the validation, and every spelling outside the lowercase alphabet fails.
 - [IP addresses](#ip-addresses): `net.Ip4` and `net.Prefix4`, following Go's `net/netip`: classification, ordering, canonical prefixes, and overlap checks.
@@ -137,7 +137,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`time`](api/#stdx.time)                                     | Compact time values, clock reads without an `Io` value, a cached clock, RFC 3339 formatting, and a log rate limiter.                                                              |
 | [`timers`](api/#stdx.timers)                                 | A caller-driven set of timers over `Io.Timestamp`: arm and stop entries by handle, fire callbacks, and repeat on a period.                                                        |
 | [`Uuid`](api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                                      |
-| [`wire`](api/#stdx.wire)                                     | A forward-only writer over caller-owned bytes, with the byte order fixed at comptime. Integers, enums, slices, and backpatch slots.                                               |
+| [`wire`](api/#stdx.wire)                                     | A forward-only writer over caller-owned bytes, with the byte order fixed at comptime. Integers, enums, packed structs, slices, backpatch slots, and LEB128 varints.               |
 
 # Choosing a container
 
@@ -570,9 +570,31 @@ Byte slices and reserved slots are order-agnostic. A protocol with a mixed byte 
 
 Every fallible method has two forms. The checked form returns `error.NoSpaceLeft`. The `AssumeCapacity` form asserts the bound: it panics in Debug and ReleaseSafe, and ReleaseFast removes the check. Use the checked form when the size depends on input. Use the unchecked form when a prior check or a fixed maximum proves the fit.
 
+A field the caller decides against comes back off the output with `undo`. The bytes stay in the backing, so the next write overwrites them.
+
+## Write a run of values
+
+`appendSlice` copies bytes verbatim, which is wrong for an array of values wider than a byte on a host whose order differs. `appendSliceEndian` writes one element at a time through `append`, so the run has the same bytes as a loop. `readSliceEndian` is the inverse, and it fills a buffer the caller owns because the values only exist once the order is applied.
+
+A packed struct writes as its backing integer in one store, since it has a defined bit layout and no padding. The fields fill that integer from its low bit, so on a big-endian writer the first declared field lands in the last byte. That is the backing integer's order, not a protocol bit order.
+
+## Write a varint
+
+A field whose width is part of the value is a LEB128 varint. `appendLeb128` takes the sign from the type, so an unsigned type writes ULEB128 and a signed type writes SLEB128. The length follows from the value, so there is no width argument and no slot.
+
+`readLeb128` is the inverse. An encoding that does not fit the type is `error.Overflow`, and bytes that end before the terminator are `error.UnexpectedEof`. A failed read leaves the cursor where it was.
+
+## Look before you read
+
+`peek`, `peekSlice`, and `peekUntil` return what `read`, `readSlice`, and `readUntil` would return, and leave the cursor alone. A decoder uses them to route on a tag, or to check a delimiter before it commits to the field.
+
+```zig
+{{ load_data(path="examples/wire_varint.zig", format="plain") | trim_end }}
+```
+
 ## Know the limits
 
-The writer writes fixed-width integers and enums, byte slices, and slots. It does not write varints, bit-packed fields, or a different byte order per field. A protocol that needs those writes the field with `std.mem` or its own codec.
+The writer writes fixed-width integers, enums, packed structs, byte slices, slots, and LEB128 varints. It does not write bits outside a packed struct, and it does not take a different byte order per field. A protocol that needs those writes the field with `std.mem` or its own codec.
 
 # Base64
 

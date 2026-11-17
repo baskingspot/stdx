@@ -64,6 +64,7 @@ pub const time_wall_from_awake = @import("time_wall_from_awake.zig");
 pub const timers_loop = @import("timers_loop.zig");
 pub const uuid_roundtrip = @import("uuid_roundtrip.zig");
 pub const wire_backpatch = @import("wire_backpatch.zig");
+pub const wire_varint = @import("wire_varint.zig");
 
 test {
     std.testing.refAllDecls(@This());

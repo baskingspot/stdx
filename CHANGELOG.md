@@ -5,6 +5,14 @@ All notable changes to stdx are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `wire`: `Reader.peek`, `peekSlice`, and `peekUntil` return what the read forms would and leave the cursor alone, so a decoder can route on a tag or test a delimiter before it commits.
+- `wire`: LEB128 varints. `Writer.appendLeb128` and `Reader.readLeb128` take the sign from the type, so an unsigned type writes ULEB128 and a signed one writes SLEB128. `readLeb128` returns `error.Overflow` for an encoding that does not fit its type and `error.UnexpectedEof` for a missing terminator, and a failed read leaves the cursor where it was.
+- `wire`: `append` and `read` take a packed struct as its backing integer, so a flags byte or a bitfield has one store and no padding.
+- `wire`: `Writer.appendSliceEndian` and `Reader.readSliceEndian` write and read a run of integers or packed structs in the byte order, where `appendSlice` would copy bytes. `readSliceEndian` fills a buffer the caller owns.
+- `wire`: `Writer.undo` drops the last `n` bytes from the output, for a field the caller writes and then decides against.
+
 ## [0.6.0] - 2026-11-16
 
 ### Changed
