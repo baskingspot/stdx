@@ -596,10 +596,11 @@ test Prefix4 {
 }
 
 /// IPv4 address as octets + port — 6 bytes, the same layout as
-/// `std.Io.net.Ip4Address`. The type exists because std's cannot be
-/// extended, and `toSockaddrIn` needs a receiver: the kernel struct that
-/// `bind(2)` and `connect(2)` take, port in network order. The other
-/// methods are the port helpers around it.
+/// `std.Io.net.Ip4Address`, and small enough for a per-connection record.
+/// The type exists because std's cannot be extended, and `toSockaddrIn`
+/// needs a receiver: the kernel struct that `bind(2)` and `connect(2)`
+/// take, port in network order. The rest is the conversions and port
+/// helpers around it.
 pub const Ip4Endpoint = struct {
     bytes: [4]u8,
     port: u16,
