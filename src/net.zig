@@ -595,11 +595,11 @@ test Prefix4 {
     try testing.expectError(error.BitsOutOfRange, Ip4.parseComptime("10.0.0.1").prefix(33));
 }
 
-/// IPv4 address as octets + port — 6 bytes, the value without the
-/// sockaddr padding. For callers that own raw fds and call `bind(2)`/
-/// `connect(2)` directly, and for per-connection records where the
-/// 16-byte `Ip4Address` carries the sockaddr shape, not the storage
-/// shape.
+/// IPv4 address as octets + port — 6 bytes, the same layout as
+/// `std.Io.net.Ip4Address`. The type exists because std's cannot be
+/// extended, and `toSockaddrIn` needs a receiver: the kernel struct that
+/// `bind(2)` and `connect(2)` take, port in network order. The other
+/// methods are the port helpers around it.
 pub const Ip4Endpoint = struct {
     bytes: [4]u8,
     port: u16,
@@ -710,6 +710,9 @@ pub const HostPort = struct {
 };
 
 test Ip4Endpoint {
+    try testing.expectEqual(@as(usize, 6), @sizeOf(Ip4Endpoint));
+    try testing.expectEqual(@as(usize, 2), @alignOf(Ip4Endpoint));
+
     const loopback = Ip4Endpoint.init(.{ 127, 0, 0, 1 }, 5432);
     try testing.expectEqual(@as(u16, 5432), loopback.port);
 
