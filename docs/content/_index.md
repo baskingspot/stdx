@@ -697,7 +697,7 @@ An `Ip4` is four bytes with no padding. It works as a key in the hash containers
 
 ## Carry an address and a port
 
-`net.Ip4Endpoint` is four octets and a port in 6 bytes: the value shape without the sockaddr padding that std's `Ip4Address` carries. Use it in per-connection records and in code that owns a raw fd and calls `bind(2)` or `connect(2)` directly. `toSockaddrIn` returns the kernel struct with the port in network order. `parse` takes the address text and the port separately. `HostPort.parse` handles config text that carries both. `toStd` and `fromStd` convert to and from `Ip4Address`.
+`net.Ip4Endpoint` is four octets and a port, the same layout as `std.Io.net.Ip4Address`. Use it in per-connection records and in code that owns a raw fd and calls `bind(2)` or `connect(2)` directly: `toSockaddrIn` returns the kernel struct with the port in network order. `parse` takes the address text and the port separately. `HostPort.parse` handles config text that carries both. `toStd` and `fromStd` convert to and from `Ip4Address`.
 
 ## Parse a host and port
 
