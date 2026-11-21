@@ -134,6 +134,19 @@ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+## hash4j
+
+Upstream: https://github.com/dynatrace-oss/hash4j (`UltraLogLog.java`, main branch).
+License: Apache-2.0; the full text is in `LICENSE-APACHE`.
+
+`src/ultraloglog.zig` implements Otmar Ertl's UltraLogLog algorithm (PVLDB
+2024, arXiv:2308.16862), using `hash4j`'s `+4p - 8` shifted register encoding
+(so register saturation always lands at byte `255`), bit-packing (`pack` /
+`unpack`), downsizing formula, and Optimal FGRA estimator structure. Zig
+adaptations: comptime generation of the per-precision scaling factor and
+register contribution table, unsigned register validation in `fromBytes`, and
+the `Sketch` / `Custom` / `Auto` / `String` layering.
+
 ## Design references
 
 These are designs stdx implemented on its own. No code was copied, so no
@@ -148,6 +161,13 @@ cache-miss cost model, inline keys, prefix stripping between a node's fences,
 and the rule that the smallest and largest keys fence the spines are his.
 Inline keys and prefix keys themselves trace further back, to Graefe and
 Larson (ICDE 2001) and Bayer and Unterauer (TODS 1977).
+
+`count_min` implements the Count-Min Sketch by Graham Cormode and S.
+Muthukrishnan (Journal of Algorithms, 2005) and the conservative update rule
+by Cristian Estan and George Varghese (SIGCOMM 2002).
+
+`cuckoo` implements the Cuckoo Filter by Bin Fan, Dave G. Andersen, Michael
+Kaminsky, and Michael D. Mitzenmacher (CoNEXT 2014).
 
 Copyright (c) 2026 Xiangpeng Hao
 

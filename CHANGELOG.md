@@ -7,6 +7,9 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `count_min`: fixed-capacity Count-Min Sketches (`Sketch`, `Custom`, `Auto`, `String`) with comptime sizing by explicit dimensions or `Config.fromError`, saturating counters, `addConservative`, `merge`, and `halve`.
+- `cuckoo`: fixed-capacity Cuckoo filters (`Filter`, `Custom`, `Auto`, `String`) with deletion, `u8`/`u16`/`u32` fingerprints, SIMD 4-slot bucket probing, and full rollback on `error.FilterFull`.
+- `ultraloglog`: UltraLogLog distinct-count sketches (`Sketch`, `Custom`, `Auto`, `String`) in `[1 << precision]u8` storage, with the Optimal FGRA estimator, `merge`, lossless `downsize`, and validated `asBytes`/`fromBytes`.
 - `wire`: `Reader.peek`, `peekSlice`, and `peekUntil` return what the read forms would and leave the cursor alone, so a decoder can route on a tag or test a delimiter before it commits.
 - `wire`: LEB128 varints. `Writer.appendLeb128` and `Reader.readLeb128` take the sign from the type, so an unsigned type writes ULEB128 and a signed one writes SLEB128. `readLeb128` returns `error.Overflow` for an encoding that does not fit its type and `error.UnexpectedEof` for a missing terminator, and a failed read leaves the cursor where it was.
 - `wire`: `append` and `read` take a packed struct as its backing integer, so a flags byte or a bitfield has one store and no padding.

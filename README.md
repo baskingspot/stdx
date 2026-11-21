@@ -13,7 +13,8 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 
 - [Modules](https://baskingspot.dev/stdx/#modules): every export of `src/root.zig`, one row each, with the reason to reach for it.
 - [Choosing a container](https://baskingspot.dev/stdx/#choosing-a-container): which fixed-capacity type fits a need, and when to use std or `swiss` instead.
-- [Fixed-capacity containers](https://baskingspot.dev/stdx/#fixed-capacity-containers): lists, queues, bitsets, maps, sets, Bloom filters, and comptime lookup tables. No allocator and no `deinit`; `Array` owns its storage, and `Slice` and `Queue` borrow it.
+- [Fixed-capacity containers](https://baskingspot.dev/stdx/#fixed-capacity-containers): lists, queues, bitsets, maps, sets, and comptime lookup tables. No allocator and no `deinit`; `Array` owns its storage, and `Slice` and `Queue` borrow it.
+- [Probabilistic data structures](https://baskingspot.dev/stdx/#probabilistic-data-structures): `bloom`, `cuckoo`, `count_min`, and `ultraloglog` answer membership, frequency, and distinct-count questions in fixed memory with bounded error.
 - [Ordered maps](https://baskingspot.dev/stdx/#ordered-maps): `btree.Auto` and `btree.String` keep the keys sorted for iteration and lookups by key.
 - [Strict parsing](https://baskingspot.dev/stdx/#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest. `fmt.parseBool` accepts Go's boolean spellings.
 - [Configuration files](https://baskingspot.dev/stdx/#configuration-files): `dotenv.parse` reads a `.env` file against one documented grammar, returns borrowed slices, and reports the line that does not fit.

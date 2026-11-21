@@ -8,7 +8,8 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 
 - [Modules](#modules): every export of `src/root.zig`, one row each, with the reason to reach for it.
 - [Choosing a container](#choosing-a-container): which fixed-capacity type fits a need, and when to use std or `swiss` instead.
-- [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, Bloom filters, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
+- [Fixed-capacity containers](#fixed-capacity-containers): lists, queues, maps, sets, and comptime lookup tables. The storage lives in the value, with no allocator and no `deinit`.
+- [Probabilistic data structures](#probabilistic-data-structures): `bloom`, `cuckoo`, `count_min`, and `ultraloglog` answer membership, frequency, and distinct-count questions in fixed memory with bounded error.
 - [Ordered maps](#ordered-maps): `btree` keeps the keys sorted for iteration and range scans, with cache-sized nodes and a stripped prefix at every node.
 - [Strict parsing](#strict-parsing): `fmt.atoi` accepts one grammar for machine-written integers and rejects the rest. `fmt.parseBool` accepts Go's boolean spellings.
 - [Configuration files](#configuration-files): `dotenv.parse` reads a `.env` file against one documented grammar, returns borrowed slices, and reports the line that does not fit.
@@ -110,6 +111,8 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`btree`](api/#stdx.btree)                                   | An ordered map that grows: sorted iteration, and lookups by key.                                                                                                                  |
 | [`BoundedWriter`](api/#stdx.BoundedWriter)                   | An `Io.Writer` over an allocated buffer with a hard byte limit. It fails at the limit instead of growing.                                                                         |
 | [`buffer`](api/#stdx.buffer)                                 | Fixed-capacity buffers. `Array` owns its storage. `Slice` and `Queue` borrow it, and `Queue` consumes from the front.                                                             |
+| [`count_min`](api/#stdx.count_min)                           | Fixed-capacity Count-Min Sketches for approximate frequency counts, with conservative updates, merging, and halving.                                                              |
+| [`cuckoo`](api/#stdx.cuckoo)                                 | Fixed-capacity Cuckoo filters: approximate membership with removal and SIMD bucket probes.                                                                                        |
 | [`dotenv`](api/#stdx.dotenv)                                 | A `.env` parser: one grammar, borrowed key and value slices, and the line number when a line does not fit.                                                                        |
 | [`enums`](api/#stdx.enums)                                   | Switch on a byte string: generate an open or closed enum from a list, or look up an existing enum.                                                                                |
 | [`fmt`](api/#stdx.fmt)                                       | Strict parsing for integers and booleans (`atoi`, `parseBool`), and comptime hex decoding.                                                                                        |
@@ -136,6 +139,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`swiss`](api/#stdx.swiss)                                   | Resizable Swiss-table hash maps.                                                                                                                                                  |
 | [`time`](api/#stdx.time)                                     | Compact time values, clock reads without an `Io` value, a cached clock, RFC 3339 formatting, and a log rate limiter.                                                              |
 | [`timers`](api/#stdx.timers)                                 | A caller-driven set of timers over `Io.Timestamp`: arm and stop entries by handle, fire callbacks, and repeat on a period.                                                        |
+| [`ultraloglog`](api/#stdx.ultraloglog)                       | UltraLogLog sketches for approximate distinct counts, with Optimal FGRA estimation, lossless merging, and downsizing.                                                             |
 | [`Uuid`](api/#stdx.Uuid)                                     | UUID v4 and v7. Generate, parse, and format.                                                                                                                                      |
 | [`wire`](api/#stdx.wire)                                     | A forward-only writer over caller-owned bytes, with the byte order fixed at comptime. Integers, enums, packed structs, slices, backpatch slots, and LEB128 varints.               |
 
@@ -145,21 +149,24 @@ Most stdx containers have a fixed capacity. The capacity is part of the type, th
 
 Find the need in the table. Then read the section for that type in [Fixed-capacity containers](#fixed-capacity-containers).
 
-| You need                                              | Use                                        | Notes                                                                                   |
-| ----------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| A list with a known maximum length                    | `buffer.Array`                             | Storage inside the value.                                                               |
-| The same list over memory you already own             | `buffer.Slice`                             | Same methods. The capacity is the slice length.                                         |
-| A buffer that a transport refills and a parser drains | `buffer.Queue`                             | Borrows storage. `rebase` compacts the consumed front.                                  |
-| One array per struct field                            | `multi_array.Buffer`                       | Runtime length. `multi_array.Array` has a fixed length.                                 |
-| The smallest item first                               | `priority_queue.Custom`                    | A binary heap. You supply the comparison.                                               |
-| A map that keeps insertion order                      | `bounded_array_hash_map.Auto` or `.String` | Fixed capacity.                                                                         |
-| The N most recent entries, evicting the rest          | `lru.Auto` or `.String`                    | Fixed capacity. A hit moves to the front.                                               |
-| A set                                                 | `set.Auto` or `.String`                    | A map with no values, plus set algebra.                                                 |
-| A set of indices in a reused workspace                | `bit_set.Scratch`                          | Reset clears only a validity map.                                                       |
-| A constant lookup table                               | `static_map.Auto` or `.String`             | Built at compile time from a literal. Not the same as `std.StaticStringMap`: see below. |
-| A cheap "have I seen this" test                       | `bloom.Auto`                               | Can report a key that was never added.                                                  |
-| A map that grows                                      | `swiss.Auto` or `.String`                  | Uses an allocator. Order is not insertion order.                                        |
-| Keys kept in sorted order                             | `btree.Auto` or `.String`                  | Uses an allocator. Iteration is in key order, not insertion order.                      |
+| You need                                              | Use                                        | Notes                                                                                                              |
+| ----------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| A list with a known maximum length                    | `buffer.Array`                             | Storage inside the value.                                                                                          |
+| The same list over memory you already own             | `buffer.Slice`                             | Same methods. The capacity is the slice length.                                                                    |
+| A buffer that a transport refills and a parser drains | `buffer.Queue`                             | Borrows storage. `rebase` compacts the consumed front.                                                             |
+| One array per struct field                            | `multi_array.Buffer`                       | Runtime length. `multi_array.Array` has a fixed length.                                                            |
+| The smallest item first                               | `priority_queue.Custom`                    | A binary heap. You supply the comparison.                                                                          |
+| A map that keeps insertion order                      | `bounded_array_hash_map.Auto` or `.String` | Fixed capacity.                                                                                                    |
+| The N most recent entries, evicting the rest          | `lru.Auto` or `.String`                    | Fixed capacity. A hit moves to the front.                                                                          |
+| A set                                                 | `set.Auto` or `.String`                    | A map with no values, plus set algebra.                                                                            |
+| A set of indices in a reused workspace                | `bit_set.Scratch`                          | Reset clears only a validity map.                                                                                  |
+| A constant lookup table                               | `static_map.Auto` or `.String`             | Built at compile time from a literal. Not the same as `std.StaticStringMap`: see below.                            |
+| A cheap "have I seen this" test                       | `bloom.Auto` or `.String`                  | Can report a key that was never added. See [Probabilistic data structures](#probabilistic-data-structures).        |
+| A cheap membership test with removal                  | `cuckoo.Auto` or `.String`                 | Can return `error.FilterFull` near full load. See [Probabilistic data structures](#probabilistic-data-structures). |
+| Approximate frequency counts in fixed memory          | `count_min.Auto` or `.String`              | Never undercounts. Supports `addConservative`, `merge`, and `halve`.                                               |
+| Approximate distinct counts in fixed memory           | `ultraloglog.Auto` or `.String`            | Byte-aligned registers, `merge`, and lossless `downsize`.                                                          |
+| A map that grows                                      | `swiss.Auto` or `.String`                  | Uses an allocator. Order is not insertion order.                                                                   |
+| Keys kept in sorted order                             | `btree.Auto` or `.String`                  | Uses an allocator. Iteration is in key order, not insertion order.                                                 |
 
 ## Pick a fixed capacity when
 
@@ -286,14 +293,6 @@ When the map is full, `put` fails for a new key. It still updates an existing ke
 
 For string keys, use std unless you want one of those properties from `static_map`. For a dense enum key, `std.EnumMap` fits. For any other key type, std has no table of this kind.
 
-## Test membership cheaply
-
-`bloom` is a Bloom filter. `contains` never misses a key that was added. It can report a key that was never added, at a known rate. The rate holds only while the filter holds the number of keys that you sized it for.
-
-```zig
-{{ load_data(path="examples/containers_bloom.zig", format="plain") | trim_end }}
-```
-
 ## Store columns
 
 `multi_array` keeps one array for each field of a struct. A loop over one field reads one contiguous array. `Buffer` has a runtime length. `Array` has a fixed length.
@@ -308,6 +307,80 @@ For string keys, use std unless you want one of those properties from `static_ma
 
 ```zig
 {{ load_data(path="examples/containers_swiss_map.zig", format="plain") | trim_end }}
+```
+
+# Probabilistic data structures
+
+Probabilistic data structures trade exactness for fixed memory and constant-time operations. None of them store the keys that you insert. Every type in this chapter lives in a flat value with no allocator and no `deinit`.
+
+Use an exact container (`set`, `bounded_array_hash_map`, or `swiss`) when the key set fits in memory, or when a wrong answer breaks correctness. Do not use a probabilistic filter for access control, billing, or deduplication that cannot tolerate a miss or a false positive. Use these types for pre-checks, telemetry, cache admission, rate tracking, and shard-level analytics where bounded error is acceptable and memory must stay fixed.
+
+| Question                        | Module        | Error direction                       | Mutability and merge                                                 |
+| ------------------------------- | ------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| Was this key added              | `bloom`       | False positives only                  | Add only. Infallible `add`.                                          |
+| Is this key in the active set   | `cuckoo`      | False positives only                  | `add` and `remove`. `add` returns `error.FilterFull` near full load. |
+| How often did this key appear   | `count_min`   | Overcounts only                       | `add`, `addConservative`, `merge`, and `halve`.                      |
+| How many distinct keys appeared | `ultraloglog` | Relative error (~`0.782 / sqrt(2^p)`) | `add`, `merge`, and lossless `downsize`.                             |
+
+## Test membership cheaply
+
+Reach for `bloom` or `cuckoo` when an exact lookup is expensive, such as a disk read or a network call. A `false` result proves that the key is absent, so the caller skips the slow path. A `true` result means the caller checks the authoritative store.
+
+Pick `bloom` when keys are never removed and `add` must never fail. `bloom` computes its bit count and probe count at compile time from `item_count` and `target_rate`. Its false-positive rate stays at `actual_rate` up to `expected_items` distinct keys, and degrades smoothly past that load.
+
+```zig
+{{ load_data(path="examples/containers_bloom.zig", format="plain") | trim_end }}
+```
+
+Pick `cuckoo` when keys leave the set, or when you want faster probes at a low false-positive rate. A Cuckoo filter stores four fingerprints per bucket and probes two candidate buckets with SIMD compares. For false-positive rates below 3%, it uses less memory than a Bloom filter and touches two cache lines instead of many scattered bits.
+
+`cuckoo` has two strict rules. First, `add` returns `error.FilterFull` when relocation hits `max_kicks`, typically above 90% load. On failure, `add` rolls back every relocation so no live key is lost. Second, call `remove` only for keys that you previously added. If you remove an absent key, `cuckoo` can delete a colliding fingerprint and hide a live key.
+
+```zig
+{{ load_data(path="examples/containers_cuckoo.zig", format="plain") | trim_end }}
+```
+
+## Count frequencies in bounded memory
+
+Use `count_min` when a stream has too many distinct keys to keep a counter per key, such as per-route request counts, hot-key detection, or cache admission next to `lru`. Every cell holds an unsigned `Counter` in a `[depth][width]Counter` grid, and additions saturate instead of wrapping around.
+
+Size a sketch either by error bounds (`Config.fromError`) or by an explicit memory budget (`depth`, `width`, and `Counter`). Larger `width` shrinks the additive error `epsilon = e / width`. Larger `depth` shrinks the failure probability `delta = exp(-depth)`.
+
+Use `addConservative` for most non-negative streams. Standard `add` increments all `depth` cells for a key, while `addConservative` raises each cell only up to `estimate(key) + amount`. Conservative updates cut overestimation on skewed traffic and preserve the upper-bound guarantee across `merge`.
+
+Use `merge` to combine per-thread or per-shard sketches into one total. Use `halve` on a fixed schedule or when `count()` reaches a threshold to decay older counts for sliding-window tracking or TinyLFU cache admission. Pair `halve` with a narrow `Counter` such as `u8` or `u16` to keep the table inside L1 cache.
+
+```zig
+{{ load_data(path="examples/containers_count_min.zig", format="plain") | trim_end }}
+```
+
+## Count distinct keys in bounded memory
+
+Use `ultraloglog` to estimate cardinality (unique users, unique IPs, distinct query hashes) when keeping an exact set is too large. UltraLogLog stores `2^precision` byte registers and uses about 28% less memory than HyperLogLog for the same relative standard error. One estimator (Optimal FGRA) covers counts from zero up to `2^64`.
+
+Pick `precision` from the memory and error budget:
+
+| `precision` | Size   | Relative standard error |
+| ----------- | ------ | ----------------------- |
+| `10`        | 1 KiB  | ~2.4%                   |
+| `12`        | 4 KiB  | ~1.2%                   |
+| `14`        | 16 KiB | ~0.61%                  |
+| `16`        | 64 KiB | ~0.31%                  |
+
+Each worker or shard can maintain its own sketch. `merge` combines those sketches into the exact register state that one sketch produces. Call `downsize` to reduce a sketch to a lower precision without extra error when you merge against a smaller sketch or archive history. Call `asBytes` and `fromBytes` to serialize registers over the wire. `fromBytes` rejects any byte that is unreachable at that precision.
+
+```zig
+{{ load_data(path="examples/containers_ultraloglog.zig", format="plain") | trim_end }}
+```
+
+## Bring your own hash
+
+`cuckoo.Filter`, `count_min.Sketch`, and `ultraloglog.Sketch` are the hash-level primitives beneath `Custom`, `Auto`, and `String`. They take uniform 64-bit hashes directly and perform no hashing of their own.
+
+Use the primitives directly when you already hold a 64-bit hash, such as a `hash.RapidHash` digest. One digest can feed several sketches so you do not hash the key twice. The primitives also cover key types that `std.hash.autoHash` rejects. Never pass sequential integers or weak hashes to `addHash`: all three structures require uniform bits across all 64 bits.
+
+```zig
+{{ load_data(path="examples/probabilistic_shared_hash.zig", format="plain") | trim_end }}
 ```
 
 # Ordered maps

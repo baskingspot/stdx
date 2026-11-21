@@ -22,6 +22,8 @@ pub const bounded_array_hash_map = @import("bounded_array_hash_map.zig");
 pub const BoundedWriter = @import("BoundedWriter.zig");
 pub const btree = @import("btree.zig");
 pub const buffer = @import("buffer.zig");
+pub const count_min = @import("count_min.zig");
+pub const cuckoo = @import("cuckoo.zig");
 pub const dotenv = @import("dotenv.zig");
 pub const enums = @import("enums.zig");
 pub const fmt = @import("fmt.zig");
@@ -48,6 +50,7 @@ pub const stdio = @import("stdio.zig");
 pub const swiss = @import("swiss.zig");
 pub const time = @import("time.zig");
 pub const timers = @import("timers.zig");
+pub const ultraloglog = @import("ultraloglog.zig");
 pub const Uuid = @import("Uuid.zig");
 pub const wire = @import("wire.zig");
 
