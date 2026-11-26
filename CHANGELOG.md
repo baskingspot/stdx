@@ -7,6 +7,7 @@ All notable changes to stdx are recorded here. The format follows
 
 ### Added
 
+- `hash.crc32c`: CRC-32C (Castagnoli), one-shot with `hash` and resumable from a stored digest with `append`. SSE4.2 on x86-64, the ARMv8 CRC instructions on aarch64, and slice-by-16 tables elsewhere, picked from the target at compile time.
 - `count_min`: fixed-capacity Count-Min Sketches (`Sketch`, `Custom`, `Auto`, `String`) with comptime sizing by explicit dimensions or `Config.fromError`, saturating counters, `addConservative`, `merge`, and `halve`.
 - `cuckoo`: fixed-capacity Cuckoo filters (`Filter`, `Custom`, `Auto`, `String`) with deletion, `u8`/`u16`/`u32` fingerprints, SIMD 4-slot bucket probing, and full rollback on `error.FilterFull`.
 - `ultraloglog`: UltraLogLog distinct-count sketches (`Sketch`, `Custom`, `Auto`, `String`) in `[1 << precision]u8` storage, with the Optimal FGRA estimator, `merge`, lossless `downsize`, and validated `asBytes`/`fromBytes`.

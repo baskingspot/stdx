@@ -1,6 +1,7 @@
 //! The hash module's benchmarks: RapidHash against Wyhash, the incumbent,
 //! on small keys (4/8/16 bytes, the author's own workload shape) and a
-//! 16 KiB buffer.
+//! 16 KiB buffer, and CRC-32C over a 64 KiB buffer, where the number that
+//! matters is bytes per second.
 
 const testingx = @import("testingx");
 
@@ -8,6 +9,7 @@ const std = @import("std");
 
 const stdx = @import("stdx");
 const RapidHash = stdx.hash.RapidHash;
+const crc32c = stdx.hash.crc32c;
 
 // The small-key workload cycles 4/8/16-byte slices of a fixed 4096-key
 // table, the large one hashes a single 16 KiB buffer. Each implementation
@@ -40,6 +42,30 @@ const hash_large = blk: {
     }
     break :blk data;
 };
+
+// The checksum's input is a 64 KiB block: large enough that the bulk loop
+// dominates the tail, which is what the throughput number should measure.
+const crc_len = 64 * 1024;
+
+const crc_large = blk: {
+    @setEvalBranchQuota(100_000);
+    var data: [crc_len]u8 = undefined;
+    var state: u64 = 0x2545f4914f6a03d5;
+    for (&data) |*byte| {
+        state = state *% 6364136223846793005 +% 1442695040888963407;
+        byte.* = @truncate(state >> 32);
+    }
+    break :blk data;
+};
+
+pub fn benchmarkCrc32cLarge(b: *testingx.B) !void {
+    b.setBytes(crc_len);
+    var sink: u32 = 0;
+    defer b.keepAlive(sink);
+    while (try b.loop()) {
+        sink +%= crc32c.hash(b.blackBox(&crc_large));
+    }
+}
 
 pub fn benchmarkRapidhashSmall(b: *testingx.B) !void {
     var sink: u64 = 0;
