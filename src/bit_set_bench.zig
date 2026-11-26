@@ -19,12 +19,6 @@ const offsets_1024 = blk: {
     break :blk out;
 };
 
-const offsets_10000 = blk: {
-    var out: [touches]usize = undefined;
-    for (&out, 0..) |*offset, index| offset.* = (index * 97) % 10000;
-    break :blk out;
-};
-
 const offsets_65536 = blk: {
     var out: [touches]usize = undefined;
     for (&out, 0..) |*offset, index| offset.* = (index * 509) & 65535;

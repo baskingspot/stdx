@@ -15,7 +15,6 @@ const swiss = stdx.swiss;
 // The small workload: 3000 keys, u64 — robin is declared at 3584 capacity
 // and swiss grows to the same 4096 buckets (3584 capacity), so the pairing
 // stays like-for-like.
-const small_capacity = 3584;
 const small_keys = blk: {
     @setEvalBranchQuota(20000);
     var ks: [3000]u64 = undefined;
