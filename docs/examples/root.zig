@@ -27,6 +27,7 @@ pub const containers_ultraloglog = @import("containers_ultraloglog.zig");
 pub const dotenv_diagnostic = @import("dotenv_diagnostic.zig");
 pub const dotenv_load = @import("dotenv_load.zig");
 pub const enums_classify = @import("enums_classify.zig");
+pub const hash_crc32c = @import("hash_crc32c.zig");
 pub const hash_keyed_map = @import("hash_keyed_map.zig");
 pub const heap_bump_values = @import("heap_bump_values.zig");
 pub const heap_slab_records = @import("heap_slab_records.zig");

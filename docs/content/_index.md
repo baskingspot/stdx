@@ -27,7 +27,7 @@ The same helpers kept showing up copy-pasted across projects: strict number pars
 - [Timekeeping](#timekeeping): clock reads with no `Io` value, a per-tick cached clock, wall time for log lines, and a log rate limiter.
 - [Timers](#timers): a caller-driven set of deadlines over `Io.Timestamp`, with callbacks, removal by handle, and period re-arm without drift.
 - [Logging transport](#logging-transport): `slot_ring.Mpsc` moves log lines from worker threads to one consumer. Producers never block, and a refused claim drops the new message.
-- [Small modules](#small-modules): a bounded writer, rapidhash, the heap pools, fixed-size byte values, secure random, and buffered stdio.
+- [Small modules](#small-modules): a bounded writer, rapidhash and CRC-32C, the heap pools, fixed-size byte values, secure random, and buffered stdio.
 
 This guide explains how to choose modules and combine them. The [API reference](api/) documents every symbol.
 
@@ -116,7 +116,7 @@ A module that extends a std namespace takes its name: `mem`, `fmt`, `net`, `posi
 | [`dotenv`](api/#stdx.dotenv)                                 | A `.env` parser: one grammar, borrowed key and value slices, and the line number when a line does not fit.                                                                        |
 | [`enums`](api/#stdx.enums)                                   | Switch on a byte string: generate an open or closed enum from a list, or look up an existing enum.                                                                                |
 | [`fmt`](api/#stdx.fmt)                                       | Strict parsing for integers and booleans (`atoi`, `parseBool`), and comptime hex decoding.                                                                                        |
-| [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts.                                                                                                                      |
+| [`hash`](api/#stdx.hash)                                     | `RapidHash`: rapidhash V3, plus std-style hash-map contexts. `crc32c`: CRC-32C, one-shot or continued from a stored digest.                                                       |
 | [`heap`](api/#stdx.heap)                                     | `SlabAllocator`, `SizeClassPool`, and the single-threaded `Bump` arena.                                                                                                           |
 | [`intern`](api/#stdx.intern)                                 | A string pool with stable `u32` ids. Names are copied into chunks, so an intern allocates only when a chunk fills.                                                                |
 | [`jsonc`](api/#stdx.jsonc)                                   | JSON with `//` and `/* */` comments and trailing commas. The scrub keeps every byte offset for `std.json` diagnostics.                                                            |
@@ -992,6 +992,20 @@ Use it when input that you do not control feeds a fixed-size response, such as a
 
 ```zig
 {{ load_data(path="examples/hash_keyed_map.zig", format="plain") | trim_end }}
+```
+
+## Check a block
+
+`hash.crc32c` computes CRC-32C, the Castagnoli checksum. Use it to detect a corrupted copy of a block. It is not a signature, because anyone can compute one.
+
+Castagnoli's polynomial is not the IEEE one behind `std.hash.Crc32`. For `"123456789"` this module returns `0xE306_9283` and `std.hash.Crc32` returns `0xCBF4_3926`. The hardware implements Castagnoli: SSE4.2's `crc32` and ARMv8's `crc32c` fold eight bytes per instruction. iSCSI, ext4, btrfs, and the LevelDB family store this checksum, so a format that interoperates with one of them stores this value.
+
+`hash(bytes)` returns the digest of one buffer. `append(digest, bytes)` continues a digest over another buffer, and `0` starts the chain. A chain of `append` calls equals one `hash` over the concatenation, so a writer that checksums chunk by chunk stores one `u32` between calls. Do not seed `std.hash.crc.@"CRC-32/ISCSI"` with that stored value: its `crc` field is the digest in the SSE4.2 kernel and the raw state in the generic one. A value that one kernel continues, the other does not.
+
+The kernel comes from the build target. x86-64 with SSE4.2 and aarch64 with the ARMv8 CRC extension run the instruction. Every other target gets slice-by-16 tables. There is no run-time dispatch, so name the CPU with `-Dcpu=...`.
+
+```zig
+{{ load_data(path="examples/hash_crc32c.zig", format="plain") | trim_end }}
 ```
 
 ## Pool fixed-size records
